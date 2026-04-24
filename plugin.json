@@ -1,7 +1,7 @@
 {
   "name": "chaingpt",
   "displayName": "ChainGPT Web3 AI Developer Kit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Build with ChainGPT's Web3 AI platform — full API/SDK reference, project scaffolding, MCP server, 45+ smart contract patterns, and testing mock server for: AI Chatbot & LLM, NFT Generator, Smart Contract Generator & Auditor, Crypto News, AgenticOS, and Solidity LLM.",
   "author": "ChainGPT",
   "license": "MIT",
