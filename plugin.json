@@ -1,0 +1,48 @@
+{
+  "name": "chaingpt",
+  "displayName": "ChainGPT Web3 AI Developer Kit",
+  "version": "1.0.0",
+  "description": "Build with ChainGPT's Web3 AI platform — full API/SDK reference, project scaffolding, MCP server, 45+ smart contract patterns, and testing mock server for: AI Chatbot & LLM, NFT Generator, Smart Contract Generator & Auditor, Crypto News, AgenticOS, and Solidity LLM.",
+  "author": "ChainGPT",
+  "license": "MIT",
+  "repository": "https://github.com/ChainGPT-org/chaingpt-claude-skill",
+  "homepage": "https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk",
+  "keywords": ["web3", "blockchain", "ai", "nft", "smart-contracts", "crypto", "defi", "chaingpt", "solidity"],
+  "skills": [
+    {
+      "name": "chaingpt",
+      "path": "./SKILL.md",
+      "description": "Core ChainGPT developer skill — API reference, quickstarts, templates, and conventions"
+    },
+    {
+      "name": "chaingpt-playground",
+      "path": "./skills/playground/SKILL.md",
+      "description": "Interactive API testing playground"
+    },
+    {
+      "name": "chaingpt-debug",
+      "path": "./skills/debug/SKILL.md",
+      "description": "Troubleshoot ChainGPT API errors"
+    },
+    {
+      "name": "chaingpt-hackathon",
+      "path": "./skills/hackathon/SKILL.md",
+      "description": "Scaffold a hackathon project in 60 seconds"
+    },
+    {
+      "name": "chaingpt-update",
+      "path": "./skills/update/SKILL.md",
+      "description": "Check for and apply skill updates"
+    }
+  ],
+  "mcpServers": {
+    "chaingpt": {
+      "command": "node",
+      "args": ["./mcp-server/dist/index.js"],
+      "env": {
+        "CHAINGPT_API_KEY": "${CHAINGPT_API_KEY}"
+      },
+      "description": "ChainGPT MCP server — Claude can call ChainGPT APIs directly"
+    }
+  }
+}

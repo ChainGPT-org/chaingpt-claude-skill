@@ -1,0 +1,45 @@
+{
+  "name": "@chaingpt/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing ChainGPT Web3 AI APIs as tools for Claude",
+  "main": "dist/index.js",
+  "bin": {
+    "chaingpt-mcp": "dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node --esm src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@chaingpt/generalchat": "latest",
+    "@chaingpt/nft": "latest",
+    "@chaingpt/smartcontractgenerator": "latest",
+    "@chaingpt/smartcontractauditor": "latest",
+    "@chaingpt/ainews": "latest",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "chaingpt",
+    "mcp",
+    "model-context-protocol",
+    "web3",
+    "ai",
+    "blockchain",
+    "claude"
+  ],
+  "license": "MIT"
+}
