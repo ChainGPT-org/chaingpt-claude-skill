@@ -275,10 +275,11 @@ contract UUPSUpgradeableContract is
  * @dev Storage layout: value (slot 0), name (slot 1), newField (slot 2), __gap (slots 3-50)
  */
 contract UUPSUpgradeableContractV2 is UUPSUpgradeableContract {
-    // New storage variable goes AFTER existing variables, BEFORE __gap
-    // Reduce __gap by 1 to maintain total slot count
+    // New storage variable goes AFTER existing variables, BEFORE __gap.
+    // The parent's __gap was reduced from 48 to 47 slots to accommodate
+    // this new variable, keeping the total storage layout at 50 slots.
+    // Do NOT add a separate __gap_v2 — always adjust the parent's __gap instead.
     uint256 public newField;
-    uint256[47] private __gap_v2; // 48 - 1 = 47
 
     function initializeV2(uint256 newFieldValue) external reinitializer(2) {
         newField = newFieldValue;

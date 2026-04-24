@@ -1,9 +1,13 @@
 import { SmartContractAuditor } from '@chaingpt/smartcontractauditor';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-const auditor = new SmartContractAuditor({
-  apiKey: process.env.CHAINGPT_API_KEY!,
-});
+let _auditor: SmartContractAuditor | null = null;
+function getClient(): SmartContractAuditor {
+  if (!_auditor) {
+    _auditor = new SmartContractAuditor({ apiKey: process.env.CHAINGPT_API_KEY! });
+  }
+  return _auditor;
+}
 
 export const auditTools: Tool[] = [
   {
@@ -51,6 +55,17 @@ export async function handleAuditTool(
     if (name === 'chaingpt_audit_contract') {
       const isFollowUp = !!args.followUpQuestion;
 
+      if (isFollowUp && !args.sessionId) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Error: followUpQuestion requires sessionId to continue an existing conversation.',
+            },
+          ],
+        };
+      }
+
       if (!isFollowUp && !args.sourceCode) {
         return {
           content: [
@@ -74,7 +89,7 @@ export async function handleAuditTool(
 
       const useChatHistory = isFollowUp || !!args.sessionId;
 
-      const response = await auditor.auditSmartContractBlob({
+      const response = await getClient().auditSmartContractBlob({
         question,
         chatHistory: useChatHistory ? 'on' : 'off',
         ...(args.sessionId ? { sdkUniqueId: args.sessionId as string } : {}),

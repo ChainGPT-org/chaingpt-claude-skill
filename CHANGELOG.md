@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - 2025-01-XX
+## [1.0.0] - 2025-01-15
 ### Added
 - Initial release
 - 7 product API/SDK references
@@ -12,7 +12,7 @@
 - Mock server for testing
 - 8 working code examples (JS + Python)
 
-## [1.1.0] - 2025-XX-XX
+## [1.1.0] - 2026-04-24
 ### Added
 - API response examples in all reference files
 - Wallet integration guide

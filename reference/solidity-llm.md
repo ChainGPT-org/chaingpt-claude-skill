@@ -99,9 +99,9 @@ thread.join()
 
 ## Roadmap
 
-| Timeline | Milestone |
-|----------|-----------|
-| Q3 2025 | Enhanced Solidity & OpenZeppelin support |
-| Q4 2025 | Inline code editing |
-| Q1 2026 | Rust/Solana support |
-| Q2 2026 | Increased context length |
+| Milestone | Status |
+|-----------|--------|
+| Enhanced Solidity & OpenZeppelin support | Planned |
+| Inline code editing | Planned |
+| Rust/Solana support | Planned |
+| Increased context length | Planned |

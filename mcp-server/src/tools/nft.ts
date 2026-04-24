@@ -1,9 +1,13 @@
 import { Nft } from '@chaingpt/nft';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-const nft = new Nft({
-  apiKey: process.env.CHAINGPT_API_KEY!,
-});
+let _nft: Nft | null = null;
+function getClient(): Nft {
+  if (!_nft) {
+    _nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY! });
+  }
+  return _nft;
+}
 
 export const nftTools: Tool[] = [
   {
@@ -155,7 +159,7 @@ export const nftTools: Tool[] = [
           description: 'Art style',
         },
       },
-      required: ['prompt', 'walletAddress', 'chainId', 'name', 'symbol'],
+      required: ['prompt', 'walletAddress', 'chainId', 'name'],
     },
   },
 ];
@@ -170,13 +174,13 @@ export async function handleNftTool(
 
   try {
     if (name === 'chaingpt_nft_generate_image') {
-      const result = await nft.generateImage({
+      const result = await getClient().generateImage({
         prompt: args.prompt as string,
         model: ((args.model as string) || 'velogen'),
         width: (args.width as number) || 512,
         height: (args.height as number) || 512,
         steps: (args.steps as number) || 2,
-        walletAddress: (args.walletAddress as string) || '0x0000000000000000000000000000000000000000',
+        ...(args.walletAddress ? { walletAddress: args.walletAddress as string } : {}),
         ...(args.enhance ? { enhance: args.enhance as string } : {}),
         ...(args.style ? { style: args.style as string } : {}),
       } as any);
@@ -200,7 +204,7 @@ export async function handleNftTool(
     }
 
     if (name === 'chaingpt_nft_enhance_prompt') {
-      const result = await nft.enhancePrompt({
+      const result = await getClient().enhancePrompt({
         prompt: args.prompt as string,
       });
 
@@ -220,7 +224,7 @@ export async function handleNftTool(
     }
 
     if (name === 'chaingpt_nft_get_chains') {
-      const result = await nft.getChains(
+      const result = await getClient().getChains(
         (args.testNet as boolean) ?? false
       );
 
@@ -236,7 +240,7 @@ export async function handleNftTool(
 
     if (name === 'chaingpt_nft_generate_and_mint') {
       // Step 1: Queue NFT generation
-      const generation = await nft.generateNftWithQueue({
+      const generation = await getClient().generateNftWithQueue({
         prompt: args.prompt as string,
         model: ((args.model as string) || 'velogen'),
         height: 512,
@@ -266,7 +270,7 @@ export async function handleNftTool(
       let attempts = 0;
       while (status !== 'completed' && attempts < 60) {
         await new Promise((r) => setTimeout(r, 3000));
-        const progress = await nft.getNftProgress({ collectionId });
+        const progress = await getClient().getNftProgress({ collectionId });
         status = (progress as any).status || 'unknown';
         attempts++;
 
@@ -294,7 +298,7 @@ export async function handleNftTool(
       }
 
       // Step 3: Mint
-      const minted = await nft.mintNft({
+      const minted = await getClient().mintNft({
         collectionId,
         name: args.name as string,
         description: (args.description as string) || '',

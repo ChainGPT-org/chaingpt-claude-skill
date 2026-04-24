@@ -93,7 +93,7 @@ Combined Response to User
 import { SmartContractGenerator } from "@chaingpt/smartcontractgenerator";
 import { SmartContractAuditor } from "@chaingpt/smartcontractauditor";
 import { GeneralChat } from "@chaingpt/generalchat";
-import { AiNews } from "@chaingpt/ainews";
+import { AINews } from "@chaingpt/ainews";
 
 interface TokenSpec {
   name: string;
@@ -114,7 +114,7 @@ interface LaunchResult {
 const generator = new SmartContractGenerator({ apiKey: process.env.CHAINGPT_API_KEY! });
 const auditor = new SmartContractAuditor({ apiKey: process.env.CHAINGPT_API_KEY! });
 const chat = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY! });
-const news = new AiNews({ apiKey: process.env.CHAINGPT_API_KEY! });
+const news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY! });
 
 export async function launchToken(spec: TokenSpec): Promise<LaunchResult> {
   const sessionId = `launch-${Date.now()}`;
@@ -541,7 +541,7 @@ Tweet live on X
 ```typescript
 // src/services/socialIntelService.ts
 import { GeneralChat } from "@chaingpt/generalchat";
-import { AiNews } from "@chaingpt/ainews";
+import { AINews } from "@chaingpt/ainews";
 import axios from "axios";
 
 interface TrendingTopic {
@@ -559,7 +559,7 @@ interface InsightResult {
 }
 
 const chat = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY! });
-const news = new AiNews({ apiKey: process.env.CHAINGPT_API_KEY! });
+const news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY! });
 
 // AgenticOS runs as a separate service; we trigger tweet generation via its API
 const AGENTICOS_URL = process.env.AGENTICOS_URL || "http://localhost:8000";
@@ -999,7 +999,7 @@ Final response with analysis + sources
 ```typescript
 // src/services/researchService.ts
 import { GeneralChat } from "@chaingpt/generalchat";
-import { AiNews } from "@chaingpt/ainews";
+import { AINews } from "@chaingpt/ainews";
 
 interface ResearchResult {
   analysis: string;
@@ -1014,7 +1014,7 @@ interface ResearchResult {
 }
 
 const chat = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY! });
-const news = new AiNews({ apiKey: process.env.CHAINGPT_API_KEY! });
+const news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY! });
 
 // Map common topics to news category/subcategory IDs
 const TOPIC_MAP: Record<string, { categoryId?: number; subCategoryId?: number }> = {
@@ -1191,7 +1191,7 @@ import { GeneralChat } from "@chaingpt/generalchat";
 import { SmartContractAuditor } from "@chaingpt/smartcontractauditor";
 import { SmartContractGenerator } from "@chaingpt/smartcontractgenerator";
 import { Nft } from "@chaingpt/nft";
-import { AiNews } from "@chaingpt/ainews";
+import { AINews } from "@chaingpt/ainews";
 
 const apiKey = process.env.CHAINGPT_API_KEY!;
 
@@ -1199,7 +1199,7 @@ export const chat = new GeneralChat({ apiKey });
 export const auditor = new SmartContractAuditor({ apiKey });
 export const generator = new SmartContractGenerator({ apiKey });
 export const nftClient = new Nft({ apiKey });
-export const newsClient = new AiNews({ apiKey });
+export const newsClient = new AINews({ apiKey });
 ```
 
 ### Error Handling Across Products

@@ -14,7 +14,7 @@ nextjs-chaingpt-chatbot/
 │   ├── layout.tsx (root layout with metadata)
 │   ├── page.tsx (chat interface)
 │   ├── api/
-│   │   ├── chat/route.ts (POST — streaming chat via Edge Runtime)
+│   │   ├── chat/route.ts (POST — streaming chat via Node.js runtime)
 │   │   └── history/route.ts (GET — chat history)
 │   ├── components/
 │   │   ├── ChatWindow.tsx (message list + scroll)
@@ -31,7 +31,7 @@ nextjs-chaingpt-chatbot/
 next, react, react-dom, @chaingpt/generalchat, react-markdown, tailwindcss
 
 ### Key Implementation
-- **app/api/chat/route.ts**: Next.js Route Handler using Edge Runtime. Accepts POST with { question, sessionId }. Uses GeneralChat.createChatStream(). Returns a ReadableStream via new Response(stream).
+- **app/api/chat/route.ts**: Next.js Route Handler using Node.js runtime (`export const runtime = 'nodejs'`). Accepts POST with { question, sessionId }. Uses GeneralChat.createChatStream(). Returns a ReadableStream via new Response(stream). **Note:** Edge Runtime is not compatible because the ChainGPT SDK relies on Node.js-specific streaming APIs (e.g., Node streams) that are not available in the Edge Runtime environment.
 - **app/page.tsx**: Client component with useState for messages, useRef for scroll, fetch to /api/chat with streaming reader
 - **ChatWindow.tsx**: Maps messages array, auto-scrolls to bottom, renders markdown in bot messages
 - **ChatInput.tsx**: Text input + send button, Enter to send, disabled while streaming

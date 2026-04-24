@@ -4,7 +4,7 @@ Production-ready Solidity patterns that Claude can compose from when generating 
 
 ## Overview
 
-This library contains **50+ audited patterns** organized into 6 categories. Each pattern includes:
+This library contains **45+ audited patterns** organized into 6 categories. Each pattern includes:
 
 - Complete Solidity 0.8.x code (MIT licensed)
 - OpenZeppelin v5.x imports where applicable

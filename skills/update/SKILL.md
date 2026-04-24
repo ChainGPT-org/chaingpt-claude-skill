@@ -13,7 +13,7 @@ When the user invokes this skill, follow these steps in order:
 Read the file `VERSION` in the skill root directory to determine the currently installed version:
 
 ```
-cat /Users/r/Documents/Claude/Projects/ChainGPT\ Group/chaingpt-claude-skill/VERSION
+cat VERSION
 ```
 
 Report the current version to the user.
@@ -23,11 +23,11 @@ Report the current version to the user.
 Fetch the latest changes from the remote repository, then compare against the local HEAD:
 
 ```bash
-git -C "/Users/r/Documents/Claude/Projects/ChainGPT Group/chaingpt-claude-skill" fetch origin
+git fetch origin
 ```
 
 ```bash
-git -C "/Users/r/Documents/Claude/Projects/ChainGPT Group/chaingpt-claude-skill" log HEAD..origin/main --oneline
+git log HEAD..origin/main --oneline
 ```
 
 - If the `log` command returns **no output**, tell the user: "You are on the latest version (vX.X.X). No updates available."
@@ -50,7 +50,7 @@ Ask the user: "Would you like to apply these updates?"
 If the user confirms, pull the latest changes:
 
 ```bash
-git -C "/Users/r/Documents/Claude/Projects/ChainGPT Group/chaingpt-claude-skill" pull origin main
+git pull origin main
 ```
 
 Report the result. If the pull succeeds, read the updated `VERSION` file and confirm the new version.
@@ -61,7 +61,7 @@ After a successful update, check if the MCP server directory exists. If it does,
 
 > The MCP server may need to be rebuilt. Run:
 > ```bash
-> cd "/Users/r/Documents/Claude/Projects/ChainGPT Group/chaingpt-claude-skill/mcp-server" && npm install && npm run build
+> cd mcp-server && npm install && npm run build
 > ```
 > Then restart Claude Code for the MCP server changes to take effect.
 

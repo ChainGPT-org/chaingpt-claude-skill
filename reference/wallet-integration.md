@@ -118,7 +118,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   137: {
     chainId: "0x89",
     chainName: "Polygon",
-    nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+    nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
     rpcUrls: ["https://polygon-rpc.com"],
     blockExplorerUrls: ["https://polygonscan.com"],
   },
@@ -1113,7 +1113,7 @@ For the full up-to-date list, call `GET /nft/get-chains?testNet=false`.
 | Cronos | 25 | CRO |
 | BSC | 56 | BNB |
 | Viction | 88 | VIC |
-| Polygon | 137 | MATIC |
+| Polygon | 137 | POL |
 | Sonic | 146 | S |
 | X Layer | 196 | OKB |
 | BTTC | 199 | BTT |

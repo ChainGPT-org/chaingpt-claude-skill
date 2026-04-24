@@ -46,6 +46,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    // Tool routing by name prefix. ORDER MATTERS — more specific prefixes must come
+    // before less specific ones. The catch-all "chaingpt_" must be last.
+    //
+    // Prefix               -> Handler              -> Tool names
+    // "chaingpt_chat"      -> handleChatTool       -> chaingpt_chat_ask, chaingpt_chat_stream
+    // "chaingpt_nft"       -> handleNftTool        -> chaingpt_nft_generate_image, chaingpt_nft_enhance_prompt, chaingpt_nft_get_chains, chaingpt_nft_generate_and_mint
+    // "chaingpt_audit"     -> handleAuditTool      -> chaingpt_audit_contract
+    // "chaingpt_generate"  -> handleGeneratorTool  -> chaingpt_generate_contract
+    // "chaingpt_news"      -> handleNewsTool       -> chaingpt_news_fetch
+    // "chaingpt_"          -> handleUtilTool       -> chaingpt_estimate_cost, chaingpt_check_credits (catch-all)
     if (name.startsWith('chaingpt_chat')) return await handleChatTool(name, args);
     if (name.startsWith('chaingpt_nft')) return await handleNftTool(name, args);
     if (name.startsWith('chaingpt_audit')) return await handleAuditTool(name, args);

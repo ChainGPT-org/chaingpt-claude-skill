@@ -704,7 +704,7 @@ export class TTLCache<T> {
 ```typescript
 // lib/cached-client.ts
 import { GeneralChat } from "@chaingpt/generalchat";
-import { AiNews } from "@chaingpt/ainews";
+import { AINews } from "@chaingpt/ainews";
 import { TTLCache } from "./cache";
 import crypto from "crypto";
 
@@ -720,12 +720,12 @@ function cacheKey(prefix: string, params: Record<string, unknown>): string {
 export class CachedChainGPT {
   private cache: TTLCache<unknown>;
   private chat: GeneralChat;
-  private news: AiNews;
+  private news: AINews;
 
   constructor(apiKey: string) {
     this.cache = new TTLCache(300_000); // 5 min default
     this.chat = new GeneralChat({ apiKey });
-    this.news = new AiNews({ apiKey });
+    this.news = new AINews({ apiKey });
   }
 
   /**
@@ -747,13 +747,13 @@ export class CachedChainGPT {
   }
 
   /** Cached news — news changes infrequently, cache 15 minutes. */
-  async getNews(category?: string) {
-    const key = cacheKey("news", { category });
+  async getNews(categoryId?: number) {
+    const key = cacheKey("news", { categoryId });
     const cached = this.cache.get(key);
     if (cached) return cached;
 
     const res = await this.news.getNews(
-      category ? { category } : undefined
+      categoryId ? { categoryId } : undefined
     );
     this.cache.set(key, res, 900_000); // 15 min
     return res;
@@ -801,13 +801,13 @@ export class RedisCache {
 const redis = new RedisCache(process.env.REDIS_URL);
 await redis.connect();
 
-async function cachedNews(category: string) {
-  const cacheKey = `chaingpt:news:${category}`;
+async function cachedNews(categoryId: number) {
+  const cacheKey = `chaingpt:news:${categoryId}`;
   const cached = await redis.get(cacheKey);
   if (cached) return cached;
 
-  const news = new AiNews({ apiKey: process.env.CHAINGPT_API_KEY! });
-  const result = await news.getNews({ category });
+  const news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY! });
+  const result = await news.getNews({ categoryId });
 
   await redis.set(cacheKey, result, 900); // 15 min TTL
   return result;
@@ -1042,9 +1042,11 @@ export class IdempotentMinter {
    */
   async mint(params: {
     collectionId: string;
+    name: string;
+    description: string;
     prompt: string;
     walletAddress: string;
-    chain: string;
+    chainId: string;
   }): Promise<MintRecord> {
     const { collectionId } = params;
 
@@ -1067,21 +1069,34 @@ export class IdempotentMinter {
     this.records.set(collectionId, record);
 
     try {
-      // Step 1: Generate image
-      const generated = await this.nft.generateNft({
+      // Step 1: Generate image via queue (async)
+      const queued = await this.nft.generateNftWithQueue({
         prompt: params.prompt,
         model: "velogen",
+        walletAddress: params.walletAddress,
+        chainId: params.chainId,
       });
 
-      // Step 2: Mint on-chain
+      // Step 2: Poll progress until generation is complete
+      let progress = await this.nft.getNftProgress(queued.data.id);
+      while (progress.data.status !== "completed") {
+        await new Promise((r) => setTimeout(r, 3000));
+        progress = await this.nft.getNftProgress(queued.data.id);
+        if (progress.data.status === "failed") {
+          throw new Error("NFT generation failed");
+        }
+      }
+
+      // Step 3: Mint on-chain with correct parameters
       const minted = await this.nft.mintNft({
-        image: generated.data.imageUrl,
-        walletAddress: params.walletAddress,
-        chain: params.chain,
+        collectionId: params.collectionId,
+        name: params.name,
+        description: params.description,
+        ids: [queued.data.id],
       });
 
       record.status = "minted";
-      record.transactionHash = minted.data.transactionHash;
+      record.transactionHash = minted.data?.transactionHash;
       return record;
     } catch (err) {
       record.status = "failed";
@@ -1104,9 +1119,11 @@ for (let attempt = 0; attempt < 3; attempt++) {
   try {
     const result = await minter.mint({
       collectionId: "collection-abc-123",
+      name: "Cyberpunk Warrior #1",
+      description: "A cyberpunk warrior with neon armor",
       prompt: "Cyberpunk warrior with neon armor",
       walletAddress: "0x1234...abcd",
-      chain: "binance",
+      chainId: "binance",
     });
     console.log("Minted:", result.transactionHash);
     break;

@@ -1,9 +1,13 @@
 import { GeneralChat } from '@chaingpt/generalchat';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-const generalChat = new GeneralChat({
-  apiKey: process.env.CHAINGPT_API_KEY!,
-});
+let _generalChat: GeneralChat | null = null;
+function getClient(): GeneralChat {
+  if (!_generalChat) {
+    _generalChat = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY! });
+  }
+  return _generalChat;
+}
 
 export const chatTools: Tool[] = [
   {
@@ -116,7 +120,7 @@ export async function handleChatTool(
 
   try {
     if (name === 'chaingpt_chat') {
-      const response = await generalChat.createChatBlob({
+      const response = await getClient().createChatBlob({
         question: args.question as string,
         chatHistory: args.chatHistory ? 'on' : 'off',
         ...(args.sessionId ? { sdkUniqueId: args.sessionId as string } : {}),
@@ -148,7 +152,7 @@ export async function handleChatTool(
         contextInjection.selectedTone = args.tone;
       }
 
-      const response = await generalChat.createChatBlob({
+      const response = await getClient().createChatBlob({
         question: args.question as string,
         chatHistory: args.chatHistory ? 'on' : 'off',
         ...(args.sessionId ? { sdkUniqueId: args.sessionId as string } : {}),

@@ -100,12 +100,14 @@ app.post('/api/ai/analyze-contract', async (req, res) => {
 
 **ChainGPT replacement:**
 ```javascript
+import { SmartContractAuditor } from '@chaingpt/smartcontractauditor';
+
 app.post('/api/ai/analyze-contract', async (req, res) => {
   const { sourceCode } = req.body;
   
-  const result = await chat.createChatBlob({
+  const auditor = new SmartContractAuditor({ apiKey: process.env.CHAINGPT_API_KEY });
+  const result = await auditor.createSmartContractAuditBlob({
     question: `Audit this contract for vulnerabilities:\n\n${sourceCode}`,
-    model: 'smart_contract_auditor',
     chatHistory: 'off'
   });
   
@@ -136,9 +138,9 @@ app.post('/api/ai/generate-nft', async (req, res) => {
 
 **ChainGPT replacement:**
 ```javascript
-import { NFTAI } from '@chaingpt/nftai';
+import { Nft } from '@chaingpt/nft';
 
-const nft = new NFTAI({ apiKey: process.env.CHAINGPT_API_KEY });
+const nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY });
 
 app.post('/api/ai/generate-nft', async (req, res) => {
   const { prompt } = req.body;
@@ -184,20 +186,26 @@ export interface ImageOptions {
 ```typescript
 // services/chaingpt-service.ts
 import { GeneralChat } from '@chaingpt/generalchat';
-import { NFTAI } from '@chaingpt/nftai';
+import { SmartContractGenerator } from '@chaingpt/smartcontractgenerator';
+import { SmartContractAuditor } from '@chaingpt/smartcontractauditor';
+import { Nft } from '@chaingpt/nft';
 import { AIService, ImageOptions } from './ai-service';
 
 export class ChainGPTService implements AIService {
-  private chat: GeneralChat;
-  private nft: NFTAI;
+  private chatClient: GeneralChat;
+  private contractGenerator: SmartContractGenerator;
+  private contractAuditor: SmartContractAuditor;
+  private nft: Nft;
 
   constructor(apiKey: string) {
-    this.chat = new GeneralChat({ apiKey });
-    this.nft = new NFTAI({ apiKey });
+    this.chatClient = new GeneralChat({ apiKey });
+    this.contractGenerator = new SmartContractGenerator({ apiKey });
+    this.contractAuditor = new SmartContractAuditor({ apiKey });
+    this.nft = new Nft({ apiKey });
   }
 
   async chat(prompt: string, sessionId?: string): Promise<string> {
-    const res = await this.chat.createChatBlob({
+    const res = await this.chatClient.createChatBlob({
       question: prompt,
       chatHistory: sessionId ? 'on' : 'off',
       sdkUniqueId: sessionId
@@ -206,18 +214,16 @@ export class ChainGPTService implements AIService {
   }
 
   async generateContract(description: string): Promise<string> {
-    const res = await this.chat.createChatBlob({
+    const res = await this.contractGenerator.createSmartContractBlob({
       question: description,
-      model: 'smart_contract_generator',
       chatHistory: 'off'
     });
     return res.data.bot;
   }
 
   async auditContract(sourceCode: string): Promise<string> {
-    const res = await this.chat.createChatBlob({
+    const res = await this.contractAuditor.createSmartContractAuditBlob({
       question: `Audit this contract:\n\n${sourceCode}`,
-      model: 'smart_contract_auditor',
       chatHistory: 'off'
     });
     return res.data.bot;
@@ -335,7 +341,7 @@ Once your migration is validated, you can decommission self-hosted infrastructur
 1. [ ] Audit current AI infrastructure costs (GPU, data pipeline, engineers)
 2. [ ] Map custom endpoints to ChainGPT equivalents (see table above)
 3. [ ] Get API key at [app.chaingpt.org](https://app.chaingpt.org)
-4. [ ] Install SDKs: `npm install @chaingpt/generalchat @chaingpt/nftai`
+4. [ ] Install SDKs: `npm install @chaingpt/generalchat @chaingpt/nft @chaingpt/smartcontractgenerator @chaingpt/smartcontractauditor`
 5. [ ] Create service abstraction layer
 6. [ ] Implement ChainGPT service behind the abstraction
 7. [ ] Test with the [mock server](../mock-server/) during development

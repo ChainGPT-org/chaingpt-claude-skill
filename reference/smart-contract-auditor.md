@@ -23,7 +23,7 @@ The ChainGPT Smart Contract Auditor analyzes Solidity smart contracts for vulner
 - Categorized findings by severity (Critical, High, Medium, Low, Informational)
 - Line-by-line code references
 - Remediation suggestions for each finding
-- **Upcoming:** In-depth PDF reports (Q2 2025)
+- **PDF reports** — check [docs.chaingpt.org](https://docs.chaingpt.org) for latest availability
 
 ---
 

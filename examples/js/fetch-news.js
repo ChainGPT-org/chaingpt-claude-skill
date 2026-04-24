@@ -23,7 +23,7 @@ const BLOCKCHAINS = {
 
 const TOKENS = {
   BTC: 79, ETH: 80, USDT: 81, BNB: 82, XRP: 83,
-  SOL: 85, DOGE: 87, LINK: 96, AVAX: 100
+  SOL: 85, DOGE: 87, LINK: 96, AVAX: 92
 };
 
 // 1. Latest DeFi news

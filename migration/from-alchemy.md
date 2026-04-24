@@ -101,9 +101,9 @@ const floor = await alchemy.nft.getFloorPrice('0x...contractAddress');
 ### ChainGPT (AI Generation + Minting)
 
 ```javascript
-import { NFTAI } from '@chaingpt/nftai';
+import { Nft } from '@chaingpt/nft';
 
-const nft = new NFTAI({ apiKey: process.env.CHAINGPT_API_KEY });
+const nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY });
 
 // Generate an AI image from a text prompt
 const image = await nft.generateImage({
@@ -155,14 +155,15 @@ Alchemy provides contract verification through Etherscan integration and basic c
 ### ChainGPT (AI Generation + Auditing)
 
 ```javascript
-import { GeneralChat } from '@chaingpt/generalchat';
+import { SmartContractGenerator } from '@chaingpt/smartcontractgenerator';
+import { SmartContractAuditor } from '@chaingpt/smartcontractauditor';
 
-const generator = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY });
+const generator = new SmartContractGenerator({ apiKey: process.env.CHAINGPT_API_KEY });
+const auditor = new SmartContractAuditor({ apiKey: process.env.CHAINGPT_API_KEY });
 
 // Generate a smart contract from natural language
-const contract = await generator.createChatBlob({
+const contract = await generator.createSmartContractBlob({
   question: 'Create an ERC-721 NFT contract with royalties, whitelist minting, and reveal functionality',
-  model: 'smart_contract_generator',
   chatHistory: 'off'
 });
 
@@ -170,9 +171,8 @@ console.log(contract.data.bot);
 // Returns complete, deployable Solidity code
 
 // Then audit it
-const audit = await generator.createChatBlob({
+const audit = await auditor.createSmartContractAuditBlob({
   question: `Audit this contract for security vulnerabilities:\n\n${contract.data.bot}`,
-  model: 'smart_contract_auditor',
   chatHistory: 'off'
 });
 
@@ -256,7 +256,7 @@ const analysis = await chat.createChatBlob({
 1. [ ] Identify which Alchemy features you use (RPC, NFT data, webhooks, AA)
 2. [ ] Keep Alchemy for infrastructure (RPC, indexing, webhooks)
 3. [ ] Get a ChainGPT API key at [app.chaingpt.org](https://app.chaingpt.org)
-4. [ ] Install ChainGPT SDKs: `npm install @chaingpt/generalchat @chaingpt/nftai`
+4. [ ] Install ChainGPT SDKs: `npm install @chaingpt/generalchat @chaingpt/nft @chaingpt/smartcontractgenerator @chaingpt/smartcontractauditor`
 5. [ ] Replace manual data-formatting code with ChainGPT AI queries
 6. [ ] Add AI NFT generation if applicable
 7. [ ] Add smart contract generation/auditing to your development workflow

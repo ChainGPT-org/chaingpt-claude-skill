@@ -3,6 +3,13 @@ ChainGPT AI NFT Generator — Generate + Mint Example (Python)
 
 Demonstrates: image generation, prompt enhancement, minting
 Install: pip install chaingpt python-dotenv
+
+NOTE: The Python SDK's actual class names, method signatures, and import
+paths may differ from what is shown here. These examples illustrate the
+*concepts* (image generation, minting, prompt enhancement) but are not
+guaranteed to match the latest SDK release. Always check the official
+ChainGPT documentation at https://docs.chaingpt.org for up-to-date
+Python SDK usage.
 """
 import asyncio
 import os
@@ -70,7 +77,7 @@ async def enhance_and_generate():
             await asyncio.sleep(3)
 
         # Mint
-        mint = await client.nft.mint_nft_metadata(NFTMintRequestModel(
+        mint = await client.nft.mint_nft(NFTMintRequestModel(
             collectionId=collection_id,
             name="Space Dragon #1",
             description="AI-generated cosmic dragon",

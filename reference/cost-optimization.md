@@ -18,13 +18,13 @@ import { GeneralChat } from "@chaingpt/generalchat";
 const chat = new GeneralChat({ apiKey: process.env.CHAINGPT_API_KEY });
 
 // Single-shot question — no history needed (0.5 credits)
-const quick = await chat.createChatMessage({
+const quick = await chat.createChatBlob({
   question: "What is EIP-4337?",
   chatHistory: "off",
 });
 
 // Multi-turn conversation — enable history (1.0 credits per message)
-const conversational = await chat.createChatMessage({
+const conversational = await chat.createChatBlob({
   question: "Now explain how it relates to account abstraction",
   chatHistory: "on",
 });
@@ -68,7 +68,7 @@ async function cachedChat(question: string): Promise<string> {
   const cached = cache.get<string>(key);
   if (cached) return cached;
 
-  const response = await chat.createChatMessage({
+  const response = await chat.createChatBlob({
     question,
     chatHistory: "off",
   });
@@ -99,7 +99,7 @@ async function cachedChatRedis(question: string): Promise<string> {
   const cached = await redis.get(key);
   if (cached) return cached;
 
-  const response = await chat.createChatMessage({
+  const response = await chat.createChatBlob({
     question,
     chatHistory: "off",
   });
@@ -137,7 +137,7 @@ const expensive = await nft.generateNft({
     + "rain reflecting city lights, detailed armor with glowing circuits, "
     + "cinematic composition, 8k quality",
   model: "velogen",
-  enhance: true,  // +0.5 credits — unnecessary here
+  enhance: '1x',  // +0.5 credits — unnecessary here
 });
 
 // GOOD: skip enhancement, prompt is already specific (saves 0.5 credits)
@@ -146,7 +146,7 @@ const optimized = await nft.generateNft({
     + "rain reflecting city lights, detailed armor with glowing circuits, "
     + "cinematic composition, 8k quality",
   model: "velogen",
-  enhance: false,
+  enhance: 'original',
 });
 ```
 
@@ -170,10 +170,10 @@ The News API charges 1 credit per 10 records. Optimize batch size and use free
 alternatives where possible.
 
 ```typescript
-import { CryptoNews } from "@chaingpt/cryptonews";
+import { AINews } from "@chaingpt/ainews";
 import Parser from "rss-parser";
 
-const news = new CryptoNews({ apiKey: process.env.CHAINGPT_API_KEY });
+const news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY });
 const rss = new Parser();
 
 // Strategy 1: Fetch max batch size (50) to minimize per-record cost
@@ -188,10 +188,10 @@ const batch = await news.getNews({
 
 // Strategy 2: Use RSS feeds (FREE) for real-time monitoring
 const RSS_FEEDS = {
-  general: "https://app.chaingpt.org/api/rss/general",
-  defi: "https://app.chaingpt.org/api/rss/defi",
-  nft: "https://app.chaingpt.org/api/rss/nft",
-  regulation: "https://app.chaingpt.org/api/rss/regulation",
+  general: "https://app.chaingpt.org/rssfeeds.xml",
+  bitcoin: "https://app.chaingpt.org/rssfeeds-bitcoin.xml",
+  ethereum: "https://app.chaingpt.org/rssfeeds-ethereum.xml",
+  bnb: "https://app.chaingpt.org/rssfeeds-bnb.xml",
 };
 
 async function getLatestNews(category: keyof typeof RSS_FEEDS) {
@@ -231,8 +231,11 @@ Use a local patterns library for common contracts instead of the Generator API.
 
 ```typescript
 // Local template — zero credits
+import { SmartContractGenerator } from "@chaingpt/smartcontractgenerator";
 import { readFileSync } from "fs";
 import path from "path";
+
+const generator = new SmartContractGenerator({ apiKey: process.env.CHAINGPT_API_KEY });
 
 const TEMPLATES: Record<string, string> = {
   erc20: "templates/ERC20Token.sol",
@@ -259,7 +262,7 @@ async function generateContract(description: string): Promise<string> {
   }
 
   // Complex/custom contract — use the API (1-2 credits)
-  const result = await contractGenerator.createSmartContract({
+  const result = await generator.createSmartContractBlob({
     question: description,
     chatHistory: "off",  // "off" unless iterating (saves 1 credit)
   });
@@ -349,7 +352,7 @@ app.post("/api/chat", async (req, res) => {
 
   const result = await deduplicatedRequest(
     key,
-    () => chat.createChatMessage({ question, chatHistory: "off" }),
+    () => chat.createChatBlob({ question, chatHistory: "off" }),
     3600
   );
 
@@ -363,7 +366,10 @@ For bulk NFT generation or batch audits, use a job queue to control concurrency
 and avoid hitting rate limits (200 req/min).
 
 ```typescript
+import { Nft } from "@chaingpt/nft";
 import PQueue from "p-queue";
+
+const nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY });
 
 // Max 3 concurrent requests, 150 req/min to stay under the 200 limit
 const queue = new PQueue({ concurrency: 3, interval: 60_000, intervalCap: 150 });
@@ -380,7 +386,7 @@ async function batchGenerateNfts(jobs: BatchNftJob[]) {
         nft.generateNft({
           prompt: job.prompt,
           model: job.model,
-          enhance: false,  // skip enhancement to save 0.5 cr each
+          enhance: 'original',  // skip enhancement to save 0.5 cr each
         })
       )
     )
@@ -536,7 +542,7 @@ Monthly cost estimates at different scales, with and without optimization.
 - [ ] Use RSS feeds for news dashboards, API only for filtered queries
 - [ ] Maintain local Solidity templates for standard contracts
 - [ ] Use VeloGen for drafts, reserve Dale3 for photorealistic finals
-- [ ] Skip `enhance: true` when prompts are already detailed
+- [ ] Use `enhance: 'original'` when prompts are already detailed
 - [ ] Route all API calls through a backend proxy with deduplication
 - [ ] Set per-user daily credit quotas
 - [ ] Monitor credit spend per endpoint with budget alerts
