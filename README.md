@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://www.chaingpt.org/images/chaingpt-logo-dark.svg" alt="ChainGPT" width="280" />
+<img src="https://raw.githubusercontent.com/ChainGPT-org/chaingpt-claude-skill/refs/heads/main/653ba24987df35fe63c92a17_chaingpt-logo-head.png" alt="ChainGPT" width="280" />
 
 # ChainGPT Developer Kit for Claude Code
 
