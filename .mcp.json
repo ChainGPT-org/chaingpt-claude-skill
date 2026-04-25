@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "chaingpt": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/index.js"],
+      "env": {
+        "CHAINGPT_API_KEY": "${CHAINGPT_API_KEY}"
+      }
+    }
+  }
+}

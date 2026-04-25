@@ -1,0 +1,15 @@
+{
+  "name": "chaingpt",
+  "version": "1.1.0",
+  "description": "Build with ChainGPT's Web3 AI platform — full API/SDK reference, project scaffolding, MCP server, 45+ smart contract patterns, and testing mock server for: AI Chatbot & LLM, NFT Generator, Smart Contract Generator & Auditor, Crypto News, AgenticOS, and Solidity LLM.",
+  "author": {
+    "name": "ChainGPT",
+    "url": "https://www.chaingpt.org"
+  },
+  "homepage": "https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk",
+  "repository": "https://github.com/ChainGPT-org/chaingpt-claude-skill",
+  "license": "MIT",
+  "keywords": ["web3", "blockchain", "ai", "nft", "smart-contracts", "crypto", "defi", "chaingpt", "solidity", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}
