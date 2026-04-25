@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://www.chaingpt.org/images/chaingpt-logo-dark.svg" alt="ChainGPT" width="280" />
+<img src="https://raw.githubusercontent.com/ChainGPT-org/chaingpt-claude-skill/refs/heads/main/653ba24987df35fe63c92a17_chaingpt-logo-head.png" alt="ChainGPT" width="140" />
 
 # ChainGPT Developer Kit for Claude Code
 
@@ -257,21 +257,11 @@ Just talk to Claude naturally:
 
 ## 🧪 Testing
 
-**79 tests passing** across two test suites:
+> **Use the mock server to develop and test without spending a single credit.**
 
-```bash
-# MCP Server tests (53 tests)
-cd mcp-server && npm test
+The mock server is a full drop-in replacement for the ChainGPT API — realistic responses, simulated latency, credit tracking — so you can build, iterate, and run CI/CD pipelines without touching your API quota.
 
-# Mock Server tests (26 tests)
-cd mock-server && npm test
-
-# Skill validation (118 structural checks)
-bash scripts/validate.sh
-```
-
-<details>
-<summary><b>Start Mock Server (zero-credit local testing)</b></summary>
+### Start the mock server
 
 ```bash
 cd .claude/skills/chaingpt/mock-server
@@ -279,9 +269,24 @@ npm install && npm run dev
 # → http://localhost:3001
 ```
 
-Drop-in replacement for the real API. Realistic responses, artificial latency, credit tracking — perfect for development and CI/CD.
+Point your `CHAINGPT_BASE_URL` at `http://localhost:3001` and everything works exactly as it would in production. **No API key required.**
 
-</details>
+### Run the full test suite
+
+**79 tests passing** across two suites:
+
+```bash
+# MCP Server tests (53 tests)
+cd mcp-server && npm install && npm test
+
+# Mock Server tests (26 tests)
+cd mock-server && npm install && npm test
+
+# Skill validation (118 structural checks)
+bash scripts/validate.sh
+```
+
+The CI workflow (`.github/workflows/ci.yml`) runs all three automatically on every push and pull request.
 
 <br/>
 
