@@ -3,6 +3,13 @@ ChainGPT Web3 AI Chatbot — Async Streaming Example (Python)
 
 Demonstrates: streaming, chat history, context injection
 Install: pip install chaingpt python-dotenv
+
+NOTE: The Python SDK's actual class names, method signatures, and import
+paths may differ from what is shown here. These examples illustrate the
+*concepts* (streaming, context injection, chat history) but are not
+guaranteed to match the latest SDK release. Always check the official
+ChainGPT documentation at https://docs.chaingpt.org for up-to-date
+Python SDK usage.
 """
 import asyncio
 import os

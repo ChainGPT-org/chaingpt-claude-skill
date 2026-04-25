@@ -84,19 +84,16 @@ interface PaginatedResponse<T> {
 
 /** Preset tone options for context-injected conversations */
 type PresetTone =
-  | 'Professional'
-  | 'Friendly'
-  | 'Informative'
-  | 'Casual'
-  | 'Witty'
-  | 'Formal'
-  | 'Empathetic'
-  | 'Direct'
-  | 'Enthusiastic'
-  | 'Analytical'
-  | 'Creative'
-  | 'Persuasive'
-  | 'Educational';
+  | 'PROFESSIONAL'
+  | 'FRIENDLY'
+  | 'CONVERSATIONAL'
+  | 'AUTHORITATIVE'
+  | 'PLAYFUL'
+  | 'INSPIRATIONAL'
+  | 'CONCISE'
+  | 'ACADEMIC'
+  | 'NEUTRAL'
+  | 'SARCASTIC_MEME_STYLE';
 
 /** Supported blockchains for context injection */
 type BlockchainEnum =
@@ -142,26 +139,29 @@ type BlockchainEnum =
  * Requires `useCustomContext: true` in the request.
  */
 interface ContextInjection {
-  /** Company or project name for branded responses */
-  companyName?: string;
-  /** Token-specific information (name, ticker, supply, etc.) */
-  tokenInformation?: string;
-  /** Select a preset tone for the AI response */
-  aiTone?: PresetTone;
-  /** Free-form custom tone description (overrides aiTone) */
-  customTone?: string;
-  /** Preferred response language (e.g. "English", "Spanish") */
-  language?: string;
-  /** Target blockchain for chain-specific answers */
-  blockchain?: BlockchainEnum;
-  /** Custom instructions appended to the system prompt */
-  customInstructions?: string;
-  /** Project website URL for grounding */
-  website?: string;
+  /** Company or project description */
+  companyDescription?: string;
+  /** Company website URL */
+  companyWebsiteUrl?: string;
+  /** Whitepaper URL */
+  whitePaperUrl?: string;
+  /** Whether the project has a crypto token */
+  cryptoToken?: boolean;
+  /** Token-specific information */
+  tokenInformation?: {
+    name?: string;
+    symbol?: string;
+    network?: string;
+    contractAddress?: string;
+  };
   /** Social media links */
-  socialMedia?: string;
-  /** Additional free-form context */
-  additionalContext?: string;
+  socialMediaUrls?: Array<{ name: string; url: string }>;
+  /** Limitations or restrictions for the AI responses */
+  limitation?: string;
+  /** AI tone mode selector */
+  aiTone?: 'DEFAULT_TONE' | 'CUSTOM_TONE' | 'PRE_SET_TONE';
+  /** Selected preset tone (when aiTone is 'PRE_SET_TONE') or custom tone string (when aiTone is 'CUSTOM_TONE') */
+  selectedTone?: PresetTone | string;
 }
 
 // ── Chat Request ────────────────────────────────────────────────────
@@ -376,6 +376,25 @@ interface MintNftResponse {
     /** Encoded calldata to submit as a transaction */
     mintData: string;
   };
+}
+
+// ── NFT Progress ───────────────────────────────────────────────────
+
+/**
+ * GET /nft/progress/{collectionId} — poll generation progress.
+ * Returns the current status of an NFT generation job.
+ */
+interface NftProgressResponse {
+  /** Collection ID being tracked */
+  collectionId: string;
+  /** Current generation status */
+  status: 'processing' | 'completed' | 'failed';
+  /** Progress percentage (0-100) */
+  progress: number;
+  /** Generated image URLs (available when completed) */
+  images?: string[];
+  /** Whether generation is complete */
+  generated?: boolean;
 }
 ```
 

@@ -1,9 +1,13 @@
 import { AINews } from '@chaingpt/ainews';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-const news = new AINews({
-  apiKey: process.env.CHAINGPT_API_KEY!,
-});
+let _news: AINews | null = null;
+function getClient(): AINews {
+  if (!_news) {
+    _news = new AINews({ apiKey: process.env.CHAINGPT_API_KEY! });
+  }
+  return _news;
+}
 
 export const newsTools: Tool[] = [
   {
@@ -145,7 +149,7 @@ const TOKEN_MAP: Record<number, string> = {
   97: 'XMR',
   98: 'ALGO',
   99: 'FIL',
-  100: 'AVAX',
+  // 100: possible alternate AVAX mapping — canonical AVAX is 92
   101: 'NEAR',
   102: 'APT',
   103: 'SUI',
@@ -199,7 +203,7 @@ export async function handleNewsTool(
       if (args.search) params.searchQuery = args.search;
       if (args.fetchAfter) params.fetchAfter = args.fetchAfter;
 
-      const response = await news.getNews(params as any);
+      const response = await getClient().getNews(params as any);
       const data = (response as any).data || response;
       const total = (response as any).total;
 

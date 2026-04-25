@@ -112,7 +112,7 @@ Generate ALL files below. Every file must be complete and working — no placeho
     "express": "^4.18.2",
     "dotenv": "^16.3.1",
     "cors": "^2.8.5",
-    "@chaingpt/generalchat": "^2.0.0",
+    "@chaingpt/generalchat": "^1.0.0",
     "@chaingpt/nft": "^1.0.0",
     "@chaingpt/smartcontractgenerator": "^1.0.0",
     "@chaingpt/smartcontractauditor": "^1.0.0",

@@ -149,7 +149,7 @@ const nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY! });
 
 **generateAndMint(prompt, walletAddress, chainId, metadata):**
 - Optionally call enhancePrompt first
-- Call `nft.generateNftQueue()` with all params including walletAddress, chainId, amount: 1
+- Call `nft.generateNftWithQueue()` with all params including walletAddress, chainId, amount: 1
 - Return the collectionId for polling
 
 **checkProgress(collectionId):**

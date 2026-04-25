@@ -80,7 +80,7 @@ Three sub-endpoints available. Ask which one:
 | model | string | No | `"velogen"` | Options: `velogen`, `nebula_forge_xl`, `VisionaryForge`, `Dale3` |
 | height | number | No | `512` | Image height in px |
 | width | number | No | `512` | Image width in px |
-| steps | number | No | `3` | Generation steps (VeloGen: 1-8, others: 1-50) |
+| steps | number | No | `3` | Generation steps (VeloGen: 1-4, others: 1-50) |
 | enhance | string | No | `"no"` | Upscale: `"no"`, `"1x"`, `"2x"` |
 | style | string | No | — | Optional style preset |
 

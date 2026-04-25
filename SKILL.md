@@ -1,6 +1,6 @@
 ---
 name: chaingpt
-description: "Build with the ChainGPT Web3 AI developer platform. Full API/SDK reference and project scaffolding for: Web3 AI Chatbot & LLM, AI NFT Generator, Smart Contract Generator, Smart Contract Auditor, AI Crypto News, AgenticOS Twitter agents, and Solidity LLM. Use when building blockchain apps, Web3 chatbots, NFT tools, smart contract tools, crypto news feeds, AI agents, or integrating any ChainGPT API. Triggers: chaingpt, web3 ai, nft generator, smart contract audit, crypto news api, agenticos, solidity llm, cgpt, blockchain ai, token analysis."
+description: "Build with the ChainGPT Web3 AI developer platform. Full API/SDK reference and project scaffolding for: Web3 AI Chatbot & LLM, AI NFT Generator, Smart Contract Generator, Smart Contract Auditor, AI Crypto News, AgenticOS Twitter agents, and Solidity LLM. Use when building blockchain apps, Web3 chatbots, NFT tools, smart contract tools, crypto news feeds, AI agents, or integrating any ChainGPT API. Triggers: chaingpt, web3 ai, nft generator, smart contract audit, crypto news api, agenticos, solidity llm, cgpt, blockchain ai, token analytics."
 ---
 
 # ChainGPT Developer Skill
@@ -118,7 +118,7 @@ const mint = await nft.mintNft({
 });
 ```
 
-> For all endpoints (generate-image, generate-multiple, queue, progress, mint, enhancePrompt, get-chains, abi), models, styles, chain IDs, and pricing, read `reference/nft-generator.md`.
+> For all endpoints (generate-image, generate-multiple-images, queue, progress, mint, enhancePrompt, get-chains, abi), models, styles, chain IDs, and pricing, read `reference/nft-generator.md`.
 
 ### 3. Smart Contract Generator
 
@@ -261,6 +261,9 @@ Complete runnable examples are in the `examples/` directory:
 | NFT Generate + 1x upscale | 2.0 | $0.02 |
 | NFT Generate + 2x upscale | 3.0 | $0.03 |
 | NFT Generate (Dale3 1024x1024) | 4.75 | $0.0475 |
+| NFT Generate (Dale3 other resolutions) | ~9.5 | ~$0.095 |
+| NFT Generate (Dale3 + enhanced) | ~14.25 | ~$0.1425 |
+| NFT Generate (NebulaForge/VisionaryForge steps 26-50) | +0.25 surcharge | +$0.0025 |
 | NFT Character Preserve | +5.0 | +$0.05 |
 | NFT Prompt Enhancement | 0.5 | $0.005 |
 | NFT Mint / Chains / ABI | 0 | Free |
@@ -294,6 +297,8 @@ If a developer is migrating from another platform, read the relevant guide:
 - `migration/from-custom.md` — Custom AI solutions → ChainGPT (cost comparison, hybrid approach)
 
 ## Additional Skills
+
+These are Claude Code skill commands — invoke them in any Claude conversation, not in a terminal.
 
 | Command | What It Does |
 |---------|-------------|

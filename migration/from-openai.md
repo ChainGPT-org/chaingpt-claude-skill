@@ -29,9 +29,9 @@ OpenAI's models are general-purpose. For Web3 applications, you need custom tool
 |--------|----------|-------|
 | `openai.chat.completions.create()` | `generalchat.createChatBlob()` | Single response |
 | `stream: true` | `generalchat.createChatStream()` | Streaming response |
-| `model: "gpt-4"` | `model: "general_assistant"` | One model for all Web3 queries |
-| `model: "gpt-4"` + custom prompt | `model: "smart_contract_generator"` | Dedicated contract generation |
-| `model: "gpt-4"` + custom prompt | `model: "smart_contract_auditor"` | Dedicated security auditing |
+| `model: "gpt-4"` | No model param needed | One model for all Web3 queries |
+| `model: "gpt-4"` + custom prompt | Separate `SmartContractGenerator` SDK | Dedicated contract generation |
+| `model: "gpt-4"` + custom prompt | Separate `SmartContractAuditor` SDK | Dedicated security auditing |
 | `messages: [{role: "user", content: "..."}]` | `question: "..."` | Flat string, not message array |
 | System messages | `contextInjection` object | Structured branding/persona config |
 | `OPENAI_API_KEY` | `CHAINGPT_API_KEY` | Different env variable |
@@ -149,9 +149,9 @@ const response = await chat.createChatBlob({
     companyWebsiteUrl: 'https://moondao.com',
     cryptoToken: true,
     tokenInformation: {
-      name: 'MoonDAO',
-      symbol: 'MOON',
-      network: 'Ethereum'
+      tokenName: 'MoonDAO',
+      tokenSymbol: 'MOON',
+      blockchain: 'Ethereum'
     },
     limitation: true,       // Only answer about this project
     aiTone: 'PRE_SET_TONE',

@@ -16,11 +16,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@chaingpt/generalchat": "latest",
-    "@chaingpt/nft": "latest",
-    "@chaingpt/smartcontractgenerator": "latest",
-    "@chaingpt/smartcontractauditor": "latest",
-    "@chaingpt/ainews": "latest",
+    "@chaingpt/generalchat": "^1.0.0",
+    "@chaingpt/nft": "^1.0.0",
+    "@chaingpt/smartcontractgenerator": "^1.0.0",
+    "@chaingpt/smartcontractauditor": "^1.0.0",
+    "@chaingpt/ainews": "^1.0.0",
     "dotenv": "^16.0.0"
   },
   "devDependencies": {

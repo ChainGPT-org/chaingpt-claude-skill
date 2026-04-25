@@ -1,9 +1,13 @@
 import { SmartContractGenerator } from '@chaingpt/smartcontractgenerator';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-const generator = new SmartContractGenerator({
-  apiKey: process.env.CHAINGPT_API_KEY!,
-});
+let _generator: SmartContractGenerator | null = null;
+function getClient(): SmartContractGenerator {
+  if (!_generator) {
+    _generator = new SmartContractGenerator({ apiKey: process.env.CHAINGPT_API_KEY! });
+  }
+  return _generator;
+}
 
 export const generatorTools: Tool[] = [
   {
@@ -46,7 +50,7 @@ export async function handleGeneratorTool(
     if (name === 'chaingpt_generate_contract') {
       const useChatHistory = (args.chatHistory as boolean) || !!args.sessionId;
 
-      const response = await generator.createSmartContractBlob({
+      const response = await getClient().createSmartContractBlob({
         question: args.description as string,
         chatHistory: useChatHistory ? 'on' : 'off',
         ...(args.sessionId ? { sdkUniqueId: args.sessionId as string } : {}),

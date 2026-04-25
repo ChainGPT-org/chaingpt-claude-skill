@@ -126,6 +126,8 @@ app.post("/chat/stream", (req: Request, res: Response) => {
         res.end();
       }
     }, 50);
+
+    req.on('close', () => clearInterval(interval));
   } else {
     // Blob response
     res.setHeader("X-Credit-Cost", String(credits));
@@ -223,6 +225,7 @@ app.get("/nft/progress/:collectionId", (req: Request, res: Response) => {
   } else {
     // Subsequent calls: completed
     progressState[collectionId] = 100;
+    delete progressState[collectionId];
     res.json({
       data: {
         collectionId,
@@ -327,7 +330,7 @@ app.get("/news", (req: Request, res: Response) => {
     ? parseInt(req.query.tokenId as string)
     : null;
 
-  logRequest("GET", "/news", undefined, 0.1);
+  logRequest("GET", "/news", undefined, Math.ceil(limit / 10));
 
   let filtered = [...sampleNewsArticles];
 

@@ -568,8 +568,8 @@ export const creditCosts: Record<string, number> = {
   "chat:general_assistant:history": 1.0,
   "chat:smart_contract_generator": 1.0,
   "chat:smart_contract_generator:history": 2.0,
-  "chat:smart_contract_auditor": 2.0,
-  "chat:smart_contract_auditor:history": 4.0,
+  "chat:smart_contract_auditor": 1.0,
+  "chat:smart_contract_auditor:history": 2.0,
   "chat:chatHistory": 0,
   "nft:generate-image": 1.0,
   "nft:generate-multiple-images": 1.0,  // per image
