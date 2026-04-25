@@ -22,10 +22,10 @@ jobs:
             mock-server/package-lock.json
 
       - name: Install and test mcp-server
-        run: cd mcp-server && npm install && npm test
+        run: cd mcp-server && npm ci && npm test
 
       - name: Install and test mock-server
-        run: cd mock-server && npm install && npm test
+        run: cd mock-server && npm ci && npm test
 
       - name: Run validate.sh
         run: bash scripts/validate.sh
