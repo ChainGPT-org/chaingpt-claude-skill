@@ -58,6 +58,12 @@ No docs. No boilerplate. Just results.
 
 **One command. That's it.**
 
+**Claude Code (plugin install):**
+```
+/plugin install ChainGPT-org/chaingpt-claude-skill
+```
+
+**Manual install (git clone):**
 ```bash
 git clone https://github.com/ChainGPT-org/chaingpt-claude-skill .claude/skills/chaingpt
 ```
@@ -169,6 +175,14 @@ The MCP server gives Claude **direct API access** — not just code generation:
 
 <details>
 <summary><b>Setup MCP Server (optional)</b></summary>
+
+If installed via `/plugin install`, the MCP server is configured automatically via `.mcp.json`. Just set your API key:
+
+```bash
+export CHAINGPT_API_KEY="your-key-here"
+```
+
+For manual installs, build and configure:
 
 ```bash
 cd .claude/skills/chaingpt/mcp-server
@@ -297,13 +311,21 @@ The CI workflow (`.github/workflows/ci.yml`) runs all three automatically on eve
 
 ```
 chaingpt-claude-skill/
-├── SKILL.md                          # Main skill entry point (336 lines)
+├── .claude-plugin/
+│   └── plugin.json                   # Plugin manifest (name, version, author)
+├── .mcp.json                         # MCP server configuration
 ├── VERSION                           # Semantic version
-├── plugin.json                       # Claude Code plugin manifest
 ├── README.md
 ├── CONTRIBUTING.md
 ├── CHANGELOG.md
 ├── LICENSE
+│
+├── skills/                           # All skills (auto-discovered)
+│   ├── chaingpt/SKILL.md             #   Main skill — API reference (341 lines)
+│   ├── playground/SKILL.md           #   Interactive API testing
+│   ├── debug/SKILL.md                #   Troubleshoot API errors
+│   ├── hackathon/SKILL.md            #   60-second project scaffolder
+│   └── update/SKILL.md               #   Check for skill updates
 │
 ├── reference/                        # API & SDK documentation (16 files)
 │   ├── llm-chatbot.md                #   Web3 AI Chatbot & LLM
@@ -326,7 +348,6 @@ chaingpt-claude-skill/
 ├── templates/                        # Project scaffolding (11 files)
 ├── patterns/                         # Solidity patterns (5 files, 45+ patterns)
 ├── migration/                        # Platform migration guides (3 files)
-├── skills/                           # Interactive sub-skills (4 skills)
 ├── mcp-server/                       # MCP server — 12 tools, 53 tests
 ├── mock-server/                      # Testing mock server — 26 tests
 ├── scripts/                          # Validation tooling
