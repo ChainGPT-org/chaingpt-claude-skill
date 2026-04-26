@@ -25,6 +25,5 @@ Thumbs.db
 npm-debug.log*
 
 # Lock files (keep package.json, let users generate their own)
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
