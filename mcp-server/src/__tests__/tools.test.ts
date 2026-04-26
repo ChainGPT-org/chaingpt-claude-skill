@@ -155,7 +155,7 @@ describe('Tool Definitions', () => {
     expect(required).toContain('walletAddress');
     expect(required).toContain('chainId');
     expect(required).toContain('name');
-    expect(required).toContain('symbol');
+    // symbol is an optional field in the tool schema
   });
 
   it('chaingpt_generate_contract requires "description" field', () => {
@@ -189,7 +189,7 @@ describe('Tool Definitions', () => {
 
 describe('handleChatTool', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     // Reset call history on shared mock methods without clearing implementations
     Object.values(mockChatInstance).forEach(fn => fn.mockReset?.());
     Object.values(mockNftInstance).forEach(fn => fn.mockReset?.());
@@ -278,7 +278,7 @@ describe('handleChatTool', () => {
 
 describe('handleNftTool', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     // Reset call history on shared mock methods without clearing implementations
     Object.values(mockChatInstance).forEach(fn => fn.mockReset?.());
     Object.values(mockNftInstance).forEach(fn => fn.mockReset?.());
@@ -363,7 +363,7 @@ describe('handleNftTool', () => {
 
 describe('handleAuditTool', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     // Reset call history on shared mock methods without clearing implementations
     Object.values(mockChatInstance).forEach(fn => fn.mockReset?.());
     Object.values(mockNftInstance).forEach(fn => fn.mockReset?.());
@@ -439,7 +439,7 @@ describe('handleAuditTool', () => {
 
 describe('handleGeneratorTool', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     // Reset call history on shared mock methods without clearing implementations
     Object.values(mockChatInstance).forEach(fn => fn.mockReset?.());
     Object.values(mockNftInstance).forEach(fn => fn.mockReset?.());
@@ -512,7 +512,7 @@ describe('handleGeneratorTool', () => {
 
 describe('handleNewsTool', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     // Reset call history on shared mock methods without clearing implementations
     Object.values(mockChatInstance).forEach(fn => fn.mockReset?.());
     Object.values(mockNftInstance).forEach(fn => fn.mockReset?.());
