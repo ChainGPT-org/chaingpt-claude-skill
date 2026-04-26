@@ -15,18 +15,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@chaingpt/ainews": "^0.0.9",
     "@chaingpt/generalchat": "^0.0.17",
     "@chaingpt/nft": "^0.1.2",
-    "@chaingpt/smartcontractgenerator": "^0.0.5",
     "@chaingpt/smartcontractauditor": "^0.0.2",
-    "@chaingpt/ainews": "^0.0.9",
+    "@chaingpt/smartcontractgenerator": "^0.0.5",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^16.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "ts-node": "^10.0.0",
     "@types/node": "^20.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.0"
   },
   "engines": {

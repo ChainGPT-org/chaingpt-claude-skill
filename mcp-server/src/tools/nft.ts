@@ -354,7 +354,7 @@ export async function handleNftTool(
         ...(args.style ? { style: args.style as string } : {}),
       } as any);
 
-      const collectionId = (generation as any).collectionId;
+      const collectionId = (generation as any)?.data?.collectionId ?? (generation as any)?.collectionId;
       if (!collectionId) {
         return {
           content: [
@@ -413,6 +413,56 @@ export async function handleNftTool(
             text: `NFT generated and minted successfully!\n\nCollection ID: ${collectionId}\nName: ${args.name}\nSymbol: ${args.symbol}\nChain ID: ${args.chainId}\nWallet: ${args.walletAddress}\n\nMint result:\n${JSON.stringify(minted, null, 2)}`,
           },
         ],
+      };
+    }
+
+
+    if (name === 'chaingpt_nft_surprise_me') {
+      const result = await getClient().surpriseMe();
+      const prompt = (result as any)?.prompt ?? (result as any)?.data?.prompt ?? JSON.stringify(result);
+      return {
+        content: [{ type: 'text', text: `Random NFT prompt suggestion:\n\n${prompt}` }],
+      };
+    }
+
+    if (name === 'chaingpt_nft_generate_multiple') {
+      const numImages = (args.count as number) || 2;
+      const promptsArray = Array(numImages).fill(args.prompt as string);
+      const buffers = await getClient().generateMultipleImages({
+        prompts: promptsArray,
+        model: ((args.model as string) || 'velogen'),
+        width: (args.width as number) || 512,
+        height: (args.height as number) || 512,
+        steps: (args.steps as number) || 2,
+      } as any);
+
+      const count = Array.isArray(buffers) ? buffers.length : 0;
+      const summaries = Array.isArray(buffers)
+        ? buffers.map((buf: any, i: number) => {
+            const b64 = Buffer.from(buf).toString('base64');
+            return `Image ${i + 1}: ${b64.length} chars base64`;
+          })
+        : ['No images returned'];
+
+      return {
+        content: [{ type: 'text', text: `Generated ${count} images:\n${summaries.join('\n')}` }],
+      };
+    }
+
+    if (name === 'chaingpt_nft_get_collections') {
+      const options: Record<string, unknown> = {};
+      if (args.walletAddress) options.walletAddress = args.walletAddress;
+      if (args.page) options.page = args.page;
+      if (args.limit) options.limit = args.limit;
+      if (args.isPublic !== undefined) options.isPublic = args.isPublic;
+      if (args.isDraft !== undefined) options.isDraft = args.isDraft;
+      if (args.isMinted !== undefined) options.isMinted = args.isMinted;
+      if (args.name) options.name = args.name;
+      if (args.symbol) options.symbol = args.symbol;
+
+      const result = await getClient().getCollections(options as any);
+      return {
+        content: [{ type: 'text', text: `NFT Collections:\n\n${JSON.stringify(result, null, 2)}` }],
       };
     }
 

@@ -270,6 +270,20 @@ export async function handleChatTool(
       return { content: [{ type: 'text', text: botResponse }] };
     }
 
+
+    if (name === 'chaingpt_chat_history') {
+      const result = await getClient().getChatHistory({
+        sdkUniqueId: args.sessionId as string,
+        limit: (args.limit as number) || 10,
+        offset: (args.offset as number) || 0,
+        sortOrder: (args.sortOrder as string) || 'DESC',
+      });
+
+      return {
+        content: [{ type: 'text', text: `Chat History:\n\n${JSON.stringify(result, null, 2)}` }],
+      };
+    }
+
     return { content: [{ type: 'text', text: `Unknown chat tool: ${name}` }] };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
