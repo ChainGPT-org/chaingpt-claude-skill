@@ -21,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   mockChatInstance: {
     createChatBlob: vi.fn(),
+    getChatHistory: vi.fn(),
   } as Record<string, any>,
   mockNftInstance: {
     generateImage: vi.fn(),
@@ -29,12 +30,17 @@ const {
     generateNftWithQueue: vi.fn(),
     getNftProgress: vi.fn(),
     mintNft: vi.fn(),
+    surpriseMe: vi.fn(),
+    generateMultipleImages: vi.fn(),
+    getCollections: vi.fn(),
   } as Record<string, any>,
   mockAuditorInstance: {
     auditSmartContractBlob: vi.fn(),
+    getChatHistory: vi.fn(),
   } as Record<string, any>,
   mockGeneratorInstance: {
     createSmartContractBlob: vi.fn(),
+    getChatHistory: vi.fn(),
   } as Record<string, any>,
   mockNewsInstance: {
     getNews: vi.fn(),
@@ -116,14 +122,16 @@ describe('Tool Definitions', () => {
     expect(names).toContain('chaingpt_nft_generate_and_mint');
   });
 
-  it('should define the audit tool', () => {
-    expect(auditTools).toHaveLength(1);
-    expect(auditTools[0].name).toBe('chaingpt_audit_contract');
+  it('should define all expected audit tools', () => {
+    const names = auditTools.map((t) => t.name);
+    expect(names).toContain('chaingpt_audit_contract');
+    expect(names).toContain('chaingpt_audit_history');
   });
 
-  it('should define the generator tool', () => {
-    expect(generatorTools).toHaveLength(1);
-    expect(generatorTools[0].name).toBe('chaingpt_generate_contract');
+  it('should define all expected generator tools', () => {
+    const names = generatorTools.map((t) => t.name);
+    expect(names).toContain('chaingpt_generate_contract');
+    expect(names).toContain('chaingpt_generate_history');
   });
 
   it('should define all expected news tools', () => {
@@ -270,6 +278,53 @@ describe('handleChatTool', () => {
       'ChainGPT Chat error: Rate limit exceeded'
     );
   });
+
+  it('should define chat_history tool', () => {
+    const names = chatTools.map((t) => t.name);
+    expect(names).toContain('chaingpt_chat_history');
+  });
+
+  it('retrieves chat history', async () => {
+    const mock = getChatMock();
+    mock.getChatHistory.mockResolvedValue({ data: [{ question: 'hi', answer: 'hello' }] });
+
+    const result = await handleChatTool('chaingpt_chat_history', {
+      sessionId: 'test-sess',
+      limit: 5,
+    });
+
+    expect(mock.getChatHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ sdkUniqueId: 'test-sess', limit: 5 })
+    );
+    expect(result.content[0].text).toContain('Chat History');
+  });
+
+  it('passes new context fields (whitePaperUrl, purpose, customTone, limitation)', async () => {
+    const mock = getChatMock();
+    mock.createChatBlob.mockResolvedValue({ data: { bot: 'Custom response' } });
+
+    await handleChatTool('chaingpt_chat_with_context', {
+      question: 'Tell me about the project',
+      companyName: 'TestCo',
+      whitePaperUrl: 'https://example.com/wp.pdf',
+      purpose: 'DeFi lending',
+      customTone: 'Be very casual and fun',
+      limitation: true,
+    });
+
+    expect(mock.createChatBlob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        useCustomContext: true,
+        contextInjection: expect.objectContaining({
+          whitePaperUrl: 'https://example.com/wp.pdf',
+          purpose: 'DeFi lending',
+          aiTone: 'CUSTOM_TONE',
+          customTone: 'Be very casual and fun',
+          limitation: true,
+        }),
+      })
+    );
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -355,6 +410,55 @@ describe('handleNftTool', () => {
       handleNftTool('chaingpt_nft_generate_image', { prompt: 'test' })
     ).rejects.toThrow('ChainGPT NFT error: Insufficient credits');
   });
+
+  it('should define new NFT tools (surpriseMe, generateMultiple, getCollections)', () => {
+    const names = nftTools.map((t) => t.name);
+    expect(names).toContain('chaingpt_nft_surprise_me');
+    expect(names).toContain('chaingpt_nft_generate_multiple');
+    expect(names).toContain('chaingpt_nft_get_collections');
+  });
+
+  it('returns a random prompt via surpriseMe', async () => {
+    const mock = getNftMock();
+    mock.surpriseMe.mockResolvedValue({ prompt: 'A golden dragon in space' });
+
+    const result = await handleNftTool('chaingpt_nft_surprise_me', {});
+    expect(result.content[0].text).toContain('golden dragon');
+  });
+
+  it('generates multiple images', async () => {
+    const mock = getNftMock();
+    mock.generateMultipleImages.mockResolvedValue([Buffer.from('img1'), Buffer.from('img2')]);
+
+    const result = await handleNftTool('chaingpt_nft_generate_multiple', { prompt: 'cats' });
+    expect(result.content[0].text).toContain('Generated 2 images');
+  });
+
+  it('fetches NFT collections', async () => {
+    const mock = getNftMock();
+    mock.getCollections.mockResolvedValue({ data: [{ name: 'TestCol', id: '123' }] });
+
+    const result = await handleNftTool('chaingpt_nft_get_collections', {});
+    expect(result.content[0].text).toContain('TestCol');
+  });
+
+  it('passes image and isCharacterPreserve to generateImage', async () => {
+    const mock = getNftMock();
+    mock.generateImage.mockResolvedValue({ data: [1, 2, 3] });
+
+    await handleNftTool('chaingpt_nft_generate_image', {
+      prompt: 'test',
+      image: 'https://example.com/ref.png',
+      isCharacterPreserve: true,
+    });
+
+    expect(mock.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: 'https://example.com/ref.png',
+        isCharacterPreserve: true,
+      })
+    );
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -431,6 +535,17 @@ describe('handleAuditTool', () => {
       handleAuditTool('chaingpt_audit_contract', { sourceCode: 'contract T {}' })
     ).rejects.toThrow('ChainGPT Audit error: Service unavailable');
   });
+
+  it('retrieves audit history', async () => {
+    const mock = getAuditorMock();
+    mock.getChatHistory.mockResolvedValue({ data: [{ question: 'audit', answer: 'result' }] });
+
+    const result = await handleAuditTool('chaingpt_audit_history', { sessionId: 'aud-sess' });
+    expect(mock.getChatHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ sdkUniqueId: 'aud-sess' })
+    );
+    expect(result.content[0].text).toContain('Audit History');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -504,6 +619,17 @@ describe('handleGeneratorTool', () => {
       handleGeneratorTool('chaingpt_generate_contract', { description: 'test' })
     ).rejects.toThrow('ChainGPT Generator error: Timeout');
   });
+
+  it('retrieves generator history', async () => {
+    const mock = getGeneratorMock();
+    mock.getChatHistory.mockResolvedValue({ data: [{ question: 'gen', answer: 'code' }] });
+
+    const result = await handleGeneratorTool('chaingpt_generate_history', { sessionId: 'gen-sess' });
+    expect(mock.getChatHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ sdkUniqueId: 'gen-sess' })
+    );
+    expect(result.content[0].text).toContain('Generator History');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -529,6 +655,22 @@ describe('handleNewsTool', () => {
     expect(result.content[0].text).toContain('DeFi');
     expect(result.content[0].text).toContain('Bitcoin');
     expect(result.content[0].text).toContain('CGPT');
+  });
+
+  it('includes all 23 categories including new additions', async () => {
+    const result = await handleNewsTool('chaingpt_news_categories', {});
+    const text = result.content[0].text;
+    expect(text).toContain('Decentralized');
+    expect(text).toContain('Distributed Ledger');
+    expect(text).toContain('Cryptography');
+    expect(text).toContain('Digital Assets');
+    expect(text).toContain('Tokenization');
+    expect(text).toContain('Consensus Mechanisms');
+    expect(text).toContain('ICO');
+    expect(text).toContain('Crypto Wallets');
+    expect(text).toContain('Interoperability');
+    expect(text).toContain('Mining');
+    expect(text).toContain('Cross-Chain Transactions');
   });
 
   it('fetches news articles and formats them', async () => {

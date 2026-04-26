@@ -50,12 +50,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // before less specific ones. The catch-all "chaingpt_" must be last.
     //
     // Prefix               -> Handler              -> Tool names
-    // "chaingpt_chat"      -> handleChatTool       -> chaingpt_chat_ask, chaingpt_chat_stream
-    // "chaingpt_nft"       -> handleNftTool        -> chaingpt_nft_generate_image, chaingpt_nft_enhance_prompt, chaingpt_nft_get_chains, chaingpt_nft_generate_and_mint
-    // "chaingpt_audit"     -> handleAuditTool      -> chaingpt_audit_contract
-    // "chaingpt_generate"  -> handleGeneratorTool  -> chaingpt_generate_contract
-    // "chaingpt_news"      -> handleNewsTool       -> chaingpt_news_fetch
-    // "chaingpt_"          -> handleUtilTool       -> chaingpt_estimate_cost, chaingpt_check_credits (catch-all)
+    // "chaingpt_chat"      -> handleChatTool       -> chaingpt_chat, chaingpt_chat_with_context, chaingpt_chat_history
+    // "chaingpt_nft"       -> handleNftTool        -> chaingpt_nft_generate_image, chaingpt_nft_enhance_prompt, chaingpt_nft_get_chains, chaingpt_nft_generate_and_mint, chaingpt_nft_surprise_me, chaingpt_nft_generate_multiple, chaingpt_nft_get_collections
+    // "chaingpt_audit"     -> handleAuditTool      -> chaingpt_audit_contract, chaingpt_audit_history
+    // "chaingpt_generate"  -> handleGeneratorTool  -> chaingpt_generate_contract, chaingpt_generate_history
+    // "chaingpt_news"      -> handleNewsTool       -> chaingpt_news_fetch, chaingpt_news_categories
+    // "chaingpt_"          -> handleUtilTool       -> chaingpt_estimate_credits, chaingpt_check_balance (catch-all)
     if (name.startsWith('chaingpt_chat')) return await handleChatTool(name, args);
     if (name.startsWith('chaingpt_nft')) return await handleNftTool(name, args);
     if (name.startsWith('chaingpt_audit')) return await handleAuditTool(name, args);

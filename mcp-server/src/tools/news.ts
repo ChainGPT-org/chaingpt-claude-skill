@@ -21,7 +21,7 @@ export const newsTools: Tool[] = [
           type: 'array',
           items: { type: 'number' },
           description:
-            'Category IDs to filter by. Common: 5=DeFi, 8=NFT, 64=Cryptocurrency, 78=Exchange, 2=Gaming, 3=DAO, 4=DApps, 6=Lending, 7=Metaverse, 9=Stablecoins, 66=Smart Contracts, 74=Web3',
+            'Category IDs to filter by. Common: 5=DeFi, 8=NFT, 64=Cryptocurrency, 78=Exchange, 2=Gaming, 3=DAO, 4=DApps, 6=Lending, 7=Metaverse, 9=Stablecoins, 66=Smart Contracts, 74=Web3. Also: 65=Decentralized, 67=Distributed Ledger, 68=Cryptography, 69=Digital Assets, 70=Tokenization, 71=Consensus, 72=ICO, 73=Wallets, 75=Interoperability, 76=Mining, 77=Cross-Chain',
         },
         blockchains: {
           type: 'array',
@@ -79,8 +79,19 @@ const CATEGORY_MAP: Record<number, string> = {
   8: 'NFT',
   9: 'Stablecoins',
   64: 'Cryptocurrency',
+  65: 'Decentralized',
   66: 'Smart Contracts',
+  67: 'Distributed Ledger',
+  68: 'Cryptography',
+  69: 'Digital Assets',
+  70: 'Tokenization',
+  71: 'Consensus Mechanisms',
+  72: 'ICO',
+  73: 'Crypto Wallets',
   74: 'Web3.0',
+  75: 'Interoperability',
+  76: 'Mining',
+  77: 'Cross-Chain Transactions',
   78: 'Exchange',
 };
 

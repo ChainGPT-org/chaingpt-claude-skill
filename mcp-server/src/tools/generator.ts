@@ -36,6 +36,36 @@ export const generatorTools: Tool[] = [
       required: ['description'],
     },
   },
+  {
+    name: 'chaingpt_generate_history',
+    description:
+      'Retrieve smart contract generation conversation history for a given session.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: {
+          type: 'string',
+          description: 'The session ID to retrieve history for',
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of messages to return',
+          default: 10,
+        },
+        offset: {
+          type: 'number',
+          description: 'Pagination offset',
+          default: 0,
+        },
+        sortOrder: {
+          type: 'string',
+          enum: ['ASC', 'DESC'],
+          default: 'DESC',
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
 ];
 
 export async function handleGeneratorTool(

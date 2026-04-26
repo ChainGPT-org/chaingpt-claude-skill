@@ -72,6 +72,17 @@ export const nftTools: Tool[] = [
             'craft-clay',
           ],
         },
+        image: {
+          type: 'string',
+          description:
+            'URL of an input image for image-to-image generation. The AI will use this as a reference.',
+        },
+        isCharacterPreserve: {
+          type: 'boolean',
+          description:
+            'Preserve character identity across generations. Adds +5 credits to the cost.',
+          default: false,
+        },
       },
       required: ['prompt'],
     },
@@ -144,6 +155,11 @@ export const nftTools: Tool[] = [
           type: 'string',
           description: 'NFT collection symbol (e.g. "MYNFT")',
         },
+        amount: {
+          type: 'number',
+          description: 'Number of NFTs to generate (default 1)',
+          default: 1,
+        },
         steps: {
           type: 'number',
           description: 'Inference steps',
@@ -160,6 +176,89 @@ export const nftTools: Tool[] = [
         },
       },
       required: ['prompt', 'walletAddress', 'chainId', 'name'],
+    },
+  },
+  {
+    name: 'chaingpt_nft_surprise_me',
+    description:
+      'Get a random creative AI-generated prompt suggestion for NFT art. Free (0 credits). Great for inspiration.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'chaingpt_nft_generate_multiple',
+    description:
+      'Generate multiple AI images from a single prompt. Returns an array of base64-encoded images. Cost scales per image.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Text description of the images to generate',
+        },
+        model: {
+          type: 'string',
+          enum: ['velogen', 'nebula_forge_xl', 'VisionaryForge', 'Dale3'],
+          default: 'velogen',
+        },
+        count: {
+          type: 'number',
+          description: 'Number of images to generate (default 2)',
+          default: 2,
+        },
+        width: { type: 'number', default: 512 },
+        height: { type: 'number', default: 512 },
+        steps: { type: 'number', default: 2 },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'chaingpt_nft_get_collections',
+    description:
+      'List NFT collections associated with your API key. Filter by wallet, mint status, visibility, name, or symbol. Free (0 credits).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        walletAddress: {
+          type: 'string',
+          description: 'Filter by wallet address',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination',
+          default: 1,
+        },
+        limit: {
+          type: 'number',
+          description: 'Results per page',
+          default: 10,
+        },
+        isPublic: {
+          type: 'boolean',
+          description: 'Filter by public visibility',
+        },
+        isDraft: {
+          type: 'boolean',
+          description: 'Filter draft collections',
+        },
+        isMinted: {
+          type: 'boolean',
+          description: 'Filter minted collections',
+        },
+        name: {
+          type: 'string',
+          description: 'Filter by collection name',
+        },
+        symbol: {
+          type: 'string',
+          description: 'Filter by collection symbol',
+        },
+      },
+      required: [],
     },
   },
 ];
@@ -183,6 +282,8 @@ export async function handleNftTool(
         ...(args.walletAddress ? { walletAddress: args.walletAddress as string } : {}),
         ...(args.enhance ? { enhance: args.enhance as string } : {}),
         ...(args.style ? { style: args.style as string } : {}),
+        ...(args.image ? { image: args.image as string } : {}),
+        ...(args.isCharacterPreserve ? { isCharacterPreserve: true } : {}),
       } as any);
 
       // Convert byte array to base64 data URI
@@ -248,7 +349,7 @@ export async function handleNftTool(
         steps: (args.steps as number) || 2,
         walletAddress: args.walletAddress as string,
         chainId: args.chainId as number,
-        amount: 1,
+        amount: (args.amount as number) || 1,
         ...(args.enhance ? { enhance: args.enhance as string } : {}),
         ...(args.style ? { style: args.style as string } : {}),
       } as any);
@@ -302,7 +403,7 @@ export async function handleNftTool(
         collectionId,
         name: args.name as string,
         description: (args.description as string) || '',
-        ids: [1],
+        ids: Array.from({ length: (args.amount as number) || 1 }, (_, i) => i + 1),
       } as any);
 
       return {
