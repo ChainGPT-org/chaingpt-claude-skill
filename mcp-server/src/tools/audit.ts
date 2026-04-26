@@ -41,6 +41,36 @@ export const auditTools: Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'chaingpt_audit_history',
+    description:
+      'Retrieve audit conversation history for a given session. Requires a session ID from previous audit calls.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: {
+          type: 'string',
+          description: 'The session ID to retrieve history for',
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of messages to return',
+          default: 10,
+        },
+        offset: {
+          type: 'number',
+          description: 'Pagination offset',
+          default: 0,
+        },
+        sortOrder: {
+          type: 'string',
+          enum: ['ASC', 'DESC'],
+          default: 'DESC',
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
 ];
 
 export async function handleAuditTool(

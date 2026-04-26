@@ -70,6 +70,45 @@ export const chatTools: Tool[] = [
           type: 'string',
           description: 'Token contract address',
         },
+        whitePaperUrl: {
+          type: 'string',
+          description: 'URL to the project white paper',
+        },
+        purpose: {
+          type: 'string',
+          description: 'Purpose or mission statement of the project',
+        },
+        tokenSourceCode: {
+          type: 'string',
+          description: 'URL to the token source code (e.g. GitHub)',
+        },
+        tokenAuditUrl: {
+          type: 'string',
+          description: 'URL to the token smart contract audit report',
+        },
+        exploreUrl: {
+          type: 'string',
+          description: 'Block explorer URL for the token',
+        },
+        cmcUrl: {
+          type: 'string',
+          description: 'CoinMarketCap URL for the token',
+        },
+        coingeckoUrl: {
+          type: 'string',
+          description: 'CoinGecko URL for the token',
+        },
+        socialMediaUrls: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Platform name (e.g. Twitter, Discord)' },
+              url: { type: 'string', description: 'URL to the social media profile' },
+            },
+          },
+          description: 'Social media links for the project',
+        },
         blockchain: {
           type: 'array',
           items: { type: 'string' },
@@ -95,6 +134,17 @@ export const chatTools: Tool[] = [
             'SARCASTIC_MEME_STYLE',
           ],
         },
+        customTone: {
+          type: 'string',
+          description:
+            'Custom tone instructions when tone is not a preset. Provide free-text describing the desired AI personality.',
+        },
+        limitation: {
+          type: 'boolean',
+          description:
+            'If true, the AI will only answer questions related to the injected context and refuse off-topic queries.',
+          default: false,
+        },
         chatHistory: {
           type: 'boolean',
           description: 'Enable multi-turn conversation memory',
@@ -106,6 +156,37 @@ export const chatTools: Tool[] = [
         },
       },
       required: ['question'],
+    },
+  },
+  {
+    name: 'chaingpt_chat_history',
+    description:
+      'Retrieve chat conversation history for a given session. Requires a session ID that was used in previous chat calls.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sessionId: {
+          type: 'string',
+          description: 'The session ID to retrieve history for',
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of messages to return',
+          default: 10,
+        },
+        offset: {
+          type: 'number',
+          description: 'Pagination offset',
+          default: 0,
+        },
+        sortOrder: {
+          type: 'string',
+          description: 'Sort order for results',
+          enum: ['ASC', 'DESC'],
+          default: 'DESC',
+        },
+      },
+      required: ['sessionId'],
     },
   },
 ];
@@ -147,9 +228,34 @@ export async function handleChatTool(
         contextInjection.tokenInformation = tokenInformation;
       }
 
+      if (args.whitePaperUrl) contextInjection.whitePaperUrl = args.whitePaperUrl;
+      if (args.purpose) contextInjection.purpose = args.purpose;
+
+      if (args.tokenSourceCode || args.tokenAuditUrl || args.exploreUrl || args.cmcUrl || args.coingeckoUrl) {
+        const tokenInfo = (contextInjection.tokenInformation as Record<string, unknown>) || {};
+        if (args.tokenSourceCode) tokenInfo.tokenSourceCode = args.tokenSourceCode;
+        if (args.tokenAuditUrl) tokenInfo.tokenAuditUrl = args.tokenAuditUrl;
+        if (args.exploreUrl) tokenInfo.exploreUrl = args.exploreUrl;
+        if (args.cmcUrl) tokenInfo.cmcUrl = args.cmcUrl;
+        if (args.coingeckoUrl) tokenInfo.coingeckoUrl = args.coingeckoUrl;
+        contextInjection.tokenInformation = tokenInfo;
+        if (!contextInjection.cryptoToken) contextInjection.cryptoToken = true;
+      }
+
+      if (args.socialMediaUrls) {
+        contextInjection.socialMediaUrls = args.socialMediaUrls;
+      }
+
       if (args.tone) {
         contextInjection.aiTone = 'PRE_SET_TONE';
         contextInjection.selectedTone = args.tone;
+      } else if (args.customTone) {
+        contextInjection.aiTone = 'CUSTOM_TONE';
+        contextInjection.customTone = args.customTone;
+      }
+
+      if (args.limitation) {
+        contextInjection.limitation = true;
       }
 
       const response = await getClient().createChatBlob({
