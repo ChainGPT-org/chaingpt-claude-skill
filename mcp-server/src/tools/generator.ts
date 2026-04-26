@@ -86,8 +86,29 @@ export async function handleGeneratorTool(
         ...(args.sessionId ? { sdkUniqueId: args.sessionId as string } : {}),
       });
 
-      const botResponse = (response as any)?.data?.bot ?? JSON.stringify(response);
+      // The generator SDK double-wraps: response.data.bot may be an object { data: { bot: string } }
+      let botResponse = (response as any)?.data?.bot;
+      if (botResponse && typeof botResponse === 'object') {
+        botResponse = botResponse?.data?.bot ?? JSON.stringify(botResponse);
+      }
+      if (!botResponse || typeof botResponse !== 'string') {
+        botResponse = JSON.stringify(response);
+      }
       return { content: [{ type: 'text', text: botResponse }] };
+    }
+
+
+    if (name === 'chaingpt_generate_history') {
+      const result = await getClient().getChatHistory({
+        sdkUniqueId: args.sessionId as string,
+        limit: (args.limit as number) || 10,
+        offset: (args.offset as number) || 0,
+        sortOrder: (args.sortOrder as string) || 'DESC',
+      });
+
+      return {
+        content: [{ type: 'text', text: `Generator History:\n\n${JSON.stringify(result, null, 2)}` }],
+      };
     }
 
     return { content: [{ type: 'text', text: `Unknown generator tool: ${name}` }] };
