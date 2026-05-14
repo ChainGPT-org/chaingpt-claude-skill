@@ -133,8 +133,8 @@ The `@chaingpt/generalchat` SDK has a known error-handler issue where `Insuffici
 ```typescript
 try {
   return await chat.ask({ ... });
-} catch (err) {
-  if (err.message?.includes('Cannot read properties of undefined')) {
+} catch (err: unknown) {
+  if (err instanceof Error && err.message.includes('Cannot read properties of undefined')) {
     throw new Error('ChainGPT API call failed (credit limit or rate limit). Original: ' + err.message);
   }
   throw err;
