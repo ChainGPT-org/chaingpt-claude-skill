@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- `templates/creator-sidekick.md` — full-stack template for creator-economy platforms combining 3 ChainGPT products (LLM + NFT + News). Targets the previously-uncovered crypto-native creator vertical (video, podcast, streaming) with tipping coach, script-to-thumbnail pipeline (text + actual PNG), and daily creator brief. Includes documented workarounds for SDK error-handler edge cases and JSON shape drift.
+- README updated to reflect 11 project templates (was 10).
+- SKILL.md template-routing table updated with creator-sidekick request triggers.
+
 ## [1.0.0] - 2025-01-15
 ### Added
 - Initial release

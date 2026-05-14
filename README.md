@@ -6,7 +6,7 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. 12 MCP tools. 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. 12 MCP tools. 45+ Solidity patterns. 11 project templates. Zero context-switching.
 
 [![npm version](https://img.shields.io/badge/version-1.1.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -15,7 +15,7 @@ Full API reference. 12 MCP tools. 45+ Solidity patterns. 10 project templates. Z
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Get Started](#-quickstart) · [Features](#-what-you-get) · [MCP Server](#-mcp-server--12-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Get Started](#-quickstart) · [Features](#-what-you-get) · [MCP Server](#-mcp-server--12-tools) · [Templates](#-11-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -87,7 +87,7 @@ Every endpoint, parameter, and response format for all **7 products** — with r
 ### 🤖 12 MCP Tools
 Claude doesn't just _write_ code — it **calls the APIs directly**. Generate images, mint NFTs, audit contracts, fetch news — all from the chat.
 
-### 📋 10 Project Templates
+### 📋 11 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
 
 </td>
@@ -207,7 +207,7 @@ Add to `.claude/settings.json`:
 
 <br/>
 
-## 📋 10 Project Templates
+## 📋 11 Project Templates
 
 | Template | Stack | Products |
 |----------|-------|----------|
@@ -221,6 +221,7 @@ Add to `.claude/settings.json`:
 | **Next.js Chatbot** | Next.js 14 App Router | LLM |
 | **React Native Wallet** | Expo + React Native | LLM + NFT |
 | **Nuxt News App** | Nuxt 3 SSR | News API |
+| **Creator Sidekick** | Express + TypeScript | LLM + NFT + News |
 
 <br/>
 
@@ -345,7 +346,7 @@ chaingpt-claude-skill/
 │   ├── cost-optimization.md          #   Save ~84% on credits
 │   └── typescript-types.md           #   Complete TS interfaces
 │
-├── templates/                        # Project scaffolding (11 files)
+├── templates/                        # Project scaffolding (12 files)
 ├── patterns/                         # Solidity patterns (5 files, 45+ patterns)
 ├── migration/                        # Platform migration guides (3 files)
 ├── mcp-server/                       # MCP server — 12 tools, 53 tests
@@ -362,7 +363,7 @@ chaingpt-claude-skill/
 
 - [x] Complete API reference for all 7 products
 - [x] MCP server with 12 direct-access tools
-- [x] 10 project templates including multi-product compositions
+- [x] 11 project templates including multi-product compositions
 - [x] 45+ audited Solidity patterns
 - [x] Mock server for zero-credit testing
 - [x] 79 passing tests (MCP + mock server)
