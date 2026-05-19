@@ -1,6 +1,36 @@
 # Changelog
 
 ## [Unreleased] - 2026-05-19
+### Added — Tier 7 ERC-4337 v0.7 account-abstraction foundation (4 new tools)
+Custody-free shared primitives for every v0.7 smart-contract wallet. The plugin never sees an owner key or session key; it computes the userOpHash the signer signs and proxies read-only bundler-RPC calls. Provider-specific session-key issuance (Safe / Kernel / Biconomy / Alchemy SW) is queued as follow-up PRs that layer on this foundation.
+
+- **`mcp-server/src/lib/erc4337.ts`** — primitives built on viem v2.49's audited `viem/account-abstraction` module:
+  - `normalizeUserOp` — accepts user-friendly string inputs (decimal or 0x-hex), converts to bigint with per-field error labels, validates factory+factoryData and paymaster gas-limit pairing.
+  - `computeUserOpHash` — v0.7 hash = keccak256(keccak256(abi.encode(packedFields)) ++ entryPoint ++ chainId). The bytes a signer signs.
+  - `packUserOp` — converts to the on-the-wire `PackedUserOperation` struct (gas limits + fees packed into bytes32).
+  - `userOpToBundlerJson` — bigint-safe conversion to the bundler-RPC JSON shape (uint256 → 0x-hex).
+  - `bundlerRpc` — thin POST wrapper for `eth_estimateUserOperationGas` / `eth_getUserOperationReceipt` / `eth_supportedEntryPoints` against any v0.7 bundler URL (Pimlico, Alchemy, Stackup, Particle).
+  - Canonical EntryPoint addresses exported for v0.7 and v0.6.
+- **`mcp-server/src/tools/aa.ts`** — 4 tools:
+  - `chaingpt_aa_userop_hash` — compute the hash the signer signs (chainId + EntryPoint contribute to the hash, so cross-chain replay is impossible).
+  - `chaingpt_aa_pack_userop` — emit both the EntryPoint-wire `PackedUserOperation` struct and the bundler-RPC JSON shape, with the userOpHash inline. Useful for inspection.
+  - `chaingpt_aa_estimate_userop` — POSTs `eth_estimateUserOperationGas` to an admin-supplied bundler URL.
+  - `chaingpt_aa_userop_receipt` — POSTs `eth_getUserOperationReceipt`; returns "Not yet bundled" on null result, full receipt JSON otherwise.
+- **`mcp-server/src/__tests__/aa.test.ts`** — 30 cases including:
+  - Tool surface (exact names, schema validity, descriptions ≥40 chars).
+  - **Custody-free invariant test:** walks every input schema and asserts no parameter name matches `/privatekey|ownerkey|sessionkey|mnemonic|seedphrase|signer/`. Catches accidental future additions that would weaken custody.
+  - `normalizeUserOp` over decimal/hex, missing fields, invalid sender, non-hex callData, JS-number-as-uint256 (refused for precision), factory+factoryData pairing, paymaster gas-limit pairing.
+  - `computeUserOpHash` determinism, sensitivity to chainId, sensitivity to EntryPoint, sensitivity to any input field.
+  - `packUserOp` shape — bytes32 packed fields, empty initCode / paymasterAndData when omitted.
+  - `userOpToBundlerJson` hex encoding + paymaster-field gating.
+  - `chaingpt_aa_estimate_userop` mocked fetch — assertions on POST URL, body envelope, params[0]=userOp, params[1]=EntryPoint, response shape.
+  - Bundler-side error surfaced verbatim to the caller.
+  - `chaingpt_aa_userop_receipt` mocked null → "Not yet bundled" and mocked receipt → JSON formatting.
+- **`skills/aa/SKILL.md`** — new sub-skill documenting the surface, custody invariant, foundation vs per-provider distinction, typical signed-userop flow, why `eth_sendUserOperation` is deliberately not proxied (irreversible step stays in user code), bundler URL conventions, what is deliberately NOT done yet (per-provider session-key issuance, paymaster sponsorship, EIP-7702).
+
+Why this is a "foundation" rather than a full session-key flow: each major SCW provider (Safe + Zodiac, Kernel/ZeroDev, Biconomy, Alchemy SW) has its own validator-module ABI for session keys. Picking one would lock the plugin into a single vendor. Shipping the shared primitives that every v0.7 SCW needs lets provider-specific PRs layer on top without re-engineering the foundation.
+
+## [Unreleased] - 2026-05-19
 ### Added — Unified test harness (`scripts/test-all.sh` + `TESTING.md`)
 - `scripts/test-all.sh` — single orchestrator that runs all six test layers (validate / typecheck / mcp-test / mock-test / examples / live smoke). Supports `--fast` to skip live smoke, `--only <layer>` for a single layer, `--skip-drift` for when `dlob.drift.trade` is in an outage. Summary report with per-layer timing and pass/fail/skip counts.
 - `TESTING.md` — full testing guide. Layer-by-layer reference, what each upstream the smoke test hits, how to add tests for a new capability, failure-mode cheat-sheet, the contract that every PR must add tests in the same PR.
