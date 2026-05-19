@@ -2,6 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
 import {
   makeConnection,
+  withRpcFallback,
   parseAddress,
   buildVersionedTransaction,
   serializeUnsigned,
@@ -160,11 +161,11 @@ async function handleBuildTransferTx(args: any): Promise<string> {
   const amount: string = args.amount;
   const mintArg: string | undefined = args.mint;
 
-  const conn = makeConnection(network);
   const instructions: TransactionInstruction[] = [];
-
   let summary: string[] = [];
 
+  // For SPL transfers we need a fresh mint-info read off-chain. Wrap this in
+  // withRpcFallback so a single endpoint outage doesn't break the whole call.
   if (!mintArg) {
     // Native SOL transfer
     const lamports = decimalToBaseUnits(amount, 9);
@@ -177,7 +178,7 @@ async function handleBuildTransferTx(args: any): Promise<string> {
     );
   } else {
     const mint = parseAddress(mintArg, 'mint');
-    const mintInfo = await fetchMintInfo(conn, mint);
+    const mintInfo = await withRpcFallback(network, (c) => fetchMintInfo(c, mint));
     const baseUnits = decimalToBaseUnits(amount, mintInfo.decimals);
     const sourceAta = deriveAssociatedTokenAccount(from, mint, mintInfo.tokenProgramId);
     const destAta = deriveAssociatedTokenAccount(to, mint, mintInfo.tokenProgramId);
@@ -212,11 +213,9 @@ async function handleBuildTransferTx(args: any): Promise<string> {
     );
   }
 
-  const { tx, blockhash, lastValidBlockHeight } = await buildVersionedTransaction({
-    payer: from,
-    instructions,
-    connection: conn,
-  });
+  const { tx, blockhash, lastValidBlockHeight } = await withRpcFallback(network, (c) =>
+    buildVersionedTransaction({ payer: from, instructions, connection: c }),
+  );
   const base64 = serializeUnsigned(tx);
 
   return [
@@ -305,11 +304,14 @@ async function handleDecodeTx(args: any): Promise<string> {
 
 export async function handleSolanaTool(name: string, args: any): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
   let text: string;
+  // Normalize missing args to an empty object so handlers report clean
+  // "field required" validation errors instead of TypeErrors on property access.
+  const safeArgs = args ?? {};
   try {
     if (name === 'chaingpt_solana_build_transfer_tx') {
-      text = await handleBuildTransferTx(args);
+      text = await handleBuildTransferTx(safeArgs);
     } else if (name === 'chaingpt_solana_decode_tx') {
-      text = await handleDecodeTx(args);
+      text = await handleDecodeTx(safeArgs);
     } else {
       throw new Error(`Unknown Solana tool: ${name}`);
     }

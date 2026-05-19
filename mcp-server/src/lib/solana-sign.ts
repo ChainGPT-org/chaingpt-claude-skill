@@ -66,9 +66,12 @@ export function isMainnet(network: SolanaNetwork | undefined): boolean {
 }
 
 /**
- * Build a Connection with the public RPC fallback chain, honoring
- * SOLANA_RPC_URL if set. The connection is cached per (network, endpoint)
- * tuple so repeated calls within one session reuse the underlying socket.
+ * Build a Connection for `network`. When `SOLANA_RPC_URL` is set, that single
+ * endpoint is used. Otherwise the first entry in `RPC_ENDPOINTS[network]` is
+ * used as the primary; `withRpcFallback` provides retry across the rest.
+ *
+ * The connection is cached per (network, endpoint) tuple so repeated calls
+ * within one session reuse the underlying HTTP keep-alive socket.
  */
 const connCache = new Map<string, Connection>();
 export function makeConnection(network: SolanaNetwork = 'mainnet'): Connection {
@@ -81,6 +84,48 @@ export function makeConnection(network: SolanaNetwork = 'mainnet'): Connection {
     connCache.set(key, conn);
   }
   return conn;
+}
+
+/**
+ * List the endpoints the fallback chain will try, in order. Exposed so
+ * `withRpcFallback` and tests can see exactly what's in play.
+ */
+export function rpcEndpointsFor(network: SolanaNetwork = 'mainnet'): string[] {
+  const override = process.env.SOLANA_RPC_URL;
+  if (override) return [override, ...RPC_ENDPOINTS[network]];
+  return [...RPC_ENDPOINTS[network]];
+}
+
+/**
+ * Run an RPC call against the network's endpoint list, falling back to the
+ * next endpoint on transient failure. Each endpoint gets one shot; we don't
+ * retry the same endpoint twice because the typical failure modes here are
+ * "endpoint is wedged" (won't help) or "endpoint is rate-limiting" (delay
+ * doesn't help on a sub-second timescale).
+ *
+ * Errors from every endpoint are aggregated and the final throw carries the
+ * full chain so the user can debug.
+ */
+export async function withRpcFallback<T>(
+  network: SolanaNetwork,
+  fn: (conn: Connection) => Promise<T>,
+): Promise<T> {
+  const endpoints = rpcEndpointsFor(network);
+  const errors: string[] = [];
+  for (const endpoint of endpoints) {
+    const key = `${network}:${endpoint}`;
+    let conn = connCache.get(key);
+    if (!conn) {
+      conn = new Connection(endpoint, 'confirmed');
+      connCache.set(key, conn);
+    }
+    try {
+      return await fn(conn);
+    } catch (err: any) {
+      errors.push(`${endpoint}: ${err?.message ?? String(err)}`);
+    }
+  }
+  throw new Error(`All Solana RPC endpoints failed for ${network}:\n  ${errors.join('\n  ')}`);
 }
 
 /**
@@ -140,6 +185,13 @@ export function deserializeUnsigned(base64: string): VersionedTransaction {
 }
 
 // ─── Native SOL transfer ────────────────────────────────────────────
+/**
+ * SystemProgram.transfer's `lamports` parameter accepts either `number` or
+ * `bigint` in @solana/web3.js 1.91+, and bigint preserves precision for
+ * uint64 amounts above 2^53 (≈ 9 × 10^15 lamports — only a corner case for
+ * SOL itself, but easy to hit for SPL tokens that share the lamports path).
+ * We pass bigint through untouched.
+ */
 export function buildSolTransferInstruction(opts: {
   from: PublicKey;
   to: PublicKey;
@@ -148,7 +200,7 @@ export function buildSolTransferInstruction(opts: {
   return SystemProgram.transfer({
     fromPubkey: opts.from,
     toPubkey: opts.to,
-    lamports: typeof opts.lamports === 'bigint' ? Number(opts.lamports) : opts.lamports,
+    lamports: opts.lamports,
   });
 }
 

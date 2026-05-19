@@ -367,10 +367,82 @@ describe('handleSolanaTool — decode_tx', () => {
   });
 });
 
-// ─── handleSolanaTool — unknown tool name ──────────────────────────
-describe('handleSolanaTool — unknown name', () => {
+// ─── handleSolanaTool — unknown tool name + missing args guard ─────
+describe('handleSolanaTool — unknown name + missing args guard', () => {
   it('returns a friendly error on an unknown solana tool', async () => {
     const res = await handleSolanaTool('chaingpt_solana_does_not_exist', {});
     expect(res.content[0].text).toMatch(/Unknown Solana tool/);
+  });
+
+  it('does NOT throw a TypeError when args is undefined — mainnet gate refuses cleanly', async () => {
+    // args=undefined defaults network='mainnet' and acknowledgeMainnet=undefined, so the
+    // mainnet refusal kicks in (which is exactly the defensive behavior we want — the
+    // pre-flight gate catches missing args BEFORE any address parsing). The key assertion
+    // is that the handler did not throw a TypeError accessing props on undefined.
+    const res = await handleSolanaTool('chaingpt_solana_build_transfer_tx', undefined as any);
+    const text = res.content[0].text;
+    expect(text).toMatch(/Refusing to build a Solana mainnet transaction/);
+  });
+
+  it('does NOT throw on null args for decode_tx', async () => {
+    const res = await handleSolanaTool('chaingpt_solana_decode_tx', null as any);
+    expect(res.content[0].text).toMatch(/txBase64 required/);
+  });
+});
+
+// ─── withRpcFallback ───────────────────────────────────────────────
+describe('withRpcFallback', () => {
+  it('returns the first successful endpoint result without trying the rest', async () => {
+    const { withRpcFallback } = await import('../lib/solana-sign.js');
+    let calls = 0;
+    const result = await withRpcFallback('mainnet', async () => {
+      calls++;
+      return 'ok';
+    });
+    expect(result).toBe('ok');
+    expect(calls).toBe(1);
+  });
+
+  it('falls back to the next endpoint when the first throws', async () => {
+    const { withRpcFallback, rpcEndpointsFor } = await import('../lib/solana-sign.js');
+    const endpoints = rpcEndpointsFor('mainnet');
+    expect(endpoints.length).toBeGreaterThanOrEqual(2);
+
+    let calls = 0;
+    const result = await withRpcFallback('mainnet', async () => {
+      calls++;
+      if (calls === 1) throw new Error('endpoint #1 down');
+      return 'recovered';
+    });
+    expect(result).toBe('recovered');
+    expect(calls).toBe(2);
+  });
+
+  it('throws a chain-aggregated error when every endpoint fails', async () => {
+    const { withRpcFallback } = await import('../lib/solana-sign.js');
+    let calls = 0;
+    await expect(
+      withRpcFallback('mainnet', async () => {
+        calls++;
+        throw new Error(`failure #${calls}`);
+      }),
+    ).rejects.toThrow(/All Solana RPC endpoints failed for mainnet/);
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── lamports precision ────────────────────────────────────────────
+describe('buildSolTransferInstruction lamports precision', () => {
+  it('passes bigint through unchanged — no Number() coercion that loses precision above 2^53', () => {
+    const huge = 2n ** 60n; // well above MAX_SAFE_INTEGER (2^53)
+    const ix = buildSolTransferInstruction({
+      from: new PublicKey(ALICE),
+      to: new PublicKey(BOB),
+      lamports: huge,
+    });
+    // SystemProgram instruction-data layout: [u32 discriminator=2, u64 LE lamports]
+    // i.e. lamports occupies bytes 4..12 of the instruction data.
+    expect(ix.data.length).toBeGreaterThanOrEqual(12);
+    expect(ix.data.readBigUInt64LE(4)).toBe(huge);
   });
 });
