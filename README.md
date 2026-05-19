@@ -6,9 +6,9 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **24 MCP tools** (12 ChainGPT-AI + 12 generic Web3). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **29 MCP tools** (12 ChainGPT-AI + 12 generic Web3 + 5 mainnet contract deploy). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
@@ -84,8 +84,8 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 24 MCP Tools
-Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions — all from the chat.
+### 🤖 29 MCP Tools
+Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, AND deploy contracts to mainnet with the audit-before-deploy gate — all from the chat.
 
 ### 📋 10 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
@@ -154,7 +154,7 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 24 Tools
+## 🔌 MCP Server — 29 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 
@@ -202,6 +202,23 @@ Works across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, av
 |------|-------------|
 | `chaingpt_intel_token` | One call → DexScreener + GoPlus + ChainGPT news + AI signal. The recommended "research this token" tool. Costs ~1 ChainGPT credit. |
 | `chaingpt_intel_wallet` | Portfolio + per-holding risk-rating across chains. Free read. |
+
+### Mainnet contract deployment (5 tools — new in 1.3)
+
+Custody-free pipeline. The plugin builds an unsigned tx; the user signs externally (MetaMask / Rabby / hardware wallet / ERC-4337 smart account / WalletConnect). MAINNET is the default; testnet is an opt-in via the `network` parameter.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_deploy_compile` | Compile Solidity 0.8.x → bytecode + ABI + warnings |
+| `chaingpt_deploy_estimate` | Preview gas cost on the target mainnet (or testnet) |
+| `chaingpt_deploy_build_tx` | Build the unsigned deployment tx. **Refuses mainnet without `acknowledgeMainnet: true`** |
+| `chaingpt_deploy_verify` | Submit source to Etherscan v2 (works across all major EVM chains) |
+| `chaingpt_deploy_verify_status` | Poll verification GUID |
+
+**Mainnets** (default): ethereum · base · arbitrum · optimism · polygon · bsc · avalanche · blast · linea · scroll.
+**Testnets** (opt-in): sepolia · base-sepolia · arbitrum-sepolia · optimism-sepolia · polygon-amoy · bsc-testnet.
+
+The `chaingpt-deploy` skill enforces the mandatory pipeline: **generate → audit → compile → estimate → confirm → build-tx → user-signs → verify**. Never bypass the audit step on mainnet.
 
 ### Optional API keys (graceful fallback when absent)
 

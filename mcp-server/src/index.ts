@@ -19,6 +19,7 @@ import { researchTools, handleResearchTool } from './tools/research.js';
 import { riskTools, handleRiskTool } from './tools/risk.js';
 import { onchainTools, handleOnchainTool } from './tools/onchain.js';
 import { intelTools, handleIntelTool } from './tools/intel.js';
+import { deployTools, handleDeployTool } from './tools/deploy.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -30,7 +31,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.2.0' },
+  { name: 'chaingpt', version: '1.3.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -48,6 +49,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...riskTools,
     ...onchainTools,
     ...intelTools,
+    ...deployTools,
   ],
 }));
 
@@ -84,6 +86,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_risk')) return await handleRiskTool(name, args);
     if (name.startsWith('chaingpt_onchain')) return await handleOnchainTool(name, args);
     if (name.startsWith('chaingpt_intel')) return await handleIntelTool(name, args);
+    if (name.startsWith('chaingpt_deploy')) return await handleDeployTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {

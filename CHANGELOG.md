@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0] - 2026-05-18
+### Added — Tier 2 expansion: MAINNET-FIRST contract deployment lifecycle
+
+The plugin can now deploy contracts to real EVM mainnets with a mandatory audit-before-deploy gate. **Custody-free**: the plugin builds an unsigned transaction; the user signs externally via MetaMask, Rabby, hardware wallet, ERC-4337 smart account, or WalletConnect.
+
+- **5 new deploy tools**:
+  - `chaingpt_deploy_compile` — solc 0.8.x compile, returns bytecode + ABI + warnings
+  - `chaingpt_deploy_estimate` — gas + USD-equivalent cost preview on the target network
+  - `chaingpt_deploy_build_tx` — build unsigned tx; **refuses mainnet deploy unless `acknowledgeMainnet: true`**
+  - `chaingpt_deploy_verify` — submit source to Etherscan v2 (works across all major EVM mainnets + testnets via one endpoint)
+  - `chaingpt_deploy_verify_status` — poll verification GUID
+- **10 mainnets** + **6 testnets** supported: mainnets default, testnets opt-in.
+- New `skills/deploy/SKILL.md` codifies the mandatory pipeline: generate → audit → compile → estimate → confirm → build-tx → user-signs → verify.
+- New `mcp-server/src/lib/solc.ts` thin wrapper.
+- Adds `viem@^2.49` for chain registry, fee estimation, and tx encoding.
+
+### Mainnet safety design
+- `chaingpt_deploy_build_tx` returns a refusal with a 4-step checklist instead of a tx when `network` is a mainnet and `acknowledgeMainnet` is absent.
+- 10% safety buffer added to gas-limit estimate.
+- The skill enforces that an audit must be surfaced to the user before any mainnet build-tx call.
+
+### Changed
+- Plugin to v1.3.0; MCP server to v1.3.0.
+
 ## [1.2.0] - 2026-05-18
 ### Added — Tier 1 expansion: generic Web3 toolkit
 The plugin is no longer just a ChainGPT-API wrapper. Adds 12 new read-only Web3 tools that work alongside the existing ChainGPT AI tools to make this the default Web3 surface for Claude Code.
