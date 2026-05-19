@@ -6,17 +6,17 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-One install gives Claude Code 105 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 11 project templates. Daily live‑API smoke CI.
+One install gives Claude Code 111 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 11 project templates. Daily live‑API smoke CI.
 
 [![npm version](https://img.shields.io/badge/version-1.9.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-250%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-105-blueviolet?style=flat-square)](#-mcp-server--105-tools)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-111-blueviolet?style=flat-square)](#-mcp-server--111-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--105-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--111-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -137,7 +137,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
          │
          ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  MCP Server — 105 tools (the runtime)                                  │
+│  MCP Server — 111 tools (the runtime)                                  │
 │                                                                        │
 │  ChainGPT AI       │  Web3 toolkit    │  Mainnet execution             │
 │  • chat / NFT      │  • wallet scan   │  • EVM swap (OO/1inch/CoW)    │
@@ -169,7 +169,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
 
 3. **Templates + Patterns** (`templates/` + `patterns/`, 11 templates + 45+ Solidity patterns) — production‑ready scaffolds (Next.js chatbot, NFT marketplace, DeFi dashboard, Creator Sidekick, …) and audited Solidity (ERC‑20 variants, ERC‑4626 vaults, UUPS upgradeable, Governor, role‑based access, timelocks, …). Claude composes from these instead of regenerating boilerplate from scratch.
 
-4. **MCP Server** (`mcp-server/`, 105 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
+4. **MCP Server** (`mcp-server/`, 111 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
 
 **Plus a mock server** (`mock-server/`) — a full drop‑in replacement for the ChainGPT API at `http://localhost:3001`. Realistic responses, simulated latency, credit tracking. Build and CI without burning a single credit.
 
@@ -231,9 +231,9 @@ Open **`http://127.0.0.1:8787/`**. The console prints a one‑time admin token �
 
 <br/>
 
-## 🔌 MCP Server — 105 Tools
+## 🔌 MCP Server — 111 Tools
 
-The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 105 tools across 11 categories. Detailed sections follow.
+The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 111 tools across 11 categories. Detailed sections follow.
 
 | Category | Tools | Notes |
 |---|---:|---|
@@ -247,10 +247,12 @@ The MCP server gives Claude **direct API and on‑chain access** — not just co
 | Polymarket prediction markets | 6 | Read + signed CTF/Neg‑Risk orders |
 | Cross‑chain bridge (Across v3) | 3 | 10 EVM mainnets |
 | Solana lending (Marginfi + Kamino) | 4 | Read‑only |
+| **Solana signing foundation + SPL transfer** | 2 | Custody‑free `VersionedTransaction`, classic + Token‑2022 |
+| **ERC‑4337 v0.7 account‑abstraction foundation** | 4 | userOpHash, pack, bundler‑RPC proxy |
 | Multi‑protocol portfolio + strategy plans + backtest | 6 + 1 | One‑shot snapshot across 4 protocols |
 | Agent wallet (encrypted EOA + admin policy gate) | 7 | LLM cannot bypass policy |
 | Utility (credit estimate, balance) | 2 | |
-| **Total** | **105** | |
+| **Total** | **111** | |
 
 ### ChainGPT AI products (18 tools)
 
@@ -548,7 +550,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 
 | | **This skill** | Goat SDK (Crossmint) | Coinbase AgentKit | MetaMask Snaps + MCP | Heurist |
 |---|---|---|---|---|---|
-| **Surface** | 105 MCP tools across 11 categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
+| **Surface** | 111 MCP tools across 11 categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
 | **Custody model** | User‑sovereign default + bounded agent EOA with admin policy gate | User‑sovereign | User wallet (CDP) or smart wallet | MetaMask signs everything | N/A (no signing) |
 | **Mainnet safety** | Mandatory `acknowledgeMainnet: true` + audit‑before‑deploy gate | Per‑plugin | Default mainnet | MetaMask UI confirmation | N/A |
 | **AI enrichment** | DexScreener + GoPlus + News + AI signal composed into one call | None native | None native | None native | Image + LLM only |
@@ -559,7 +561,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **Test harness** | 6 layers + daily live smoke | Per‑plugin | Examples only | Snap testing | None |
 | **License** | MIT | MIT | Apache‑2 | MIT | Various |
 
-**Where this wins:** breadth (105 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
+**Where this wins:** breadth (111 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
 
 **Where Goat / AgentKit win:** if you want pluggable per‑protocol extensions over a fixed core surface, Goat's plugin model is cleaner. If you're Coinbase‑native (CDP, Base, Smart Wallet end‑to‑end), AgentKit is the obvious choice.
 
@@ -606,7 +608,7 @@ chaingpt-claude-skill/
 ├── templates/                        # 11 project templates (+ composition guide)
 ├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
-├── mcp-server/                       # MCP server — 105 tools, 250 vitest cases
+├── mcp-server/                       # MCP server — 111 tools, 250 vitest cases
 ├── mock-server/                      # Mock API for zero-credit dev — 26 tests
 ├── scripts/                          # validate.sh + test-all.sh + demo launcher
 └── examples/                         # Working code — JS + Python
@@ -620,7 +622,7 @@ chaingpt-claude-skill/
 
 ### Shipped (1.0 → 1.9)
 - [x] Complete API reference for all 7 ChainGPT products
-- [x] **105 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
+- [x] **111 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
 - [x] **Agent wallet** — encrypted keystore + prompt‑injection‑resistant admin policy gate + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
 - [x] **Custody‑free signing** — every state‑changing tool returns an unsigned tx / EIP‑712 intent; the plugin never sees a private key. `acknowledgeMainnet: true` gate on every mainnet write
 - [x] 11 project templates including multi‑product compositions
