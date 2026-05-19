@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.9.0] - 2026-05-18
+### Added — Tier 6 protocol breadth (~17 new tools)
+Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
+
+- **Cross-chain bridging** (3 tools, `chaingpt_bridge_*`) — Across Protocol v3 across 10 EVM mainnets. `_quote` returns fees + estimated fill time + SpokePool addresses; `_build_deposit_tx` returns the unsigned `depositV3` tx (mainnet-ack gated); `_status` tracks a deposit by origin-chain tx hash. Custody-free.
+- **1inch v6 aggregator** (2 tools, `chaingpt_dex_1inch_*`) — key-gated on `ONEINCH_API_KEY` with a friendly setup hint when missing; better routing than OpenOcean on Ethereum + L2 blue-chip pairs.
+- **CoW Protocol intent-based swaps** (2 tools, `chaingpt_dex_cow_*`) — MEV-protected for large trades. User signs an EIP-712 order intent (not a tx); CoW solvers settle on-chain via the GPv2 Settlement contract.
+- **Pendle yield-strip discovery** (2 tools, `chaingpt_defi_pendle_*`) — list active markets, fixed APY (buy PT), implied APY, YT floating APY, maturity days. Supports ethereum / arbitrum / optimism / bsc / base / mantle.
+- **Morpho Blue lending** (3 tools, `chaingpt_defi_morpho_*`) — isolated markets (loan / collateral / LLTV), MetaMorpho curated vaults (Gauntlet, Steakhouse, MEV Capital), user positions with health factor.
+- **Drift Solana perps** (5 tools, `chaingpt_drift_*`) — Solana-native Hyperliquid alternative. Markets / orderbook / funding / user account. Read-only; Ed25519 signing deferred.
+
+### Added — Tier 8 multi-protocol portfolio (1 tool)
+`chaingpt_portfolio_snapshot` fans out in parallel to Hyperliquid + Polymarket + Morpho + Drift for one user. Returns consolidated cross-venue exposure + uPnL. Per-venue best-effort — a failure on one venue logs a warning line in the output and the other venues still surface.
+
+### Added — Tier 10 live-API smoke CI
+- New `.github/workflows/smoke.yml` runs the smoke harness daily at 09:00 UTC + on-demand via `workflow_dispatch`.
+- On scheduled-run failure, opens a deduplicated GitHub issue labeled `smoke-failure` / `live-api` so endpoint drift gets caught within 24h.
+- Extended `src/smoke-test.ts` with 10 new cases for the tier-6 / tier-8 surface. Total smoke surface: 38 cases (up from 28).
+
+### Added — Skills
+- `skills/bridge/SKILL.md` — Across cross-chain pipeline (quote → approve → build_deposit → status).
+- `skills/drift/SKILL.md` — Drift Solana perps read tools + when-to-use-vs-Hyperliquid guidance.
+
+### Changed
+- Routing in `mcp-server/src/index.ts`: `chaingpt_dex_1inch` / `_cow` are matched BEFORE the generic `chaingpt_dex` prefix; `chaingpt_defi_pendle` / `_morpho` matched BEFORE generic `chaingpt_defi`.
+- `skills/trade/SKILL.md` now documents 1inch + CoW alternatives alongside the default OpenOcean.
+- `skills/defi/SKILL.md` adds Pendle + Morpho discovery flows.
+- Plugin to v1.9.0; MCP server to v1.9.0.
+
+### Test count
+- Unit tests: 142 → 192 (+50 across 5 new test files: bridge, aggregators, yield, drift, portfolio).
+- Live-API smoke: 28 → 38 cases wired.
+
 ## [1.8.0] - 2026-05-19
 ### Added — Tier 4 agent infrastructure: strategy planners + backtester
 The agent layer that composes Tier 1-3 tools into multi-step plans. **Strategy tools return plans, they don't execute** — every step the plan lists is a separate `chaingpt_dex_build_swap_tx` / `chaingpt_hl_place_order_payload` / etc. call with its own mainnet ack gate. Keeps the agent surface reviewable and refusal-safe.

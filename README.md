@@ -6,11 +6,11 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **71 MCP tools** (18 ChainGPT-AI + 16 generic Web3 + 5 mainnet deploy + 5 mainnet DEX + 7 mainnet DeFi + 9 Hyperliquid + 6 Polymarket + 5 strategy/backtest). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **~83 MCP tools** spanning ChainGPT AI products, EVM + Solana DEX trading (OpenOcean + 1inch v6 + CoW Protocol + Jupiter), perps (Hyperliquid + Drift), prediction markets (Polymarket), DeFi (Aave + Lido + EigenLayer + Pendle + Morpho), cross-chain bridging (Across), and a multi-protocol portfolio snapshot. 45+ Solidity patterns. 10 project templates. Daily live-API smoke CI. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.8.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.9.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/tests-192_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
