@@ -360,7 +360,7 @@ export async function handleHyperliquidTool(
     }
 
     if (name === 'chaingpt_hl_place_order_payload') {
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',

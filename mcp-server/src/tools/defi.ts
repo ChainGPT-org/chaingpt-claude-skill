@@ -389,7 +389,7 @@ export async function handleDefiTool(
       const network = String(args.network ?? 'ethereum');
       const pool = AAVE_POOL[network];
       if (!pool) return { content: [{ type: 'text', text: `Aave V3 not deployed on ${network}.` }] };
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('supply', network) }] };
       }
       const asset = String(args.asset) as Address;
@@ -431,7 +431,7 @@ export async function handleDefiTool(
       const network = String(args.network ?? 'ethereum');
       const pool = AAVE_POOL[network];
       if (!pool) return { content: [{ type: 'text', text: `Aave V3 not deployed on ${network}.` }] };
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('borrow', network) }] };
       }
       const asset = String(args.asset) as Address;
@@ -474,7 +474,7 @@ export async function handleDefiTool(
       const network = String(args.network ?? 'ethereum');
       const pool = AAVE_POOL[network];
       if (!pool) return { content: [{ type: 'text', text: `Aave V3 not deployed on ${network}.` }] };
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('repay', network) }] };
       }
       const asset = String(args.asset) as Address;
@@ -517,7 +517,7 @@ export async function handleDefiTool(
       const network = String(args.network ?? 'ethereum');
       const pool = AAVE_POOL[network];
       if (!pool) return { content: [{ type: 'text', text: `Aave V3 not deployed on ${network}.` }] };
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('withdraw', network) }] };
       }
       const asset = String(args.asset) as Address;
@@ -555,7 +555,7 @@ export async function handleDefiTool(
     }
 
     if (name === 'chaingpt_defi_lido_stake_tx') {
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('Lido stake', 'ethereum') }] };
       }
       const amountEth = String(args.amountEth || '');
@@ -591,7 +591,7 @@ export async function handleDefiTool(
     }
 
     if (name === 'chaingpt_defi_eigenlayer_deposit_tx') {
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return { content: [{ type: 'text', text: MAINNET_REFUSAL('EigenLayer deposit', 'ethereum') }] };
       }
       const strategy = String(args.strategy) as Address;

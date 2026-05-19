@@ -283,7 +283,7 @@ export async function handleDeployTool(
       const isMainnet = NETWORK_IS_MAINNET[network];
 
       // Mainnet safety gate for build_tx
-      if (name === 'chaingpt_deploy_build_tx' && isMainnet && !args.acknowledgeMainnet) {
+      if (name === 'chaingpt_deploy_build_tx' && isMainnet && args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',
@@ -424,11 +424,37 @@ export async function handleDeployTool(
         apikey: etherscanKey(),
       });
 
-      const res = await fetch(ETHERSCAN_V2_BASE, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-      });
+      // 20s timeout + HTTP status guard so a hung or 5xx Etherscan endpoint
+      // surfaces a clear error rather than letting the tool hang indefinitely.
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 20_000);
+      let res: Response;
+      try {
+        res = await fetch(ETHERSCAN_V2_BASE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+          signal: ac.signal,
+        });
+      } catch (e: any) {
+        clearTimeout(t);
+        return {
+          content: [{
+            type: 'text',
+            text: `Etherscan verify request failed: ${e?.name === 'AbortError' ? 'timed out after 20s' : (e?.message ?? e)}`,
+          }],
+        };
+      } finally {
+        clearTimeout(t);
+      }
+      if (!res.ok) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Etherscan verify HTTP ${res.status} ${res.statusText}.`,
+          }],
+        };
+      }
       const data = await res.json() as { status: string; message: string; result: string };
       if (data.status !== '1') {
         return {

@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 const TMP_DIR = mkdtempSync(join(tmpdir(), 'chaingpt-plans-test-'));
 process.env.CHAINGPT_PLAN_DIR = TMP_DIR;
 

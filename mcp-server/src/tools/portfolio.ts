@@ -114,7 +114,12 @@ async function fetchPolymarket(user: string): Promise<VenueResult> {
   try {
     const positions = await httpJson<any[]>(`${PM_DATA}/positions?user=${user}`);
     const arr = Array.isArray(positions) ? positions : [];
+    // Sum across ALL positions for the venue total, NOT just the displayed slice.
+    // Otherwise totalUsd is understated for accounts with > 20 positions.
     let totalValue = 0;
+    for (const p of arr) {
+      totalValue += Number(p?.currentValue ?? p?.value ?? 0);
+    }
     const lines: string[] = [];
     lines.push(`Polymarket — ${arr.length} position${arr.length === 1 ? '' : 's'}`);
     for (const p of arr.slice(0, 20)) {
@@ -124,11 +129,10 @@ async function fetchPolymarket(user: string): Promise<VenueResult> {
       const currentValue = Number(p?.currentValue ?? p?.value ?? 0);
       const cost = Number(p?.totalBought ?? p?.initialValue ?? 0);
       const pnl = currentValue - cost;
-      totalValue += currentValue;
       lines.push(`  • ${market.slice(0, 60)}${market.length > 60 ? '…' : ''}`);
       lines.push(`      ${outcome}    size: ${fmtNum(size, 0)}    value: ${fmtUsdShort(currentValue)}    P&L: ${fmtUsdShort(pnl)}`);
     }
-    if (arr.length > 20) lines.push(`  …and ${arr.length - 20} more`);
+    if (arr.length > 20) lines.push(`  …and ${arr.length - 20} more (total ${fmtUsdShort(totalValue)} reflects all positions)`);
     return { venue: 'polymarket', ok: true, totalUsd: totalValue, lines };
   } catch (e: any) {
     return { venue: 'polymarket', ok: false, totalUsd: 0, lines: [`Polymarket — error: ${e?.message ?? e}`], error: e?.message };
@@ -166,6 +170,10 @@ async function fetchMorpho(address: string): Promise<VenueResult> {
   lines.push(`Morpho Blue — combined across Ethereum + Base`);
   let anyPositions = false;
   let anyError: string | undefined;
+  // Track which chains failed vs succeeded so partial failures are visible
+  // even when the other chain has positions. Without this, a totals-look-
+  // complete result would hide that one chain was skipped.
+  const failedChains: string[] = [];
 
   for (const c of chains) {
     try {
@@ -200,6 +208,7 @@ async function fetchMorpho(address: string): Promise<VenueResult> {
       }
     } catch (e: any) {
       anyError = e?.message;
+      failedChains.push(c.name);
     }
   }
   if (!anyPositions) {
@@ -211,12 +220,18 @@ async function fetchMorpho(address: string): Promise<VenueResult> {
       error: anyError,
     };
   }
+  // Surface partial failures even when the other chain succeeded — otherwise
+  // the totals look complete when one chain was actually skipped.
+  if (failedChains.length > 0) {
+    lines.push(`  ⚠ Partial result — failed to fetch from: ${failedChains.join(', ')} (${anyError ?? 'unknown error'}). Totals exclude those chains.`);
+  }
   const netExposure = totalSupplied + totalCollateral + totalVaults - totalBorrowed;
   return {
     venue: 'morpho',
-    ok: true,
+    ok: failedChains.length === 0,
     totalUsd: netExposure,
     lines,
+    error: failedChains.length > 0 ? `Partial: ${failedChains.join(', ')}` : undefined,
   };
 }
 

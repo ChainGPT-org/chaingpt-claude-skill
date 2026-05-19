@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createWalletClient, createPublicClient, http as viemHttp, type Hex } from 'viem';
 import QRCode from 'qrcode';
 import { CHAINS } from '../lib/chains.js';
@@ -27,7 +27,15 @@ import {
 import { POLICY_TEMPLATES, findTemplate } from '../lib/agent-policy-templates.js';
 import { loadTrackedTokens, addTrackedToken, removeTrackedToken, tokensPath, type TrackedToken } from '../lib/agent-tokens.js';
 import { fetchErc20Balance, fetchErc20Meta, formatTokenAmount } from '../lib/agent-erc20.js';
-import { logActivity, readActivity } from '../lib/agent-activity.js';
+import { logActivity, readActivity, activityPath } from '../lib/agent-activity.js';
+
+// Same dir-derived admin token path, available everywhere it's needed.
+// Derived from the policy DIRECTORY, not via filename regex (which would
+// silently collide with the policy file when admin uses a non-policy.json name).
+function adminTokenPath(): string {
+  return process.env.CHAINGPT_ADMIN_TOKEN_FILE?.trim()
+    || join(dirname(policyPath()), '.admin-token');
+}
 import {
   loadCustomChains,
   addCustomChain,
@@ -1034,7 +1042,7 @@ ${o.flashBlock}
       <div><label>Policy</label><code class="addr">${escapeHtml(policyPath())}</code></div>
       <div><label>Tracked tokens</label><code class="addr">${escapeHtml(tokensPath())}</code></div>
       <div><label>Custom chains</label><code class="addr">${escapeHtml(customChainsPath())}</code></div>
-      <div><label>Activity log</label><code class="addr">${escapeHtml(policyPath().replace(/policy\.json$/, 'activity.jsonl'))}</code></div>
+      <div><label>Activity log</label><code class="addr">${escapeHtml(activityPath())}</code></div>
     </div>
     <p class="help">All files are written with 0600 perms in a 0700 directory. Backups are written with the same perms on every save.</p>
   </div>
@@ -1323,8 +1331,7 @@ export async function handleAgentWalletTool(
       adminToken = generateToken();
       sessions.clear();
       try {
-        const tokenPath = process.env.CHAINGPT_ADMIN_TOKEN_FILE?.trim()
-          || policyPath().replace(/policy\.json$/, '.admin-token');
+        const tokenPath = adminTokenPath();
         mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
         writeFileSync(tokenPath, adminToken, { mode: 0o600 });
       } catch { /* best-effort */ }
@@ -1668,7 +1675,7 @@ export async function handleAgentWalletTool(
             `║                                                             ║`,
             `║  ${adminToken}  ║`,
             `║                                                             ║`,
-            `║  Also saved to ${policyPath().replace(/policy\.json$/, '.admin-token')}`,
+            `║  Also saved to ${adminTokenPath()}`,
             `╚═════════════════════════════════════════════════════════════╝`,
             ``,
             `What the dashboard does:`,

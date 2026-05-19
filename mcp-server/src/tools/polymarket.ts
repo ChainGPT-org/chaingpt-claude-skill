@@ -301,7 +301,7 @@ export async function handlePolymarketTool(
     }
 
     if (name === 'chaingpt_pm_place_order_payload') {
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',
@@ -376,11 +376,28 @@ export async function handlePolymarketTool(
         orderType,
       });
       const headers = clobHeaders(creds, 'POST', '/order', body, owner);
-      const res = await fetch('https://clob.polymarket.com/order', {
-        method: 'POST',
-        headers,
-        body,
-      });
+      // 15s timeout — without it, a hung CLOB endpoint pins the tool indefinitely.
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 15_000);
+      let res: Response;
+      try {
+        res = await fetch('https://clob.polymarket.com/order', {
+          method: 'POST',
+          headers,
+          body,
+          signal: ac.signal,
+        });
+      } catch (e: any) {
+        clearTimeout(t);
+        return {
+          content: [{
+            type: 'text',
+            text: `Polymarket CLOB request failed: ${e?.name === 'AbortError' ? 'timed out after 15s' : (e?.message ?? e)}`,
+          }],
+        };
+      } finally {
+        clearTimeout(t);
+      }
       const text = await res.text();
       return {
         content: [{

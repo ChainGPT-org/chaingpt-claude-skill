@@ -10,7 +10,7 @@
  */
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync, chmodSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { policyPath } from './agent-policy.js';
 import type { ChainInfo } from './chains.js';
 import { CHAINS } from './chains.js';
@@ -27,8 +27,10 @@ export interface CustomChain {
 }
 
 export function customChainsPath(): string {
+  // Derive from policy DIRECTORY (not via filename regex), so a non-policy.json
+  // filename doesn't cause this path to collide with the policy file itself.
   return process.env.CHAINGPT_CUSTOM_CHAINS_FILE?.trim()
-    || policyPath().replace(/policy\.json$/, 'custom-chains.json');
+    || join(dirname(policyPath()), 'custom-chains.json');
 }
 
 const SLUG_RE = /^[a-z][a-z0-9-]{1,30}$/;

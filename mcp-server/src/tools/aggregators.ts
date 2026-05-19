@@ -194,7 +194,7 @@ export async function handleAggregatorTool(
       const decimalsIn = Number(args.decimalsIn);
       const amount = rawAmount(String(args.amountIn), decimalsIn).toString();
 
-      if (name === 'chaingpt_dex_1inch_swap_tx' && !args.acknowledgeMainnet) {
+      if (name === 'chaingpt_dex_1inch_swap_tx' && args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',
@@ -258,7 +258,7 @@ export async function handleAggregatorTool(
 
     // ── CoW Protocol ─────────────────────────────────────────────────
     if (name === 'chaingpt_dex_cow_create_order') {
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',
@@ -279,6 +279,14 @@ export async function handleAggregatorTool(
       const sellDecimals = Number(args.sellDecimals);
       const sellAmount = rawAmount(String(args.sellAmount), sellDecimals);
       const slippageBps = Number(args.slippageBps ?? 100);
+      if (!Number.isFinite(slippageBps) || slippageBps < 0 || slippageBps > 10000) {
+        return {
+          content: [{
+            type: 'text',
+            text: `slippageBps must be between 0 and 10000 (got ${args.slippageBps}). 100 = 1%; 10000 = 100% (max).`,
+          }],
+        };
+      }
       const validForMin = Number(args.validForMinutes ?? 30);
       const validTo = Math.floor(Date.now() / 1000) + validForMin * 60;
       const from = String(args.from).toLowerCase() as Hex;

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 
 import { hyperliquidTools, handleHyperliquidTool } from '../tools/hyperliquid.js';
 import { polymarketTools, handlePolymarketTool } from '../tools/polymarket.js';

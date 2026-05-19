@@ -2,6 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { encodeFunctionData, parseUnits, formatUnits, type Hex } from 'viem';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 import { httpJson, jsonRpcFallback } from '../lib/http.js';
+import { fetchErc20Decimals } from '../lib/agent-erc20.js';
 
 /**
  * Tier-3a DEX trading on mainnet. Custody-free.
@@ -230,7 +231,7 @@ export async function handleDexTool(
       const gasPriceGwei = args.gasPriceGwei ? Number(args.gasPriceGwei) : undefined;
 
       if (name === 'chaingpt_dex_build_swap_tx') {
-        if (!args.acknowledgeMainnet) {
+        if (args.acknowledgeMainnet !== true) {
           return {
             content: [{
               type: 'text',
@@ -360,9 +361,27 @@ export async function handleDexTool(
         spender = '0x6352a56caadc4f1e25cd6c75970fa768a3304e64';
       }
 
-      // Determine decimals + current allowance via RPC if possible
+      // Determine decimals + current allowance via RPC if possible.
+      // If decimals omitted, fetch them on-chain — defaulting to 18 silently
+      // mis-sizes approvals for 6-decimal tokens like USDC.
       const chain = resolveChain(network);
-      const decimals = args.decimals !== undefined ? Number(args.decimals) : 18; // safe default; user can override
+      let decimals: number;
+      if (args.decimals !== undefined) {
+        decimals = Number(args.decimals);
+      } else {
+        try {
+          decimals = await fetchErc20Decimals(network, token);
+        } catch (e: any) {
+          return {
+            content: [{
+              type: 'text',
+              text:
+                `Could not fetch decimals for ${token} on ${network} (${e?.message ?? e}). ` +
+                `Pass an explicit \`decimals\` value (e.g. 6 for USDC, 18 for most ERC-20s) to retry.`,
+            }],
+          };
+        }
+      }
       const amount =
         amountInput === 'max'
           ? (1n << 256n) - 1n
@@ -432,7 +451,7 @@ export async function handleDexTool(
       }
 
       // Build swap tx (Solana mainnet ack gate)
-      if (!args.acknowledgeMainnet) {
+      if (args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',

@@ -9,7 +9,7 @@
  */
 
 import { appendFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { policyPath } from './agent-policy.js';
 
 export interface ActivityEntry {
@@ -24,9 +24,12 @@ export interface ActivityEntry {
   policyDigest: string;
 }
 
-function activityPath(): string {
+export function activityPath(): string {
+  // Derive from the policy DIRECTORY, not via regex replace on the filename.
+  // The replace silently no-ops if the policy filename isn't policy.json,
+  // which would cause the JSONL append to clobber the policy file itself.
   return process.env.CHAINGPT_ACTIVITY_FILE?.trim()
-    || policyPath().replace(/policy\.json$/, 'activity.jsonl');
+    || join(dirname(policyPath()), 'activity.jsonl');
 }
 
 export function logActivity(e: ActivityEntry): void {

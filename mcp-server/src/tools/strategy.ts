@@ -182,8 +182,15 @@ export async function handleStrategyTool(
       lines.push(`  chaingpt_research_token query=${outToken} chain=${network}`);
       lines.push('');
       lines.push('Each buy:');
-      lines.push(`  chaingpt_dex_quote network=${network} ... amountIn=<per-buy-usd-converted-to-quote>`);
-      lines.push(`  chaingpt_dex_build_swap_tx ... acknowledgeMainnet=true`);
+      // Solana DCA uses Jupiter; EVM DCA uses OpenOcean/1inch/CoW via the
+      // chaingpt_dex_* / aggregators tools.
+      if (network.toLowerCase() === 'solana') {
+        lines.push(`  chaingpt_dex_jupiter_quote outputMint=${outToken} amountIn=<per-buy-converted>`);
+        lines.push(`  chaingpt_dex_jupiter_build_swap_tx ... acknowledgeMainnet=true`);
+      } else {
+        lines.push(`  chaingpt_dex_quote network=${network} ... amountIn=<per-buy-usd-converted-to-quote>`);
+        lines.push(`  chaingpt_dex_build_swap_tx ... acknowledgeMainnet=true`);
+      }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
@@ -347,7 +354,7 @@ export async function handleStrategyTool(
     if (name === 'chaingpt_backtest_dca') {
       const coinId = String(args.coinId).toLowerCase();
       const vs = String(args.vs ?? 'usd');
-      const days = Math.max(1, Math.min(Number(args.days ?? 30), 365));
+      const days = Math.max(1, Math.min(Number(args.days ?? 30), 90));
       const intervals = Math.max(2, Math.min(Number(args.intervals ?? 30), 365));
       const totalBudget = Number(args.totalBudget ?? 1000);
 
@@ -417,7 +424,7 @@ export async function handleStrategyTool(
     if (name === 'chaingpt_backtest_grid') {
       const coinId = String(args.coinId).toLowerCase();
       const vs = String(args.vs ?? 'usd');
-      const days = Math.max(1, Math.min(Number(args.days ?? 30), 365));
+      const days = Math.max(1, Math.min(Number(args.days ?? 30), 90));
       const priceLow = Number(args.priceLow);
       const priceHigh = Number(args.priceHigh);
       const levels = Math.max(2, Math.min(Number(args.levels ?? 10), 50));

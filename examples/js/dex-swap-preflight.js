@@ -100,7 +100,10 @@ try {
   const q = await quote(NATIVE, USDC, AMOUNT, gasGwei);
   const inSym = q.inToken?.symbol ?? 'ETH';
   const outSym = q.outToken?.symbol ?? 'USDC';
-  const outAmt = Number(BigInt(q.outAmount) / 10n ** BigInt(q.outToken?.decimals ?? 6));
+  // Use float division to preserve fractional digits — BigInt / BigInt
+  // truncates and understates the quote for 6/18-decimal tokens.
+  const decimals = Number(q.outToken?.decimals ?? 6);
+  const outAmt = Number(q.outAmount) / 10 ** decimals;
   console.log(`✓ Quote: ${AMOUNT} ${inSym} → ~${outAmt} ${outSym}`);
   console.log(`  Route: ${(q.dexes ?? []).map((d) => d.dexCode ?? d).slice(0, 3).join(' → ')}`);
   const tx = await swapTx(NATIVE, USDC, AMOUNT, gasGwei);

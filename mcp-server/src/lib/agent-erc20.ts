@@ -100,6 +100,11 @@ export async function fetchErc20Meta(chain: string, token: string): Promise<{ sy
 }
 
 export function formatTokenAmount(raw: bigint, decimals: number, showDecimals = 4): string {
+  // Edge cases: decimals=0 (integer tokens like CryptoKitties) or
+  // showDecimals=0 → return a plain integer string, no trailing "."/".0".
+  if (decimals === 0 || showDecimals === 0) {
+    return raw.toString();
+  }
   const div = 10n ** BigInt(decimals);
   const whole = raw / div;
   const frac = raw % div;

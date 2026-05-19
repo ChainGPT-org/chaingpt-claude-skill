@@ -8,7 +8,6 @@
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
 import { policyPath } from './agent-policy.js';
 
 export interface TrackedToken {
@@ -26,15 +25,12 @@ export interface TrackedToken {
   addedAt: string;
 }
 
-const DEFAULT_PATH = (() => {
-  // Co-locate with the policy file: same dir, different name
-  const p = policyPath();
-  return p.replace(/policy\.json$/, 'tracked-tokens.json');
-})();
-
 export function tokensPath(): string {
+  // Co-locate with the policy file but derive from its DIRECTORY — not via
+  // filename regex replacement, which silently no-ops (and would clobber the
+  // policy file) when CHAINGPT_AGENT_POLICY_FILE has a non-policy.json suffix.
   return process.env.CHAINGPT_TRACKED_TOKENS_FILE?.trim()
-    || policyPath().replace(/policy\.json$/, 'tracked-tokens.json');
+    || join(dirname(policyPath()), 'tracked-tokens.json');
 }
 
 export function loadTrackedTokens(): TrackedToken[] {

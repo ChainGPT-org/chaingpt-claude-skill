@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 
 import { deployTools, handleDeployTool } from '../tools/deploy.js';
 

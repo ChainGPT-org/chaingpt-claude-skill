@@ -68,8 +68,15 @@ export function compileSolidity(source: string, opts: CompileOpts = {}): Compile
   if (names.length === 0) {
     throw new Error(`Compilation produced no contracts for ${fileName}.`);
   }
-  const pickName =
-    opts.contractName && names.includes(opts.contractName) ? opts.contractName : names[names.length - 1];
+  // If contractName is explicitly provided, FAIL FAST when it's not found.
+  // Silently falling back to "last defined" risks deploying unintended bytecode.
+  if (opts.contractName !== undefined && !names.includes(opts.contractName)) {
+    throw new Error(
+      `contractName "${opts.contractName}" not found in ${fileName}. ` +
+      `Available: ${names.join(', ')}.`
+    );
+  }
+  const pickName = opts.contractName ?? names[names.length - 1];
   const c = fileContracts[pickName];
   const bytecode = `0x${c.evm.bytecode.object}` as `0x${string}`;
   return {

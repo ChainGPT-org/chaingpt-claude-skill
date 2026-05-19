@@ -150,7 +150,7 @@ export async function handleBridgeTool(
       const decimals = Number(args.decimals);
       const amountRaw = parseUnits(String(args.amount) as `${number}`, decimals);
 
-      if (name === 'chaingpt_bridge_build_deposit_tx' && !args.acknowledgeMainnet) {
+      if (name === 'chaingpt_bridge_build_deposit_tx' && args.acknowledgeMainnet !== true) {
         return {
           content: [{
             type: 'text',
@@ -191,6 +191,17 @@ export async function handleBridgeTool(
       const lpFeePct = BigInt(quote.lpFeePct ?? '0');
       const lpFeeTotal = (inputAmount * lpFeePct) / 10n ** 18n;
       const outputAmount = inputAmount - relayFeeTotal - lpFeeTotal;
+      if (outputAmount <= 0n) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `Across bridge refused: relay fee (${relayFeeTotal}) + LP fee (${lpFeeTotal}) ≥ input ` +
+              `(${inputAmount}). Output would be ${outputAmount} (non-positive). Increase the input ` +
+              `amount or pick a less-loaded route.`,
+          }],
+        };
+      }
 
       const lines: string[] = [];
       lines.push(`${name === 'chaingpt_bridge_build_deposit_tx' ? 'Bridge transaction' : 'Bridge quote'} — ${originChain.name} → ${destChain.name}`);

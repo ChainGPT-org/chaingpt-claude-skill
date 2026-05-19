@@ -162,11 +162,15 @@ export async function handleOnchainTool(
         return { content: [{ type: 'text', text: `chain must be an EVM chain.` }] };
       }
 
-      // Use Etherscan's proxy module which is RPC-shaped
+      // Use Etherscan's proxy module which is RPC-shaped. detectMissingKey()
+      // returns a friendly hint if the request failed due to a missing key
+      // (Etherscan v2 rejects the legacy YourApiKeyToken placeholder).
       const txUrl =
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=proxy&action=eth_getTransactionByHash` +
-        `&txhash=${hash}&apikey=${etherscanKey()}`;
+        `&txhash=${hash}&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
       const txRes = await httpJson<{ result: any }>(txUrl);
+      const txKeyHint = detectMissingKey(txRes);
+      if (txKeyHint) return { content: [{ type: 'text', text: txKeyHint }] };
       const tx = txRes.result;
       if (!tx) {
         return { content: [{ type: 'text', text: `No transaction found for ${hash} on ${chain.name}.` }] };
@@ -174,8 +178,10 @@ export async function handleOnchainTool(
 
       const receiptUrl =
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=proxy&action=eth_getTransactionReceipt` +
-        `&txhash=${hash}&apikey=${etherscanKey()}`;
+        `&txhash=${hash}&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
       const receiptRes = await httpJson<{ result: any }>(receiptUrl);
+      const receiptKeyHint = detectMissingKey(receiptRes);
+      if (receiptKeyHint) return { content: [{ type: 'text', text: receiptKeyHint }] };
       const receipt = receiptRes.result;
 
       const lines: string[] = [];
@@ -250,10 +256,14 @@ export async function handleOnchainTool(
       if (!chain || chain.chainId === null) {
         return { content: [{ type: 'text', text: `chain must be an EVM chain.` }] };
       }
-      // Try Etherscan gas tracker (ethereum + a few others)
+      // Try Etherscan gas tracker (ethereum + a few others). Falls through
+      // to the public-RPC fallback below if Etherscan rejects (e.g. missing key).
       try {
-        const url = `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=gastracker&action=gasoracle&apikey=${etherscanKey()}`;
+        const url = `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=gastracker&action=gasoracle&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
         const res = await httpJson<{ status: string; result: any }>(url);
+        // detectMissingKey is intentionally NOT used here — gas tracker has a
+        // graceful fallback to RPC eth_gasPrice below; we'd rather degrade
+        // silently than block the user on the key.
         if (res.status === '1' && res.result) {
           const r = res.result;
           const lines = [

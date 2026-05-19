@@ -73,7 +73,9 @@ export function actionHash(
   let vaultBytes: Uint8Array;
   if (vaultAddress) {
     const clean = vaultAddress.startsWith('0x') ? vaultAddress.slice(2) : vaultAddress;
-    if (clean.length !== 40) throw new Error(`Invalid vault address: ${vaultAddress}`);
+    if (!/^[0-9a-fA-F]{40}$/.test(clean)) {
+      throw new Error(`Invalid vault address: ${vaultAddress} (must be 0x + 40 hex chars)`);
+    }
     vaultBytes = new Uint8Array(21);
     vaultBytes[0] = 0x01;
     for (let i = 0; i < 20; i++) {

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 
 import { driftTools, handleDriftTool } from '../tools/drift.js';
 

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 
 import { aggregatorTools, handleAggregatorTool } from '../tools/aggregators.js';
 

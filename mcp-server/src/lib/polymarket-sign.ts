@@ -121,8 +121,18 @@ export function buildOrder(opts: {
   /** Optional explicit salt. */
   salt?: string;
 }): PolymarketOrder {
-  const sizeUnits = BigInt(Math.round(Number(opts.size) * 1_000_000)); // outcome tokens have 6 decimals
-  const priceUnits = BigInt(Math.round(Number(opts.price) * 1_000_000)); // USDC per token, 6 decimals
+  // Reject economically-invalid inputs at the helper boundary so we never
+  // ship a real-money order with nonsensical maker/taker amounts.
+  const size = Number(opts.size);
+  const price = Number(opts.price);
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new Error(`Polymarket size must be a positive finite number (got ${opts.size})`);
+  }
+  if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+    throw new Error(`Polymarket price must be in (0, 1) — quoted as USDC per outcome token (got ${opts.price})`);
+  }
+  const sizeUnits = BigInt(Math.round(size * 1_000_000)); // outcome tokens have 6 decimals
+  const priceUnits = BigInt(Math.round(price * 1_000_000)); // USDC per token, 6 decimals
   const usdcAmount = (sizeUnits * priceUnits) / 1_000_000n;
 
   const isBuy = opts.side === 'BUY';

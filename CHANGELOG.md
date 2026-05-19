@@ -43,7 +43,7 @@ Major UX pass on the agent-wallet localhost admin dashboard. The dashboard is no
 
 **Threat model preserved:** still no MCP tool can write the policy file, tracked-tokens file, or custom-chains file. The LLM has no HTTP-issuing tool that could reach the localhost dashboard's POST endpoints. The dashboard binds to `127.0.0.1` only.
 
-## [1.9.0] - 2026-05-18
+## [1.9.0] - 2026-05-19
 ### Added — Tier 5 agent wallet with admin-controlled policy gate (7 new tools)
 The agent has its own EOA. The admin sets policies the agent CANNOT bypass — even under prompt injection.
 

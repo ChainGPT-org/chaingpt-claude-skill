@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+import './_setup.js';
 process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = 'super-long-passphrase-for-tests-only-1234';
 
 const TMP = mkdtempSync(join(tmpdir(), 'chaingpt-agent-wallet-test-'));
