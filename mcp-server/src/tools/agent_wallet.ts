@@ -4,6 +4,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createWalletClient, createPublicClient, http as viemHttp, type Hex } from 'viem';
+import QRCode from 'qrcode';
 import { CHAINS } from '../lib/chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 import {
@@ -679,7 +680,8 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
     ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
     : activity.map((a) => {
         const chain = resolveChainWithCustom(a.chain);
-        const explorerLink = chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#';
+        const txLink = chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#';
+        const addrLink = chain?.explorer ? `${chain.explorer}/address/${a.to}` : '#';
         const valueEth = fmtEth(BigInt(a.valueWei));
         return `<div class="activity-row">
           <div class="icon">→</div>
@@ -688,12 +690,18 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
               <span><span class="chain-pill ${a.chain}">${escapeHtml((chain?.name ?? a.chain).toUpperCase())}</span> <strong>${escapeHtml(valueEth)} ${escapeHtml(chain?.native ?? '?')}</strong></span>
               <span class="ts">${escapeHtml(a.ts.slice(0, 19).replace('T', ' '))} UTC</span>
             </div>
-            <div class="target">to <a href="${escapeHtml(explorerLink.replace(a.hash, a.to))}" target="_blank">${escapeHtml(a.to)}</a></div>
-            <div class="target">tx <a href="${escapeHtml(explorerLink)}" target="_blank">${escapeHtml(a.hash)}</a></div>
+            <div class="target">to <a href="${escapeHtml(addrLink)}" target="_blank">${escapeHtml(a.to)}</a></div>
+            <div class="target">tx <a href="${escapeHtml(txLink)}" target="_blank">${escapeHtml(a.hash)}</a></div>
             ${a.memo ? `<div class="memo">"${escapeHtml(a.memo)}"</div>` : ''}
           </div>
         </div>`;
       }).join('');
+
+  // Generate QR locally — no third-party egress (admin address stays on-device).
+  let qrDataUri = '';
+  try {
+    qrDataUri = await QRCode.toDataURL(`ethereum:${address}`, { margin: 1, width: 220, errorCorrectionLevel: 'M' });
+  } catch { /* fall back to no QR */ }
 
   const flashBlock = flash ? `<div class="flash ${flash.kind}">${escapeHtml(flash.msg)}</div>` : '';
   const html = renderTabbedDashboard({
@@ -706,6 +714,7 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
     activityHtml: activityRows,
     chains,
     flashBlock,
+    qrDataUri,
   });
   res.writeHead(flash?.kind === 'err' ? 400 : 200, { 'content-type': 'text/html; charset=utf-8' });
   res.end(html);
@@ -721,6 +730,7 @@ interface TabbedOpts {
   activityHtml: string;
   chains: string[];
   flashBlock: string;
+  qrDataUri: string;
 }
 
 function renderTabbedDashboard(o: TabbedOpts): string {
@@ -825,9 +835,11 @@ ${o.flashBlock}
         <button class="copy-btn" data-copy="${escapeHtml(o.address)}">Copy</button>
       </div>
       <div style="margin-top:14px; text-align:center">
-        <img class="qr" alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=ethereum:${encodeURIComponent(o.address)}" width="200" height="200"/>
+        ${o.qrDataUri
+          ? `<img class="qr" alt="QR code for receive address" src="${escapeHtml(o.qrDataUri)}" width="220" height="220"/>`
+          : `<div class="help">(QR rendering unavailable)</div>`}
       </div>
-      <p class="help">EVM-compatible address. Funds can arrive on any of the ${Object.values(CHAINS).filter((c)=>c.chainId!==null).length} supported chains.</p>
+      <p class="help">EVM-compatible address. Funds can arrive on any of the ${Object.values(CHAINS).filter((c)=>c.chainId!==null).length} supported chains. QR generated locally — never leaves the dashboard.</p>
     </div>
 
     <div class="card">
@@ -1218,31 +1230,37 @@ export async function handleAgentWalletTool(
         return { content: [{ type: 'text', text: `No RPC endpoints configured for ${chainSlug}` }] };
       }
 
-      const primary = endpoints[0];
-      const wallet = createWalletClient({ account, transport: viemHttp(primary) });
-      const publicClient = createPublicClient({ transport: viemHttp(primary) });
-
-      // Build + send a legacy or 1559 tx — let viem decide based on chain capabilities.
-      let hash: Hex;
-      try {
-        hash = await wallet.sendTransaction({
-          chain: {
-            id: chain.chainId,
-            name: chain.name,
-            nativeCurrency: { name: chain.native, symbol: chain.native, decimals: 18 },
-            rpcUrls: { default: { http: [primary] } },
-          } as any,
-          to: to as Hex,
-          value: valueWei,
-          data: data as Hex,
-          gas: intent.gas,
-          account,
-        });
-      } catch (e: any) {
+      // Try each RPC endpoint in order — single RPC outage should NOT cause
+      // an avoidable failure when fallback URLs are configured.
+      let hash: Hex | null = null;
+      let lastError: unknown = null;
+      for (const rpc of endpoints) {
+        try {
+          const wallet = createWalletClient({ account, transport: viemHttp(rpc) });
+          hash = await wallet.sendTransaction({
+            chain: {
+              id: chain.chainId,
+              name: chain.name,
+              nativeCurrency: { name: chain.native, symbol: chain.native, decimals: 18 },
+              rpcUrls: { default: { http: [rpc] } },
+            } as any,
+            to: to as Hex,
+            value: valueWei,
+            data: data as Hex,
+            gas: intent.gas,
+            account,
+          });
+          break;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (!hash) {
+        const e = lastError as any;
         return {
           content: [{
             type: 'text',
-            text: `Broadcast failed: ${e?.shortMessage ?? e?.message ?? e}`,
+            text: `Broadcast failed across ${endpoints.length} RPC endpoint(s): ${e?.shortMessage ?? e?.message ?? String(e)}`,
           }],
         };
       }

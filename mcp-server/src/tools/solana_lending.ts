@@ -164,7 +164,11 @@ export async function handleSolanaLendingTool(
         borrowApy: (b) => -Number(pickField(b, 'borrowApy', 'borrowingApr') ?? 0),
         utilization: (b) => -Number(pickField(b, 'utilization', 'utilizationRate') ?? 0),
       };
-      banks.sort((a, b) => sortKey[sortBy]?.(a) ?? 0 - (sortKey[sortBy]?.(b) ?? 0));
+      banks.sort((a, b) => {
+        const av = sortKey[sortBy]?.(a) ?? 0;
+        const bv = sortKey[sortBy]?.(b) ?? 0;
+        return av - bv;
+      });
       const top = banks.slice(0, limit);
 
       const lines: string[] = [];

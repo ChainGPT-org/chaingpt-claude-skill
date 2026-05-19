@@ -77,13 +77,15 @@ export function addTrackedToken(t: Omit<TrackedToken, 'addedAt'> & { addedAt?: s
     throw new Error(`Invalid decimals: ${t.decimals}`);
   }
   const tokens = loadTrackedTokens();
-  const key = `${t.chain}:${t.address.toLowerCase()}`;
-  if (tokens.some((x) => `${x.chain}:${x.address.toLowerCase()}` === key)) {
-    throw new Error(`Already tracked: ${t.symbol} on ${t.chain} (${t.address})`);
+  const chainLower = t.chain.toLowerCase();
+  const addrLower = t.address.toLowerCase();
+  const key = `${chainLower}:${addrLower}`;
+  if (tokens.some((x) => `${x.chain.toLowerCase()}:${x.address.toLowerCase()}` === key)) {
+    throw new Error(`Already tracked: ${t.symbol} on ${chainLower} (${addrLower})`);
   }
   tokens.push({
-    chain: t.chain,
-    address: t.address.toLowerCase(),
+    chain: chainLower,
+    address: addrLower,
     symbol: t.symbol,
     decimals: t.decimals,
     label: t.label,
@@ -95,8 +97,8 @@ export function addTrackedToken(t: Omit<TrackedToken, 'addedAt'> & { addedAt?: s
 
 export function removeTrackedToken(chain: string, address: string): TrackedToken[] {
   const tokens = loadTrackedTokens();
-  const key = `${chain}:${address.toLowerCase()}`;
-  const filtered = tokens.filter((x) => `${x.chain}:${x.address.toLowerCase()}` !== key);
+  const key = `${chain.toLowerCase()}:${address.toLowerCase()}`;
+  const filtered = tokens.filter((x) => `${x.chain.toLowerCase()}:${x.address.toLowerCase()}` !== key);
   saveTrackedTokens(filtered);
   return filtered;
 }

@@ -424,6 +424,28 @@ describe('Unrestricted mode + custom chains + blue chips', () => {
     try { (await import('node:fs')).rmSync(process.env.CHAINGPT_CUSTOM_CHAINS_FILE!, { force: true }); } catch {}
   });
 
+  it('tracked-token dedup is case-insensitive on chain key', async () => {
+    process.env.CHAINGPT_TRACKED_TOKENS_FILE = process.env.CHAINGPT_AGENT_POLICY_FILE!.replace(/policy\.json$/, 'tracked-tokens.json');
+    const { addTrackedToken, removeTrackedToken, loadTrackedTokens } = await import('../lib/agent-tokens.js');
+    addTrackedToken({
+      chain: 'Base',  // mixed case
+      address: '0xa0B86991C6218B36C1d19d4A2e9Eb0CE3606EB48',  // mixed case
+      symbol: 'USDC',
+      decimals: 6,
+    });
+    // Add same token with different casing — must reject as duplicate
+    expect(() => addTrackedToken({
+      chain: 'base',
+      address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      symbol: 'USDC',
+      decimals: 6,
+    })).toThrow(/already tracked/i);
+    // Remove with yet another casing — must still find + remove it
+    const after = removeTrackedToken('BASE', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
+    expect(after.length).toBe(0);
+    try { (await import('node:fs')).rmSync(process.env.CHAINGPT_TRACKED_TOKENS_FILE!, { force: true }); } catch {}
+  });
+
   it('blue-chip registry contains expected mainnet entries', async () => {
     const { BLUE_CHIPS, getBlueChipsForChain } = await import('../lib/agent-blue-chips.js');
     expect(BLUE_CHIPS.ethereum.find((t) => t.symbol === 'USDC')).toBeDefined();
