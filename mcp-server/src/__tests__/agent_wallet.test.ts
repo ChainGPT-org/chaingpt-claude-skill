@@ -221,6 +221,70 @@ describe('Policy gate', () => {
   });
 });
 
+describe('Policy validation (admin UI input)', () => {
+  beforeEach(() => resetState());
+
+  it('accepts a minimal valid policy', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false });
+    expect(r.ok).toBe(true);
+    expect(r.policy!.killSwitch).toBe(false);
+    expect(r.policy!.updatedAt).toMatch(/\d{4}-\d{2}-\d{2}T/); // server-set
+  });
+
+  it('rejects unknown fields', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, weirdField: 1 });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/Unknown.*weirdField/);
+  });
+
+  it('rejects bad chain id types', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, allowedChains: ['1', 2.5] as any });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/allowedChains/);
+  });
+
+  it('rejects malformed addresses in allowedToAddresses', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, allowedToAddresses: ['not-an-address'] });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/allowedToAddresses/);
+  });
+
+  it('rejects malformed function selectors', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, blockedSelectors: ['transfer'] });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/blockedSelectors/);
+  });
+
+  it('rejects non-integer maxTxValueWei', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, maxTxValueWei: 'one ether' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('savePolicy writes atomically + backs up the previous file', async () => {
+    const { savePolicy, loadPolicy } = await import('../lib/agent-policy.js');
+    const { writeFileSync, existsSync, readFileSync } = await import('node:fs');
+    // Seed an initial file
+    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: true, notes: 'original' }));
+    expect(loadPolicy().notes).toBe('original');
+    // Save new
+    const newPolicy = { version: 1 as const, killSwitch: false, notes: 'updated', updatedAt: new Date().toISOString() };
+    const { digest, path } = savePolicy(newPolicy);
+    expect(digest).toMatch(/^[0-9a-f]{16}$/);
+    expect(loadPolicy().killSwitch).toBe(false);
+    expect(loadPolicy().notes).toBe('updated');
+    // Backup exists
+    expect(existsSync(path + '.bak')).toBe(true);
+    const bak = JSON.parse(readFileSync(path + '.bak', 'utf8'));
+    expect(bak.notes).toBe('original');
+  });
+});
+
 describe('sign_and_send end-to-end gate', () => {
   beforeEach(() => resetState());
 
@@ -273,4 +337,158 @@ describe('sign_and_send end-to-end gate', () => {
     expect(t).toContain('Kill switch:     ON');
     expect(t).toContain('Passphrase env:  set');
   });
+});
+
+describe('Admin dashboard HTTP endpoints', () => {
+  // These tests start the actual UI server and hit it via fetch().
+  // Each test uses a fresh port to avoid collisions.
+  const PORT = 18790;
+
+  beforeEach(() => resetState());
+
+  it('GET / shows login form when not authed', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    const r = await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT, chains: ['ethereum'] });
+    expect(r.content[0].text).toContain('admin dashboard running');
+    const res = await fetch(`http://127.0.0.1:${PORT}/`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Admin login');
+    expect(html).toContain('Paste admin token');
+    _stopUiForTests();
+  });
+
+  it('POST /api/policy rejects unauthed', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 1, chains: ['ethereum'] });
+    const res = await fetch(`http://127.0.0.1:${PORT + 1}/api/policy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: `http://127.0.0.1:${PORT + 1}` },
+      body: 'policy=' + encodeURIComponent(JSON.stringify({ version: 1, killSwitch: false })),
+    });
+    expect(res.status).toBe(401);
+    _stopUiForTests();
+  });
+
+  it('full flow: login → edit policy → confirm kill-switch flip', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    const startResult = await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', {
+      port: PORT + 2,
+      chains: ['ethereum'],
+    });
+    // Pull the admin token out of the printed output
+    const tokenMatch = startResult.content[0].text.match(/[0-9a-f]{48}/);
+    expect(tokenMatch).not.toBeNull();
+    const token = tokenMatch![0];
+
+    const base = `http://127.0.0.1:${PORT + 2}`;
+
+    // 1. Login with wrong token → 401
+    const badLogin = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: `token=${'0'.repeat(48)}`,
+      redirect: 'manual',
+    });
+    expect(badLogin.status).toBe(401);
+
+    // 2. Login with correct token → 302 + session cookie
+    const goodLogin = await fetch(`${base}/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: `token=${token}`,
+      redirect: 'manual',
+    });
+    expect(goodLogin.status).toBe(302);
+    const cookieHeader = goodLogin.headers.get('set-cookie');
+    expect(cookieHeader).toMatch(/cg_admin_sid=[a-f0-9]+/);
+    const sid = cookieHeader!.match(/cg_admin_sid=([a-f0-9]+)/)![1];
+
+    // 3. GET /dashboard with cookie → 200
+    const dash = await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } });
+    expect(dash.status).toBe(200);
+    expect((await dash.text())).toContain('Policy editor');
+
+    // 4. POST /api/policy with valid policy → 200 + persisted
+    const editRes = await fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: base,
+      },
+      body: 'policy=' + encodeURIComponent(JSON.stringify({
+        version: 1,
+        killSwitch: false,
+        allowedChains: [8453],
+        maxTxValueWei: '100000000000000000',
+      })),
+    });
+    expect(editRes.status).toBe(200);
+    const html = await editRes.text();
+    expect(html).toContain('Saved');
+
+    // 5. Confirm the on-disk policy reflects the change
+    const { loadPolicy } = await import('../lib/agent-policy.js');
+    const persisted = loadPolicy();
+    expect(persisted.killSwitch).toBe(false);
+    expect(persisted.allowedChains).toEqual([8453]);
+    expect(persisted.maxTxValueWei).toBe('100000000000000000');
+
+    // 6. POST /api/killswitch set=on → kill switch flips
+    const kill = await fetch(`${base}/api/killswitch`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: base,
+      },
+      body: 'set=on',
+    });
+    expect(kill.status).toBe(200);
+    expect(loadPolicy().killSwitch).toBe(true);
+
+    // 7. POST /api/policy with INVALID policy → 400 + on-disk unchanged
+    const beforeBad = loadPolicy();
+    const bad = await fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: base,
+      },
+      body: 'policy=' + encodeURIComponent(JSON.stringify({ version: 1, killSwitch: false, weirdField: 'x' })),
+    });
+    expect(bad.status).toBe(400);
+    expect((await bad.text())).toContain('Policy rejected');
+    const afterBad = loadPolicy();
+    expect(JSON.stringify(beforeBad)).toBe(JSON.stringify(afterBad));
+
+    // 8. POST /api/policy with mismatched Origin → 403 (CSRF defense)
+    const csrf = await fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: 'http://evil.example.com',
+      },
+      body: 'policy=' + encodeURIComponent(JSON.stringify({ version: 1, killSwitch: true })),
+    });
+    expect(csrf.status).toBe(403);
+
+    // 9. Logout invalidates the session — after, GET /dashboard returns the login page (200)
+    //    and POST /api/policy returns 401 (no session)
+    await fetch(`${base}/logout`, { headers: { cookie: `cg_admin_sid=${sid}` }, redirect: 'manual' });
+    const afterLogoutDash = await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } });
+    expect(afterLogoutDash.status).toBe(200);
+    expect(await afterLogoutDash.text()).toContain('Admin login');
+    const afterLogoutPost = await fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `cg_admin_sid=${sid}`, origin: base },
+      body: 'policy=' + encodeURIComponent(JSON.stringify({ version: 1, killSwitch: false })),
+    });
+    expect(afterLogoutPost.status).toBe(401);
+
+    _stopUiForTests();
+  }, 20_000);
 });

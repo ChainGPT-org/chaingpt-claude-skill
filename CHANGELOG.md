@@ -16,11 +16,19 @@ Tools:
 - `chaingpt_agent_wallet_balances` — multi-chain native-coin balances
 - `chaingpt_agent_wallet_policy` — display current policy (read-only)
 - `chaingpt_agent_wallet_sign_and_send` — the only fund-moving tool; policy-gated
-- `chaingpt_agent_wallet_serve_ui` — local HTML dashboard on `127.0.0.1:8787` (read-only)
+- `chaingpt_agent_wallet_serve_ui` — local admin **dashboard** on `127.0.0.1:8787` with token-gated login, inline policy editor, and one-click kill switch
 
-New `skills/agent-wallet/SKILL.md` documents the threat model, policy file format, and setup flow.
+**Admin dashboard (localhost only):**
+- Admin token rotated on every (re)start, printed in tool output + saved to `.admin-token` (0600). Login required to access the dashboard.
+- Session cookie: HttpOnly + SameSite=Strict + 1h sliding TTL.
+- Origin + Referer check on every POST (CSRF defense).
+- Inline policy JSON editor — server-side validation rejects unknown fields, malformed addresses, non-integer wei. Atomic write to disk with `.bak` backup of the previous version.
+- One-click kill switch toggle.
+- LLM cannot reach the dashboard: no MCP tool issues HTTP requests, and the policy-write function is imported only by the HTTP handler, not by any agent-facing tool.
 
-22 new tests covering keystore round-trip, all policy refusal paths, sign-and-send gate, and a hard test that the tool surface contains NO "set policy" or "unlock" or "export key" surface (catches future regressions).
+New `skills/agent-wallet/SKILL.md` documents the threat model, policy file format, dashboard endpoints, and seven layers of defense.
+
+32 new tests covering keystore round-trip, all policy refusal paths, sign-and-send gate, a hard test that the tool surface contains NO "set policy" or "unlock" or "export key" surface (catches future regressions), policy-JSON schema validation, atomic-save-with-backup, and a full end-to-end HTTP flow: login → edit policy → kill-switch flip → invalid input rejection → CSRF defense → logout.
 
 ### Added — Tier 6.5 Solana lending (4 new tools)
 Completes the Solana DeFi triad alongside Drift (perps).
@@ -71,7 +79,7 @@ Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
 - Plugin to v1.9.0; MCP server to v1.9.0.
 
 ### Test count
-- Unit tests: 142 → 232 (+90 across 8 new test files: bridge, aggregators, yield, drift, portfolio, solana_lending, plans, agent_wallet).
+- Unit tests: 142 → 242 (+100 across 8 new test files: bridge, aggregators, yield, drift, portfolio, solana_lending, plans, agent_wallet).
 - Live-API smoke: 28 → 43 cases wired (agent-wallet tests are local-only — no remote endpoints).
 
 ## [1.8.0] - 2026-05-19

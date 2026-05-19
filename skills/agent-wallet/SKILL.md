@@ -108,20 +108,48 @@ Example **production policy** (allow DEX rebalancing on Base, capped at 0.1 ETH/
 
 If the call gets refused with a policy reason: **do not try to work around it from the agent side**. Surface the reason to the admin and let them edit the policy file (or override) themselves.
 
-## Local UI (read-only dashboard)
+## Local admin dashboard
 
 ```text
 > Use chaingpt_agent_wallet_serve_ui
 ```
 
-Returns a `http://127.0.0.1:8787` URL. Open in a browser to see:
+Returns a `http://127.0.0.1:8787` URL **and a one-time admin token** printed in the tool output (also saved to `~/.chaingpt-mcp/agent-wallet/.admin-token`, 0600). The token rotates on every restart.
 
-- Deposit address (with QR code)
-- Multi-chain native-coin balances
-- Active policy + digest
-- Keystore + policy file paths
+Open the URL in your browser. Paste the admin token at the login screen. The dashboard then shows:
 
-The dashboard binds to `127.0.0.1` only (not exposed on the network) and is read-only — it cannot trigger signing.
+- **Deposit address** with QR code
+- **Multi-chain native-coin balances** (refresh page to update)
+- **One-click kill switch** — engage or disable, single button
+- **Policy JSON editor** — full inline editor, validated server-side, atomic write with `.bak` backup
+- **Keystore + policy file paths** for reference
+
+### Why this is safe even though the dashboard CAN edit the policy
+
+Recall the threat model: the attacker controls the LLM via prompt injection. The defenses, in layers:
+
+1. **No MCP tool exposes a write to the policy file.** The LLM literally cannot reach the `savePolicy` function — it's only imported by the localhost HTTP server.
+2. **The localhost HTTP server has no client inside the agent.** The plugin has no MCP tool that does arbitrary HTTP POSTs to localhost. The LLM cannot trigger the dashboard's POST endpoints even by trying.
+3. **Admin auth required.** Even if a future tool somehow gained HTTP access, every POST endpoint requires a valid session cookie that's only set after the admin pastes the token. The token rotates every restart and lives only in admin-controlled state (env / file with 0600 perms).
+4. **Origin + Referer check.** Cross-origin POSTs (CSRF) are rejected. Browsers always set `Origin` on form submits.
+5. **Strict schema validation.** Even with a valid session, the policy editor rejects unknown fields, bad chain IDs, malformed addresses, non-integer wei values, etc. Garbage cannot make it onto disk.
+6. **Atomic write + `.bak`.** A botched save can't corrupt the policy file mid-write, and the previous version is recoverable.
+7. **Bound to `127.0.0.1` only.** Never on `0.0.0.0` — the dashboard is not reachable from other machines on the network.
+
+The single failure mode that would bypass all of this: malware running on the admin's machine that can read the admin token file AND make HTTP requests to localhost. At that point the attacker has shell access and can read the keystore directly; the policy file is no longer the weakest link.
+
+### Dashboard endpoints
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET /` | login form (if unauthed) or redirect to /dashboard | — |
+| `POST /login` | check admin token, set session cookie, redirect to /dashboard | requires Origin |
+| `GET /dashboard` | full admin UI (auth required) | — |
+| `GET /api/policy` | current policy JSON | requires session |
+| `POST /api/policy` | save new policy after validation | requires session + Origin |
+| `POST /api/killswitch` | toggle the kill switch (set=on/off) | requires session + Origin |
+| `GET /api/status` | JSON with address + balances + policy digest | requires session |
+| `GET /logout` | clear session cookie, redirect to login | — |
 
 ## What this skill does NOT do
 

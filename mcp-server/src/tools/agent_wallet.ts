@@ -1,5 +1,8 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createWalletClient, createPublicClient, http as viemHttp, parseTransaction, type Hex } from 'viem';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
@@ -15,6 +18,8 @@ import {
   checkPolicy,
   policyPath,
   policyDigest,
+  validatePolicyInput,
+  savePolicy,
   type TxIntent,
 } from '../lib/agent-policy.js';
 
@@ -167,65 +172,254 @@ async function getNativeBalance(chainSlug: string, address: string): Promise<big
 let runningServer: Server | null = null;
 let runningPort: number | null = null;
 
-function dashboardHtml(address: string, policyJson: string, digest: string, balanceRows: string, ksPath: string, polPath: string): string {
-  // Simple self-contained HTML — no external deps, no inline JS that fetches the wallet's private state.
-  // Includes a basic QR code via the goqr.me API (which doesn't see the private key).
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>ChainGPT Agent Wallet</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-  body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #0a0e1a; color: #e6edf3; max-width: 720px; margin: 24px auto; padding: 0 16px; line-height: 1.45; }
-  h1 { color: #58a6ff; font-size: 20px; margin-bottom: 4px; }
-  .subtle { color: #7d8590; font-size: 13px; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 14px 16px; margin: 16px 0; }
-  .card h2 { font-size: 14px; margin: 0 0 8px; color: #d2a8ff; text-transform: uppercase; letter-spacing: 0.5px; }
-  pre { background: #0d1117; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
-  .addr { font-size: 15px; word-break: break-all; color: #79c0ff; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 4px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
-  td:last-child { text-align: right; }
-  .digest { color: #ffa657; }
-  .killswitch-on { color: #f85149; font-weight: bold; }
-  .killswitch-off { color: #3fb950; }
-  img.qr { background: white; padding: 6px; border-radius: 4px; }
-  footer { color: #484f58; font-size: 11px; margin-top: 24px; }
-</style>
-</head>
-<body>
-  <h1>ChainGPT Agent Wallet</h1>
-  <div class="subtle">Read-only dashboard. Refresh the page to update.</div>
+// Admin-auth state for the localhost dashboard. Token is regenerated on each
+// serve_ui call. Sessions are in-memory only (no persistence across restarts).
+let adminToken: string | null = null;
+const sessions = new Map<string, number>(); // sessionId -> expiry ms
+const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-  <div class="card">
-    <h2>Deposit address</h2>
-    <div class="addr">${address}</div>
-    <div style="margin-top: 12px;">
-      <img class="qr" alt="QR code" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=ethereum:${address}" width="180" height="180" />
-    </div>
-    <div class="subtle" style="margin-top: 8px;">Send EVM-compatible assets to this address on any of the agent's allowed chains.</div>
-  </div>
+function generateToken(): string {
+  return randomBytes(24).toString('hex'); // 48-char hex, 192 bits
+}
 
-  <div class="card">
-    <h2>Balances (native coin)</h2>
-    <table>${balanceRows}</table>
-  </div>
+function timingSafeStrEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
-  <div class="card">
-    <h2>Active policy <span class="digest">[${digest}]</span></h2>
-    <pre>${policyJson}</pre>
-    <div class="subtle">Edit at <code>${polPath}</code></div>
-  </div>
+function parseCookies(header: string | undefined): Record<string, string> {
+  if (!header) return {};
+  const out: Record<string, string> = {};
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const k = part.slice(0, eq).trim();
+    const v = part.slice(eq + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
 
-  <div class="card">
-    <h2>Keystore</h2>
-    <div class="subtle">Encrypted at <code>${ksPath}</code>. Private key is AES-256-GCM-encrypted; passphrase lives only in the MCP server's env.</div>
-  </div>
+function checkSession(req: IncomingMessage): boolean {
+  const sid = parseCookies(req.headers.cookie).cg_admin_sid;
+  if (!sid) return false;
+  const exp = sessions.get(sid);
+  if (!exp) return false;
+  if (Date.now() > exp) {
+    sessions.delete(sid);
+    return false;
+  }
+  // Slide the expiry on each authed request
+  sessions.set(sid, Date.now() + SESSION_TTL_MS);
+  return true;
+}
 
-  <footer>ChainGPT Claude Skill agent-wallet dashboard. Refresh to update balances/policy.</footer>
-</body>
-</html>`;
+function createSession(): string {
+  const sid = generateToken();
+  sessions.set(sid, Date.now() + SESSION_TTL_MS);
+  return sid;
+}
+
+function checkOrigin(req: IncomingMessage, port: number): boolean {
+  // Block cross-origin POSTs (CSRF defense). Browsers always set Origin on
+  // form/fetch POSTs. We require it to be a localhost URL on our port.
+  const origin = req.headers.origin;
+  if (!origin) {
+    // Same-origin form submits sometimes omit Origin; allow if Referer matches
+    const referer = req.headers.referer;
+    if (!referer) return false;
+    return referer.startsWith(`http://127.0.0.1:${port}/`) || referer.startsWith(`http://localhost:${port}/`);
+  }
+  return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
+}
+
+async function readBody(req: IncomingMessage, maxBytes = 64 * 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (c: Buffer) => {
+      total += c.length;
+      if (total > maxBytes) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+function parseFormBody(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of body.split('&')) {
+    if (!part) continue;
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const k = decodeURIComponent(part.slice(0, eq));
+    const v = decodeURIComponent(part.slice(eq + 1).replace(/\+/g, ' '));
+    out[k] = v;
+  }
+  return out;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function loginHtml(error: string | null): string {
+  const errorBlock = error ? `<div class="error">${escapeHtml(error)}</div>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>ChainGPT Agent Wallet — Login</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>${BASE_CSS}
+.login { max-width: 420px; margin: 80px auto; }
+.login form { display: flex; flex-direction: column; gap: 10px; }
+.login input[type=password] { padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 14px; }
+.login button { padding: 10px; background: #238636; color: #fff; border: 0; border-radius: 4px; font-weight: 600; cursor: pointer; }
+.login button:hover { background: #2ea043; }
+.error { background: #5d1a1f; border: 1px solid #f85149; color: #ffa6a0; padding: 10px; border-radius: 4px; margin-bottom: 12px; }
+.hint { color: #7d8590; font-size: 12px; line-height: 1.5; }
+</style></head><body>
+<div class="login">
+<h1>ChainGPT Agent Wallet</h1>
+<div class="subtle">Admin login</div>
+${errorBlock}
+<form method="POST" action="/login">
+<input type="password" name="token" placeholder="Paste admin token" autofocus required />
+<button type="submit">Unlock</button>
+</form>
+<p class="hint">The admin token was printed in the MCP tool output when you ran <code>chaingpt_agent_wallet_serve_ui</code>. It's also stored at <code>~/.chaingpt-mcp/agent-wallet/.admin-token</code> (0600). It rotates every time the UI server is (re)started.</p>
+</div>
+</body></html>`;
+}
+
+const BASE_CSS = `
+body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #0a0e1a; color: #e6edf3; max-width: 820px; margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+h1 { color: #58a6ff; font-size: 20px; margin-bottom: 4px; }
+.subtle { color: #7d8590; font-size: 13px; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 14px 16px; margin: 16px 0; }
+.card h2 { font-size: 13px; margin: 0 0 8px; color: #d2a8ff; text-transform: uppercase; letter-spacing: 0.5px; }
+.card h2 .digest { color: #ffa657; font-weight: normal; }
+pre { background: #0d1117; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+.addr { font-size: 15px; word-break: break-all; color: #79c0ff; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 4px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+td:last-child { text-align: right; }
+.killswitch-on { color: #f85149; font-weight: bold; }
+.killswitch-off { color: #3fb950; }
+img.qr { background: white; padding: 6px; border-radius: 4px; }
+button, input[type=submit] { padding: 8px 14px; background: #238636; color: #fff; border: 0; border-radius: 4px; font-weight: 600; cursor: pointer; font-family: inherit; }
+button:hover { background: #2ea043; }
+button.danger { background: #da3633; }
+button.danger:hover { background: #f85149; }
+button.warn { background: #9e6a03; }
+textarea { width: 100%; min-height: 320px; padding: 10px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 4px; font-family: inherit; font-size: 12px; line-height: 1.5; box-sizing: border-box; }
+.bar { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.flash { padding: 8px 12px; border-radius: 4px; margin: 8px 0; font-size: 13px; }
+.flash.ok { background: #133929; color: #56d364; border: 1px solid #2ea043; }
+.flash.err { background: #5d1a1f; color: #ffa6a0; border: 1px solid #f85149; }
+nav { display: flex; gap: 12px; padding: 8px 0; font-size: 12px; margin-bottom: 8px; }
+nav a { color: #58a6ff; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+footer { color: #484f58; font-size: 11px; margin-top: 24px; }
+`;
+
+async function renderDashboard(
+  res: ServerResponse,
+  address: string,
+  chains: string[],
+  flash: { kind: 'ok' | 'err'; msg: string } | null,
+): Promise<void> {
+  const policy = loadPolicy();
+  const digest = policyDigest(policy);
+  const balanceRows = await Promise.all(chains.map(async (c) => {
+    const chain = resolveChain(c);
+    if (!chain) return `<tr><td>${escapeHtml(c)}</td><td>unknown</td></tr>`;
+    try {
+      const bal = await getNativeBalance(c, address);
+      return `<tr><td>${escapeHtml(chain.name)}</td><td>${escapeHtml(fmtEth(bal))} ${escapeHtml(chain.native)}</td></tr>`;
+    } catch {
+      return `<tr><td>${escapeHtml(chain.name)}</td><td>(RPC error)</td></tr>`;
+    }
+  }));
+  const html = dashboardHtml({
+    address,
+    policyJson: JSON.stringify(policy, null, 2),
+    digest,
+    balanceRows: balanceRows.join(''),
+    ksPath: keystorePath(),
+    polPath: policyPath(),
+    killSwitchOn: !!policy.killSwitch,
+    flash,
+  });
+  res.writeHead(flash?.kind === 'err' ? 400 : 200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(html);
+}
+
+function dashboardHtml(opts: {
+  address: string;
+  policyJson: string;
+  digest: string;
+  balanceRows: string;
+  ksPath: string;
+  polPath: string;
+  killSwitchOn: boolean;
+  flash: { kind: 'ok' | 'err'; msg: string } | null;
+}): string {
+  const flashBlock = opts.flash ? `<div class="flash ${opts.flash.kind}">${escapeHtml(opts.flash.msg)}</div>` : '';
+  const killBtn = opts.killSwitchOn
+    ? `<form method="POST" action="/api/killswitch" style="display:inline"><input type="hidden" name="set" value="off"/><button class="warn" type="submit">Disable kill switch</button></form>`
+    : `<form method="POST" action="/api/killswitch" style="display:inline"><input type="hidden" name="set" value="on"/><button class="danger" type="submit">🛑 Engage kill switch (halt all signing)</button></form>`;
+  const killLabel = opts.killSwitchOn
+    ? `<span class="killswitch-on">ON — all signing refused</span>`
+    : `<span class="killswitch-off">OFF — signing allowed (subject to other rules)</span>`;
+
+  return `<!doctype html><html lang="en"><head>
+<meta charset="utf-8"/><title>ChainGPT Agent Wallet — Dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>${BASE_CSS}</style></head><body>
+<nav><a href="/dashboard">Dashboard</a> · <a href="/logout">Logout</a></nav>
+<h1>ChainGPT Agent Wallet</h1>
+<div class="subtle">Admin dashboard. All edits write to <code>${escapeHtml(opts.polPath)}</code> with a <code>.bak</code> backup.</div>
+${flashBlock}
+
+<div class="card">
+<h2>Deposit address</h2>
+<div class="addr">${escapeHtml(opts.address)}</div>
+<div style="margin-top:12px"><img class="qr" alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=ethereum:${encodeURIComponent(opts.address)}" width="180" height="180"/></div>
+<div class="subtle" style="margin-top:8px">Send EVM assets to this address on any chain the policy allows. Refresh page to update balances.</div>
+</div>
+
+<div class="card">
+<h2>Native-coin balances</h2>
+<table>${opts.balanceRows}</table>
+</div>
+
+<div class="card">
+<h2>Kill switch</h2>
+<div>Current state: ${killLabel}</div>
+<div class="bar">${killBtn}<span class="subtle">One-click halt. Re-enable via the JSON editor below or this button.</span></div>
+</div>
+
+<div class="card">
+<h2>Policy editor <span class="digest">[digest ${escapeHtml(opts.digest)}]</span></h2>
+<form method="POST" action="/api/policy">
+<textarea name="policy" spellcheck="false">${escapeHtml(opts.policyJson)}</textarea>
+<div class="bar">
+<button type="submit">Save policy</button>
+<span class="subtle">Validated server-side. Unknown fields rejected. Atomic write + .bak backup.</span>
+</div>
+</form>
+</div>
+
+<div class="card">
+<h2>Keystore</h2>
+<div class="subtle">Encrypted at <code>${escapeHtml(opts.ksPath)}</code>. AES-256-GCM with scrypt KDF. Passphrase lives only in the MCP server's env (<code>CHAINGPT_AGENT_WALLET_PASSPHRASE</code>) and is never echoed.</div>
+</div>
+
+<footer>ChainGPT Claude Skill agent-wallet dashboard · session expires after 1h of inactivity</footer>
+</body></html>`;
 }
 
 export async function handleAgentWalletTool(
@@ -463,46 +657,160 @@ export async function handleAgentWalletTool(
         runningServer = null;
       }
 
+      // Rotate admin token on every (re)start, persist to a 0600 file so the
+      // admin can recover it without re-running the tool
+      adminToken = generateToken();
+      sessions.clear();
+      try {
+        const tokenPath = process.env.CHAINGPT_ADMIN_TOKEN_FILE?.trim()
+          || policyPath().replace(/policy\.json$/, '.admin-token');
+        mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
+        writeFileSync(tokenPath, adminToken, { mode: 0o600 });
+      } catch { /* best-effort */ }
+
       const handler = async (req: IncomingMessage, res: ServerResponse) => {
         try {
           const url = req.url || '/';
-          // Pre-fetch balances on every page load so refresh = re-fetch
-          const policy = loadPolicy();
-          const digest = policyDigest(policy);
+          const method = (req.method || 'GET').toUpperCase();
 
+          // ── POST /login ─────────────────────────────────────────────
+          if (method === 'POST' && url === '/login') {
+            if (!checkOrigin(req, port)) {
+              res.writeHead(403, { 'content-type': 'text/plain' });
+              res.end('Origin check failed');
+              return;
+            }
+            const body = await readBody(req);
+            const fields = parseFormBody(body);
+            const submitted = fields.token ?? '';
+            if (!adminToken || !timingSafeStrEqual(submitted, adminToken)) {
+              res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
+              res.end(loginHtml('Invalid admin token.'));
+              return;
+            }
+            const sid = createSession();
+            res.writeHead(302, {
+              'set-cookie': `cg_admin_sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000}`,
+              'location': '/dashboard',
+            });
+            res.end();
+            return;
+          }
+
+          // ── GET /logout ─────────────────────────────────────────────
+          if (url === '/logout') {
+            const sid = parseCookies(req.headers.cookie).cg_admin_sid;
+            if (sid) sessions.delete(sid);
+            res.writeHead(302, {
+              'set-cookie': `cg_admin_sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`,
+              'location': '/',
+            });
+            res.end();
+            return;
+          }
+
+          // ── Auth gate for everything below ──────────────────────────
+          const authed = checkSession(req);
+          if (!authed) {
+            // Unauthed → either show login (GET /) or redirect
+            if (method === 'GET' && (url === '/' || url === '/dashboard')) {
+              res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+              res.end(loginHtml(null));
+              return;
+            }
+            res.writeHead(401, { 'content-type': 'text/plain' });
+            res.end('Authentication required. Visit / to log in.');
+            return;
+          }
+
+          // ── POST /api/policy ────────────────────────────────────────
+          if (method === 'POST' && url === '/api/policy') {
+            if (!checkOrigin(req, port)) {
+              res.writeHead(403, { 'content-type': 'text/plain' });
+              res.end('Origin check failed');
+              return;
+            }
+            const body = await readBody(req);
+            const fields = parseFormBody(body);
+            const policyJson = fields.policy ?? '';
+            let parsed: unknown;
+            try { parsed = JSON.parse(policyJson); }
+            catch (e: any) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Invalid JSON: ${e?.message ?? e}` });
+              return;
+            }
+            const validation = validatePolicyInput(parsed);
+            if (!validation.ok || !validation.policy) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Policy rejected: ${validation.error}` });
+              return;
+            }
+            try {
+              const { digest, path } = savePolicy(validation.policy);
+              renderDashboard(res, file.address, chains, { kind: 'ok', msg: `Saved. New digest ${digest}. Backup at ${path}.bak.` });
+            } catch (e: any) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Save failed: ${e?.message ?? e}` });
+            }
+            return;
+          }
+
+          // ── POST /api/killswitch ────────────────────────────────────
+          if (method === 'POST' && url === '/api/killswitch') {
+            if (!checkOrigin(req, port)) {
+              res.writeHead(403, { 'content-type': 'text/plain' });
+              res.end('Origin check failed');
+              return;
+            }
+            const body = await readBody(req);
+            const fields = parseFormBody(body);
+            const set = fields.set === 'on';
+            const current = loadPolicy();
+            const newPolicy = { ...current, killSwitch: set };
+            const validation = validatePolicyInput(newPolicy);
+            if (!validation.ok || !validation.policy) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Could not toggle: ${validation.error}` });
+              return;
+            }
+            try {
+              const { digest } = savePolicy(validation.policy);
+              renderDashboard(res, file.address, chains, {
+                kind: 'ok',
+                msg: `Kill switch ${set ? 'ENGAGED' : 'disabled'}. New digest ${digest}.`,
+              });
+            } catch (e: any) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Save failed: ${e?.message ?? e}` });
+            }
+            return;
+          }
+
+          // ── GET /api/policy ─────────────────────────────────────────
+          if (url === '/api/policy') {
+            const policy = loadPolicy();
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ policy, digest: policyDigest(policy) }, null, 2));
+            return;
+          }
+
+          // ── GET /api/status ─────────────────────────────────────────
           if (url.startsWith('/api/status')) {
             const balances: Record<string, string> = {};
             for (const c of chains) {
-              try {
-                const bal = await getNativeBalance(c, file.address);
-                balances[c] = bal.toString();
-              } catch { balances[c] = 'error'; }
+              try { balances[c] = (await getNativeBalance(c, file.address)).toString(); }
+              catch { balances[c] = 'error'; }
             }
+            const policy = loadPolicy();
             res.writeHead(200, { 'content-type': 'application/json' });
-            res.end(JSON.stringify({ address: file.address, balances, policyDigest: digest }));
+            res.end(JSON.stringify({ address: file.address, balances, policyDigest: policyDigest(policy) }));
             return;
           }
-          // Default: HTML dashboard
-          const balanceRows = await Promise.all(chains.map(async (c) => {
-            const chain = resolveChain(c);
-            if (!chain) return `<tr><td>${c}</td><td>unknown</td></tr>`;
-            try {
-              const bal = await getNativeBalance(c, file.address);
-              return `<tr><td>${chain.name}</td><td>${fmtEth(bal)} ${chain.native}</td></tr>`;
-            } catch (e: any) {
-              return `<tr><td>${chain.name}</td><td>(RPC error)</td></tr>`;
-            }
-          }));
-          const html = dashboardHtml(
-            file.address,
-            JSON.stringify(policy, null, 2),
-            digest,
-            balanceRows.join(''),
-            keystorePath(),
-            policyPath(),
-          );
-          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-          res.end(html);
+
+          // ── GET / or /dashboard ─────────────────────────────────────
+          if (method === 'GET' && (url === '/' || url === '/dashboard')) {
+            await renderDashboard(res, file.address, chains, null);
+            return;
+          }
+
+          res.writeHead(404, { 'content-type': 'text/plain' });
+          res.end('Not found');
         } catch (e: any) {
           res.writeHead(500, { 'content-type': 'text/plain' });
           res.end(`Server error: ${e?.message ?? e}`);
@@ -522,13 +830,31 @@ export async function handleAgentWalletTool(
         content: [{
           type: 'text',
           text: [
-            `✓ Agent wallet UI running at ${url}`,
+            `✓ Agent wallet admin dashboard running at ${url}`,
             ``,
-            `The dashboard is read-only — it surfaces address, balances, and policy.`,
-            `Bound to 127.0.0.1 only (not exposed on the network).`,
+            `╔═════════════════════════════════════════════════════════════╗`,
+            `║  ADMIN TOKEN (paste once at /login)                         ║`,
+            `║                                                             ║`,
+            `║  ${adminToken}  ║`,
+            `║                                                             ║`,
+            `║  Also saved to ${policyPath().replace(/policy\.json$/, '.admin-token')}`,
+            `╚═════════════════════════════════════════════════════════════╝`,
             ``,
-            `Open ${url} in a browser. Refresh the page to update balances.`,
+            `What the dashboard does:`,
+            `  • Address + QR code for receiving funds`,
+            `  • Live multi-chain native balances`,
+            `  • Active policy + digest`,
+            `  • Edit the policy JSON inline (validated server-side, atomic write + .bak)`,
+            `  • One-click kill switch toggle`,
             ``,
+            `Security:`,
+            `  • Bound to 127.0.0.1 only — not exposed on the network`,
+            `  • Login required (admin token rotated on every restart)`,
+            `  • Session cookie HttpOnly + SameSite=Strict + 1h sliding TTL`,
+            `  • Origin + Referer check on every POST`,
+            `  • Policy edits validated against a strict schema`,
+            ``,
+            `Open ${url} in a browser.`,
             `To stop: kill the MCP server process or re-call this tool with a different port.`,
           ].join('\n'),
         }],
