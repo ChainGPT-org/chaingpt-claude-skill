@@ -89,19 +89,23 @@ Reference files in `reference/*.md` document ChainGPT API endpoints and SDKs. Wh
 
 ## Testing Requirements
 
-Before submitting any PR:
+Every PR must leave `./scripts/test-all.sh` green. One command runs every layer:
 
-1. **Run the validation script:**
-   ```bash
-   ./scripts/validate.sh
-   ```
-   All checks must pass.
+```bash
+./scripts/test-all.sh           # everything (~50s)
+./scripts/test-all.sh --fast    # skip live smoke (~20s, fully offline)
+```
 
-2. **For JavaScript examples:** ensure they pass `node --check`.
-3. **For Python examples:** ensure they pass `python3 -c "import ast; ast.parse(...)"`.
-4. **For MCP server changes:** run `cd mcp-server && npm test` if tests exist.
-5. **For mock server changes:** run `cd mock-server && npm test` if tests exist.
-6. **For SKILL.md changes:** verify the file stays under 500 lines, frontmatter is valid, and all referenced files exist.
+The harness covers six layers — `validate`, `typecheck`, `mcp-test`, `mock-test`, `examples`, `smoke`. See [`TESTING.md`](TESTING.md) for the full reference: what each layer covers, how to run them individually, and the failure-mode cheat-sheet.
+
+**If you add a tool, handler, or behavior, you must add tests in the same PR.** The pattern is documented in [`TESTING.md#adding-tests-for-a-new-capability`](TESTING.md#adding-tests-for-a-new-capability). A PR that adds a capability without tests will be asked to add them before merge — no exceptions.
+
+For markdown-only changes (reference docs, templates, patterns, SKILLs):
+
+- File frontmatter must be valid (`scripts/validate.sh` catches this)
+- Cross-references must point to files that exist
+- README anchor links must match actual heading slugs
+- `SKILL.md` files must stay under 500 lines
 
 ## Project Structure
 

@@ -434,20 +434,28 @@ Point your `CHAINGPT_BASE_URL` at `http://localhost:3001` and everything works e
 
 ### Run the full test suite
 
-**249 tests passing** across two suites:
+**One command runs every layer:**
 
 ```bash
-# MCP Server tests (53 tests)
-cd mcp-server && npm install && npm test
-
-# Mock Server tests (26 tests)
-cd mock-server && npm install && npm test
-
-# Skill validation (118 structural checks)
-bash scripts/validate.sh
+./scripts/test-all.sh           # everything (offline + live smoke, ~50s)
+./scripts/test-all.sh --fast    # everything except live smoke (~20s)
+./scripts/test-all.sh --only mcp-test    # one layer only
 ```
 
-The CI workflow (`.github/workflows/ci.yml`) runs all three automatically on every push and pull request.
+The orchestrator runs six layers — see [`TESTING.md`](TESTING.md) for the full reference (what each layer covers, how to add tests for a new capability, how CI gates the harness).
+
+| Layer | Pass count | Network |
+|---|---|---|
+| `validate` (structural / frontmatter checks) | 157 | none |
+| `typecheck` (`tsc --noEmit` for both servers) | clean | none |
+| `mcp-test` (vitest — handlers, policy gate, signing, schemas) | 250 | none |
+| `mock-test` (vitest — mock-server endpoints via supertest) | 26 | none |
+| `examples` (`node --check` + `python3 -m ast`) | every file | none |
+| `smoke` (live mainnet APIs: DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, …) | 39 | yes |
+
+CI runs the first four on every push and PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Smoke runs daily plus on-demand ([`.github/workflows/smoke.yml`](.github/workflows/smoke.yml)) and opens a labeled GitHub issue on scheduled-run failure.
+
+**The contract: every PR that adds a tool or behavior must add tests in the same PR.** See [`TESTING.md`](TESTING.md#adding-tests-for-a-new-capability) for the pattern.
 
 <br/>
 

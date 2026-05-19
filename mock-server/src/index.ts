@@ -376,7 +376,11 @@ app.use((_req: Request, res: Response) => {
 });
 
 // ─── Start ─────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+// Only call listen() when run directly (not when imported by tests).
+// Vitest sets process.env.VITEST automatically; covers both `npm test`
+// and ad-hoc imports.
+if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║          ChainGPT Mock API Server v1.0.0                ║
@@ -400,6 +404,7 @@ app.listen(PORT, () => {
 ║  100-500ms artificial latency per request.                ║
 ╚══════════════════════════════════════════════════════════╝
   `);
-});
+  });
+}
 
 export default app;
