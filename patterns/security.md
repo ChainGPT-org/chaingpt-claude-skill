@@ -129,7 +129,7 @@ contract PausableContract is Pausable, AccessControl {
     string public pauseReason;
 
     event PauseWithReason(address indexed pauser, string reason);
-    event Unpaused(address indexed unpauser);
+    event ContractUnpaused(address indexed unpauser);
 
     constructor(address admin, address pauser) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -154,7 +154,7 @@ contract PausableContract is Pausable, AccessControl {
     function unpause() external onlyRole(UNPAUSER_ROLE) {
         _unpause();
         pauseReason = "";
-        emit Unpaused(msg.sender);
+        emit ContractUnpaused(msg.sender);
     }
 
     /**
@@ -214,7 +214,7 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
  *   1. Deploy new implementation
  *   2. Call upgradeToAndCall() through the proxy
  *
- *   Install: npm install @openzeppelin/contracts-upgradeable
+ * @custom:install npm install @openzeppelin/contracts-upgradeable
  */
 contract UUPSUpgradeableContract is
     Initializable,

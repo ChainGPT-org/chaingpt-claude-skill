@@ -2,12 +2,14 @@
 # test-all.sh — single entry point for every test layer in the repo.
 #
 # Layers (in order, fast → slow):
-#   1. validate     — frontmatter, structural, anchor checks         (~1s)
+#   1. validate     — frontmatter, structural, version consistency   (~1s)
 #   2. typecheck    — tsc --noEmit across both servers               (~5s)
 #   3. mcp-test     — vitest unit + integration (mcp-server)         (~3s)
 #   4. mock-test    — vitest endpoint tests (mock-server)            (~10s)
 #   5. examples     — node --check / python ast.parse on every file  (~2s)
-#   6. smoke        — live-API smoke against real upstreams          (~30s)
+#   6. patterns     — solc compile every solidity block in patterns/ (~10s)
+#   7. boot         — spawn built server, JSON-RPC tools/list assert  (~2s)
+#   8. smoke        — live-API smoke against real upstreams          (~30s)
 #
 # Usage:
 #   ./scripts/test-all.sh                # run everything
@@ -155,7 +157,25 @@ layer_examples() {
   return $fail
 }
 
-# ── Layer 6: live smoke ───────────────────────────────────────────
+# ── Layer 6: solidity pattern compilation ────────────────────────
+layer_patterns() {
+  if [[ ! -d mcp-server/node_modules ]]; then
+    echo "Installing mcp-server deps..."
+    (cd mcp-server && npm ci) || return 1
+  fi
+  node "$REPO_ROOT/scripts/check-patterns.mjs"
+}
+
+# ── Layer 7: MCP boot smoke (spawn server, JSON-RPC tools/list) ──
+layer_boot() {
+  if [[ ! -f mcp-server/dist/index.js ]]; then
+    echo "Building mcp-server first..."
+    (cd mcp-server && npm run build) || return 1
+  fi
+  node "$REPO_ROOT/scripts/mcp-boot-smoke.mjs"
+}
+
+# ── Layer 8: live smoke ───────────────────────────────────────────
 layer_smoke() {
   if [[ $FAST -eq 1 && -z "$ONLY" ]]; then
     echo "${YELLOW}skipped (--fast)${RESET}"
@@ -185,6 +205,8 @@ run_layer "typecheck" layer_typecheck   || true
 run_layer "mcp-test"  layer_mcp_test    || true
 run_layer "mock-test" layer_mock_test   || true
 run_layer "examples"  layer_examples    || true
+run_layer "patterns"  layer_patterns    || true
+run_layer "boot"      layer_boot        || true
 run_layer "smoke"     layer_smoke       || true
 
 # ── Summary ───────────────────────────────────────────────────────

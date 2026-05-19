@@ -1,6 +1,6 @@
 # Testing Guide
 
-This repo ships **six independent test layers** and a single orchestrator that runs them all. The goal: every new capability lands with the tests that prove it works, and `./scripts/test-all.sh` stays green before any push to `main`.
+This repo ships **eight independent test layers** and a single orchestrator that runs them all. The goal: every new capability lands with the tests that prove it works, and `./scripts/test-all.sh` stays green before any push to `main`.
 
 ## TL;DR
 
@@ -11,7 +11,7 @@ This repo ships **six independent test layers** and a single orchestrator that r
 # Skip the live-API smoke (faster, fully offline):
 ./scripts/test-all.sh --fast
 
-# Run a single layer (validate | typecheck | mcp-test | mock-test | examples | smoke):
+# Run a single layer (validate | typecheck | mcp-test | mock-test | examples | patterns | boot | smoke):
 ./scripts/test-all.sh --only mcp-test
 
 # Smoke but skip Drift cases (when dlob.drift.trade is in an outage):
@@ -20,15 +20,17 @@ This repo ships **six independent test layers** and a single orchestrator that r
 
 Exit code `0` = every requested layer passed. `1` = at least one layer failed.
 
-## The six layers
+## The eight layers
 
 | Layer | What it covers | Runtime | Network | Where to read |
 |---|---|---|---|---|
-| **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
+| **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example **+ version consistency** (VERSION ↔ plugin.json ↔ package.json ↔ index.ts ↔ README badge) | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
 | **typecheck** | `tsc --noEmit` over `mcp-server/` and `mock-server/` | ~5s | none | each package's `tsconfig.json` |
 | **mcp-test** | 250 vitest cases covering every MCP tool handler, policy gate, signing logic, schema validation, fixture-based unit tests | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
 | **mock-test** | 26 vitest cases against the mock-server's express app via supertest | ~10s | none | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
 | **examples** | `node --check` on every JS example, `python3 -m ast` parse on every Python example | ~2s | none | [`examples/`](examples/) |
+| **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
+| **boot** | Spawns the built `mcp-server/dist/index.js`, completes the MCP `initialize` handshake, sends a `tools/list` JSON-RPC request over stdio, asserts ≥ 95 unique `chaingpt_*`-prefixed tools with valid `name`/`description`/`inputSchema`. Catches missing-export and double-registration regressions invisible to vitest. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
 | **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~30s | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
 ## Running individual layers directly
@@ -54,7 +56,13 @@ cd mock-server && npm ci && npm test
 find examples/js -name "*.js" -exec node --check {} \;
 find examples/python -name "*.py" -exec python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" {} \;
 
-# 6. live smoke
+# 6. solidity pattern compilation
+node scripts/check-patterns.mjs        # needs (cd mcp-server && npm ci) once
+
+# 7. MCP boot smoke (built server, tools/list assert)
+(cd mcp-server && npm run build) && node scripts/mcp-boot-smoke.mjs
+
+# 8. live smoke
 cd mcp-server && npm run build && CHAINGPT_API_KEY=smoke-test node dist/smoke-test.js
 ```
 
@@ -90,7 +98,7 @@ Refusal-path cases (no broadcast — we check the gate fires correctly):
 
 Two GitHub Actions workflows enforce the harness:
 
-- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — runs `typecheck`, `mcp-test`, `mock-test`, and `validate` in parallel on every push and every PR. Required for merge.
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — runs `typecheck`, `mcp-test`, `mock-test`, `validate`, `patterns`, and `boot-smoke` in parallel on every push and every PR. Required for merge.
 - [`.github/workflows/smoke.yml`](.github/workflows/smoke.yml) — runs `smoke` daily at 09:00 UTC plus manual `workflow_dispatch`. On scheduled-run failure, opens a GitHub issue labelled `smoke-failure`. Not required for merge (intentional: an upstream outage shouldn't block PRs).
 
 ## Adding tests for a new capability
