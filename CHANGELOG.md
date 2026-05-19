@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0] - 2026-05-18
+### Added — Tier 3a: MAINNET DEX trading
+First execution tier. Custody-free pattern preserved (plugin builds unsigned tx, user signs externally). Mainnet swaps default; the build-tx tool refuses without explicit `acknowledgeMainnet: true` acknowledgement.
+
+- **5 new DEX tools**:
+  - `chaingpt_dex_quote` — live EVM swap quote via OpenOcean v4 aggregator (no API key)
+  - `chaingpt_dex_build_swap_tx` — build unsigned swap tx; refuses mainnet without ack
+  - `chaingpt_dex_approve_tx` — ERC-20 approval helper (auto-resolves OpenOcean router)
+  - `chaingpt_dex_jupiter_quote` — Solana quote via Jupiter v6
+  - `chaingpt_dex_jupiter_build_swap_tx` — Solana serialized swap tx; refuses without ack
+- 10 EVM mainnets supported: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll. Plus Solana mainnet.
+- New `skills/trade/SKILL.md` codifies the mandatory pre-flight (`chaingpt_risk_token` + `chaingpt_dex_quote` before build-tx) and the refusal protocol for honeypot-flagged tokens.
+
+### Changed
+- Plugin to v1.4.0; MCP server to v1.4.0.
+
 ## [1.3.0] - 2026-05-18
 ### Added — Tier 2 expansion: MAINNET-FIRST contract deployment lifecycle
 

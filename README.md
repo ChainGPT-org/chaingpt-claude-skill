@@ -6,9 +6,9 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **29 MCP tools** (12 ChainGPT-AI + 12 generic Web3 + 5 mainnet contract deploy). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **34 MCP tools** (12 ChainGPT-AI + 12 generic Web3 + 5 mainnet deploy + 5 mainnet DEX trading). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.4.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
@@ -84,8 +84,8 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 29 MCP Tools
-Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, AND deploy contracts to mainnet with the audit-before-deploy gate — all from the chat.
+### 🤖 34 MCP Tools
+Claude doesn't just _write_ code — it **calls APIs, the chain, and DEX aggregators directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, deploy contracts to mainnet with the audit-before-deploy gate, AND swap tokens on 10 EVM mainnets + Solana via OpenOcean and Jupiter — all custody-free, all from the chat.
 
 ### 📋 10 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
@@ -154,7 +154,7 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 29 Tools
+## 🔌 MCP Server — 34 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 
@@ -219,6 +219,20 @@ Custody-free pipeline. The plugin builds an unsigned tx; the user signs external
 **Testnets** (opt-in): sepolia · base-sepolia · arbitrum-sepolia · optimism-sepolia · polygon-amoy · bsc-testnet.
 
 The `chaingpt-deploy` skill enforces the mandatory pipeline: **generate → audit → compile → estimate → confirm → build-tx → user-signs → verify**. Never bypass the audit step on mainnet.
+
+### Mainnet DEX trading (5 tools — new in 1.4)
+
+Custody-free. Plugin builds the unsigned swap tx; user signs externally. Same `acknowledgeMainnet` safety pattern as deploy.
+
+| Tool | What It Does | Backend |
+|------|-------------|---------|
+| `chaingpt_dex_quote` | Live EVM swap quote (price, impact, route) | OpenOcean v4 |
+| `chaingpt_dex_build_swap_tx` | Build unsigned EVM swap. **Mainnet ack required** | OpenOcean v4 |
+| `chaingpt_dex_approve_tx` | ERC-20 approval helper (auto-resolves router) | viem encode |
+| `chaingpt_dex_jupiter_quote` | Live Solana swap quote | Jupiter v6 |
+| `chaingpt_dex_jupiter_build_swap_tx` | Serialized Solana swap tx (base64). **Mainnet ack required** | Jupiter v6 |
+
+EVM chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll. Plus Solana mainnet. The `chaingpt-trade` skill codifies the mandatory pre-flight: **`chaingpt_risk_token` on the buy token + `chaingpt_dex_quote` BEFORE `chaingpt_dex_build_swap_tx`**.
 
 ### Optional API keys (graceful fallback when absent)
 
