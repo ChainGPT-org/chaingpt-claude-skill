@@ -18,6 +18,11 @@ import { handleHyperliquidTool } from './tools/hyperliquid.js';
 import { handlePolymarketTool } from './tools/polymarket.js';
 import { handleWalletTool } from './tools/wallet.js';
 import { handleDeployTool } from './tools/deploy.js';
+import { handleBridgeTool } from './tools/bridge.js';
+import { handleAggregatorTool } from './tools/aggregators.js';
+import { handleYieldTool } from './tools/yield.js';
+import { handleDriftTool } from './tools/drift.js';
+import { handlePortfolioTool } from './tools/portfolio.js';
 
 interface SmokeCase {
   name: string;
@@ -247,6 +252,106 @@ contract Hello { string public greeting = "hi"; }`,
     fn: () =>
       handlePolymarketTool('chaingpt_pm_markets', { limit: 3, order: 'volume24hr', active: true }),
     expect: /Polymarket markets|YES|vol24h/i,
+  },
+
+  // ─── Tier 6.1: Across bridge ─────────────────────────────────────
+  {
+    name: 'bridge_quote (USDC base → ethereum)',
+    fn: () =>
+      handleBridgeTool('chaingpt_bridge_quote', {
+        inputToken: USDC_BASE,
+        outputToken: USDC_ETH,
+        originChain: 'base',
+        destinationChain: 'ethereum',
+        amount: '100',
+        decimals: 6,
+      }),
+    expect: /Bridge quote|SpokePool|fill time/i,
+  },
+  {
+    name: 'bridge_build_deposit_tx (mainnet refusal without ack)',
+    fn: () =>
+      handleBridgeTool('chaingpt_bridge_build_deposit_tx', {
+        inputToken: USDC_BASE,
+        outputToken: USDC_ETH,
+        originChain: 'base',
+        destinationChain: 'ethereum',
+        amount: '100',
+        decimals: 6,
+        depositor: VITALIK,
+      }),
+    expect: /Mainnet bridge refused/i,
+  },
+
+  // ─── Tier 6.2: 1inch + CoW aggregators ───────────────────────────
+  {
+    name: 'dex_1inch_quote (key gating)',
+    fn: () =>
+      handleAggregatorTool('chaingpt_dex_1inch_quote', {
+        network: 'ethereum',
+        inToken: USDC_ETH,
+        outToken: WETH_ETH,
+        amountIn: '100',
+        decimalsIn: 6,
+      }),
+    // Either succeeds (key present) or returns helpful setup hint
+    expect: /1inch|ONEINCH_API_KEY|quote/i,
+  },
+  {
+    name: 'dex_cow_create_order (mainnet refusal without ack)',
+    fn: () =>
+      handleAggregatorTool('chaingpt_dex_cow_create_order', {
+        network: 'ethereum',
+        sellToken: USDC_ETH,
+        buyToken: WETH_ETH,
+        sellAmount: '100',
+        sellDecimals: 6,
+        from: VITALIK,
+      }),
+    expect: /CoW order refused/i,
+  },
+
+  // ─── Tier 6.3: Pendle + Morpho ───────────────────────────────────
+  {
+    name: 'defi_pendle_markets (ethereum)',
+    fn: () =>
+      handleYieldTool('chaingpt_defi_pendle_markets', { network: 'ethereum', limit: 3 }),
+    expect: /Pendle active markets/i,
+  },
+  {
+    name: 'defi_morpho_markets (ethereum)',
+    fn: () =>
+      handleYieldTool('chaingpt_defi_morpho_markets', { network: 'ethereum', limit: 3 }),
+    expect: /Morpho Blue markets/i,
+  },
+  {
+    name: 'defi_morpho_vaults (ethereum USDC)',
+    fn: () =>
+      handleYieldTool('chaingpt_defi_morpho_vaults', { network: 'ethereum', asset: 'USDC', limit: 3 }),
+    expect: /MetaMorpho vaults/i,
+  },
+
+  // ─── Tier 6.4: Drift ─────────────────────────────────────────────
+  {
+    name: 'drift_markets (top by volume)',
+    fn: () => handleDriftTool('chaingpt_drift_markets', { sortBy: 'volume', limit: 5 }),
+    expect: /Drift perp markets/i,
+  },
+  {
+    name: 'drift_orderbook (idx 0 = SOL-PERP)',
+    fn: () => handleDriftTool('chaingpt_drift_orderbook', { marketIndex: 0, depth: 5 }),
+    expect: /Drift L2 orderbook/i,
+  },
+
+  // ─── Tier 8: portfolio snapshot ──────────────────────────────────
+  {
+    name: 'portfolio_snapshot (Vitalik, hyperliquid + morpho)',
+    fn: () =>
+      handlePortfolioTool('chaingpt_portfolio_snapshot', {
+        evmAddress: VITALIK,
+        venues: ['hyperliquid', 'morpho'],
+      }),
+    expect: /Portfolio snapshot|Total cross-venue exposure/i,
   },
 ];
 
