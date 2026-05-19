@@ -23,9 +23,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,11 +43,17 @@ if (!existsSync(BIN)) {
   process.exit(1);
 }
 
+// Redirect HOME to a fresh temp dir so the agent-wallet keystore loader
+// (which reads from $HOME/.chaingpt-mcp/agent-wallet/) cannot see real state
+// when this script runs on a developer machine that already has an init'd wallet.
+const SMOKE_HOME = mkdtempSync(join(tmpdir(), 'chaingpt-mcp-boot-smoke-'));
+
 // Spawn the server with a dummy CHAINGPT_API_KEY (server refuses to start without one).
-// Set HOME to a temp-ish dir so the agent-wallet keystore loader doesn't see real state.
 const child = spawn(process.execPath, [BIN], {
   env: {
     ...process.env,
+    HOME: SMOKE_HOME,
+    USERPROFILE: SMOKE_HOME, // Windows fallback for the same purpose
     CHAINGPT_API_KEY: process.env.CHAINGPT_API_KEY ?? 'boot-smoke-not-a-real-key',
   },
   stdio: ['pipe', 'pipe', 'pipe'],
@@ -165,9 +172,14 @@ async function main() {
   console.log(`[boot-smoke] PASS (${names.length} ≥ ${MIN_EXPECTED_TOOLS})`);
 }
 
+function cleanup() {
+  try { rmSync(SMOKE_HOME, { recursive: true, force: true }); } catch {}
+}
+
 main()
   .then(() => {
     child.kill();
+    cleanup();
     // Give the kill a tick so we don't race with the exit handler.
     setTimeout(() => process.exit(0), 50);
   })
@@ -175,5 +187,6 @@ main()
     console.error(`[boot-smoke] FAIL: ${err.message}`);
     if (stderrBuf) console.error(`[boot-smoke] server stderr:\n${stderrBuf}`);
     try { child.kill(); } catch {}
+    cleanup();
     setTimeout(() => process.exit(1), 50);
   });

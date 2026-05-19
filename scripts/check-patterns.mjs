@@ -44,13 +44,18 @@ const PATTERNS_DIR = process.env.PATTERNS_DIR
 const MCP_NODE_MODULES = join(REPO_ROOT, 'mcp-server', 'node_modules');
 
 const require = createRequire(import.meta.url);
-// solc lives inside mcp-server/node_modules — load it from there.
+// solc lives inside mcp-server/node_modules by default — override via PATTERNS_SOLC
+// for testing against a different compiler (e.g., a system solc-js install).
+const SOLC_PATH = process.env.PATTERNS_SOLC
+  ? resolve(process.env.PATTERNS_SOLC)
+  : join(MCP_NODE_MODULES, 'solc');
 let solc;
 try {
-  solc = require(join(MCP_NODE_MODULES, 'solc'));
+  solc = require(SOLC_PATH);
 } catch (err) {
-  console.error('[check-patterns] FAIL: could not load solc from mcp-server/node_modules.');
+  console.error(`[check-patterns] FAIL: could not load solc from ${SOLC_PATH}`);
   console.error('[check-patterns] Run: (cd mcp-server && npm ci)');
+  console.error('[check-patterns] Or point PATTERNS_SOLC at a solc-js install.');
   console.error('[check-patterns] Error:', err.message);
   process.exit(2);
 }
