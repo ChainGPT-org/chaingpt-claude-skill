@@ -407,7 +407,10 @@ describe('Admin dashboard HTTP endpoints', () => {
     // 3. GET /dashboard with cookie → 200
     const dash = await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } });
     expect(dash.status).toBe(200);
-    expect((await dash.text())).toContain('Policy editor');
+    const dashHtml = await dash.text();
+    expect(dashHtml).toContain('Form editor');
+    expect(dashHtml).toContain('Quick templates');
+    expect(dashHtml).toContain('tab-assets');
 
     // 4. POST /api/policy with valid policy → 200 + persisted
     const editRes = await fetch(`${base}/api/policy`, {
@@ -475,6 +478,49 @@ describe('Admin dashboard HTTP endpoints', () => {
       body: 'policy=' + encodeURIComponent(JSON.stringify({ version: 1, killSwitch: true })),
     });
     expect(csrf.status).toBe(403);
+
+    // 8b. POST /api/policy/template applies a preset
+    const tmplRes = await fetch(`${base}/api/policy/template`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: base,
+      },
+      body: 'template=dca-base',
+    });
+    expect(tmplRes.status).toBe(200);
+    expect(await tmplRes.text()).toContain('DCA bot');
+    const { loadPolicy: loadPolicy2 } = await import('../lib/agent-policy.js');
+    const dcaPolicy = loadPolicy2();
+    expect(dcaPolicy.allowedChains).toEqual([8453]);
+    expect(dcaPolicy.requireMemo).toBe(true);
+
+    // 8c. POST /api/policy/template with unknown id → error flash
+    const badTmpl = await fetch(`${base}/api/policy/template`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: `cg_admin_sid=${sid}`,
+        origin: base,
+      },
+      body: 'template=does-not-exist',
+    });
+    expect(badTmpl.status).toBe(400);
+    expect(await badTmpl.text()).toContain('Unknown template');
+
+    // 8d. GET /api/templates returns the list
+    const templatesRes = await fetch(`${base}/api/templates`, { headers: { cookie: `cg_admin_sid=${sid}` } });
+    expect(templatesRes.status).toBe(200);
+    const templates = await templatesRes.json();
+    expect(Array.isArray(templates)).toBe(true);
+    expect(templates.length).toBeGreaterThanOrEqual(6);
+    expect(templates.find((t: any) => t.id === 'dca-base')).toBeDefined();
+
+    // 8e. GET /api/activity returns empty array initially
+    const actRes = await fetch(`${base}/api/activity`, { headers: { cookie: `cg_admin_sid=${sid}` } });
+    expect(actRes.status).toBe(200);
+    expect(await actRes.json()).toEqual([]);
 
     // 9. Logout invalidates the session — after, GET /dashboard returns the login page (200)
     //    and POST /api/policy returns 401 (no session)

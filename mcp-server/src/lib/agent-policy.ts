@@ -52,13 +52,67 @@ export interface AgentPolicy {
   updatedAt?: string;
 }
 
+/**
+ * Default policy is intentionally rich/diverse so the admin sees every
+ * available knob with a sensible example value. STILL FAIL-CLOSED:
+ * killSwitch=true, allowedToAddresses=[] → every signing op is refused
+ * until the admin explicitly relaxes the rules (via dashboard or text editor).
+ *
+ * Use this as a copy-paste reference for what fields exist and what shape
+ * each takes. The localhost dashboard also exposes named templates
+ * (`agent-policy-templates.ts`) for one-click application.
+ */
 const DEFAULT_POLICY: AgentPolicy = {
   version: 1,
   killSwitch: true,
+  allowedChains: [
+    // Chain IDs the agent may transact on. Empty array = none allowed.
+    // 1     = Ethereum mainnet
+    // 8453  = Base
+    // 42161 = Arbitrum One
+    // 10    = OP Mainnet
+    // 137   = Polygon PoS
+    // 56    = BNB Smart Chain
+    // 43114 = Avalanche C-Chain
+    // 81457 = Blast    59144 = Linea    534352 = Scroll
+  ],
+  allowedToAddresses: [
+    // 0x-prefixed 20-byte hex. Lowercase recommended. Empty = nothing
+    // allowed (combined with killSwitch=true → fail-closed default).
+    // Example router addresses you might allow (uncomment to use):
+    //   "0x6352a56caadc4f1e25cd6c75970fa768a3304e64",  // OpenOcean v4 (multi-chain)
+    //   "0x111111125421ca6dc452d289314280a0f8842a65",  // 1inch v6 (multi-chain)
+    //   "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",  // Aave V3 Pool (Ethereum)
+  ],
+  blockedToAddresses: [
+    // Wins over allowedToAddresses. Curate from chainabuse.com / Forta alerts.
+    '0x0000000000000000000000000000000000000000',
+    '0x000000000000000000000000000000000000dead',
+  ],
+  // Max native-coin value per tx, in wei (string to preserve precision).
+  // Examples:  "0"  → no native value allowed
+  //            "10000000000000000"     = 0.01 ETH
+  //            "100000000000000000"    = 0.10 ETH
+  //            "1000000000000000000"   = 1.00 ETH
+  maxTxValueWei: '0',
+  // Max gas units per tx (helps cap fee spend on a single op).
+  maxTxGas: '1000000',
+  // Function selectors to refuse. 4-byte hex with 0x prefix.
+  //   "0xa9059cbb" = ERC-20 transfer
+  //   "0x095ea7b3" = ERC-20 approve
+  //   "0x23b872dd" = ERC-20 transferFrom
+  // Leave empty to allow any selector.
+  blockedSelectors: [],
+  // Require the agent to include a `memo` arg on every sign_and_send.
+  // Forces a per-tx audit trail (e.g. "dca-iter-43", "rebalance-2026-05-18").
+  requireMemo: true,
   notes:
-    'Default policy: killSwitch=true. The agent will refuse every signing operation. ' +
-    'Edit this file manually to relax the rules. Example: ' +
-    '{"killSwitch":false,"allowedChains":[8453],"allowedToAddresses":["0x..."],"maxTxValueWei":"100000000000000000"}',
+    'Default policy is fail-closed (killSwitch=true, no allowed addresses). ' +
+    'Open the localhost admin dashboard to apply a template ' +
+    '(Locked down / Read-only / DCA bot / Yield farmer / Cross-chain / Power user / ERC-20 only / Show all knobs) ' +
+    'or edit this file directly with your text editor. The dashboard does atomic write + .bak backup; ' +
+    'manual edits do not. See skills/agent-wallet/SKILL.md for the threat model.',
+  updatedAt: new Date(0).toISOString(),
 };
 
 export function loadPolicy(): AgentPolicy {
