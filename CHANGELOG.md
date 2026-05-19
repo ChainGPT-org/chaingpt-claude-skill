@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.0] - 2026-05-18
+### Added — Tier 3d: MAINNET DeFi protocols
+Custody-free DeFi for the three highest-volume primitives. Same mainnet-first design — plugin builds unsigned tx, user signs externally, `acknowledgeMainnet: true` required for state-changing tools.
+
+- **7 new DeFi tools**:
+  - `chaingpt_defi_aave_health` — read account health factor + collateral/debt/LTV on Aave V3 (7 chains). 0 ack required.
+  - `chaingpt_defi_aave_supply_tx` / `_borrow_tx` / `_repay_tx` / `_withdraw_tx` — Aave V3 position management. Mainnet ack required.
+  - `chaingpt_defi_lido_stake_tx` — stake native ETH for stETH on Ethereum mainnet. Mainnet ack required.
+  - `chaingpt_defi_eigenlayer_deposit_tx` — restake LSTs (stETH / rETH / cbETH / …) into EigenLayer strategies on Ethereum mainnet. Mainnet ack required.
+- Aave V3 supported on: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
+- New `skills/defi/SKILL.md` codifies the pipelines (supply / borrow / stake / restake) and the mandatory pre-flight: **always check health factor before borrowing or withdrawing**.
+
+### Changed
+- Plugin to v1.5.0; MCP server to v1.5.0.
+
 ## [1.4.0] - 2026-05-18
 ### Added — Tier 3a: MAINNET DEX trading
 First execution tier. Custody-free pattern preserved (plugin builds unsigned tx, user signs externally). Mainnet swaps default; the build-tx tool refuses without explicit `acknowledgeMainnet: true` acknowledgement.

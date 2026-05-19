@@ -32,6 +32,7 @@ REQUIRED_FILES=(
   "skills/security/SKILL.md"
   "skills/deploy/SKILL.md"
   "skills/trade/SKILL.md"
+  "skills/defi/SKILL.md"
   "reference/llm-chatbot.md"
   "reference/nft-generator.md"
   "reference/smart-contract-generator.md"
