@@ -195,6 +195,29 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
     },
   },
   {
+    id: 'unrestricted',
+    emoji: '🚨',
+    name: 'Unrestricted (full access)',
+    description: 'YOLO mode — every signing operation is allowed with no policy checks. Kill switch still works as the panic button. Use only on trusted setups / dev / testnet. The dashboard shows loud red banners while this is active.',
+    policy: {
+      version: 1,
+      killSwitch: false,
+      unrestricted: true,
+      allowedChains: [],
+      allowedToAddresses: [],
+      blockedToAddresses: [],
+      maxTxValueWei: '0',
+      maxTxGas: '0',
+      blockedSelectors: [],
+      requireMemo: false,
+      notes:
+        '⚠ UNRESTRICTED MODE ACTIVE. The agent can send funds to any address on any allowed chain with no per-tx checks. ' +
+        'The kill switch (top banner) still works as a one-click panic button. ' +
+        'Only apply this template if you fully trust the agent and the prompts it operates on.',
+      updatedAt: isoNow(),
+    },
+  },
+  {
     id: 'show-all-knobs',
     emoji: '📋',
     name: 'Show all knobs (reference)',

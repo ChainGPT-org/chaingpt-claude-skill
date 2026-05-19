@@ -3,8 +3,8 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { createWalletClient, createPublicClient, http as viemHttp, parseTransaction, type Hex } from 'viem';
-import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { createWalletClient, createPublicClient, http as viemHttp, type Hex } from 'viem';
+import { CHAINS } from '../lib/chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 import {
   initKeystore,
@@ -27,6 +27,16 @@ import { POLICY_TEMPLATES, findTemplate } from '../lib/agent-policy-templates.js
 import { loadTrackedTokens, addTrackedToken, removeTrackedToken, tokensPath, type TrackedToken } from '../lib/agent-tokens.js';
 import { fetchErc20Balance, fetchErc20Meta, formatTokenAmount } from '../lib/agent-erc20.js';
 import { logActivity, readActivity } from '../lib/agent-activity.js';
+import {
+  loadCustomChains,
+  addCustomChain,
+  removeCustomChain,
+  customChainsPath,
+  resolveChainWithCustom,
+  rpcEndpointsWithCustom,
+  mergedChains,
+} from '../lib/agent-custom-chains.js';
+import { BLUE_CHIPS, getBlueChipsForChain } from '../lib/agent-blue-chips.js';
 
 /**
  * Tier-5 agent-wallet tools — the agent has its own EOA, and the admin sets
@@ -168,7 +178,7 @@ function fmtEth(wei: bigint): string {
 }
 
 async function getNativeBalance(chainSlug: string, address: string): Promise<bigint> {
-  const endpoints = rpcEndpoints(chainSlug);
+  const endpoints = rpcEndpointsWithCustom(chainSlug);
   if (endpoints.length === 0) throw new Error(`No RPC endpoints for ${chainSlug}`);
   const hex = await jsonRpcFallback<string>(endpoints, 'eth_getBalance', [address, 'latest']);
   return BigInt(hex);
@@ -405,6 +415,9 @@ img.qr { background: white; padding: 8px; border-radius: 8px; }
 .killswitch-off { color: #3fb950; font-weight: bold; }
 .kill-banner { background: linear-gradient(90deg, #5d1a1f 0%, #3a1115 100%); border: 1px solid #f85149; color: #ffa6a0; padding: 12px 16px; border-radius: 8px; margin: 12px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .kill-banner.off { background: linear-gradient(90deg, #133929 0%, #0a2417 100%); border-color: #3fb950; color: #aff5bd; }
+.kill-banner.unrestricted { background: linear-gradient(90deg, #5d3a00 0%, #361f00 100%); border-color: #fb8500; color: #ffd591; animation: throb 2s infinite; }
+@keyframes throb { 0%, 100% { box-shadow: 0 0 0 0 rgba(251, 133, 0, 0.4); } 50% { box-shadow: 0 0 0 6px rgba(251, 133, 0, 0); } }
+.logo-dot.unrestricted { background: #fb8500; box-shadow: 0 0 8px #fb8500; animation: pulse 1s infinite; }
 
 /* Activity */
 .activity-row { display: flex; gap: 12px; padding: 10px; border-bottom: 1px solid #21262d; align-items: center; }
@@ -538,18 +551,32 @@ if (formPolicyForm) {
     const allowedToAddresses = [...formPolicyForm.querySelectorAll('input[name="allowed"]')].map(i => i.value.trim()).filter(Boolean);
     const blockedToAddresses = [...formPolicyForm.querySelectorAll('input[name="blocked"]')].map(i => i.value.trim()).filter(Boolean);
     const blockedSelectors = [...formPolicyForm.querySelectorAll('input[name="selector"]')].map(i => i.value.trim()).filter(Boolean);
-    const valueAmt = fd.get('valueAmount') || '0';
+    const valueAmt = String(fd.get('valueAmount') || '0').trim();
     const valueUnit = fd.get('valueUnit') || 'wei';
+    // BigInt-safe decimal → wei conversion (no Number, no precision loss)
+    function decToWei(amount, unit) {
+      const decimals = unit === 'ether' ? 18 : unit === 'gwei' ? 9 : 0;
+      const cleaned = amount.replace(/[, ]/g, '');
+      if (decimals === 0) {
+        if (!/^-?\\d+$/.test(cleaned)) throw new Error('wei value must be an integer string');
+        return BigInt(cleaned);
+      }
+      if (!/^-?\\d+(\\.\\d+)?$/.test(cleaned)) throw new Error('value must be a decimal number');
+      const negative = cleaned.startsWith('-');
+      const abs = negative ? cleaned.slice(1) : cleaned;
+      const [intPart, fracPart = ''] = abs.split('.');
+      const padded = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
+      const wei = BigInt(intPart || '0') * (10n ** BigInt(decimals)) + BigInt(padded || '0');
+      return negative ? -wei : wei;
+    }
     let maxTxValueWei = '0';
     try {
-      const n = BigInt(Math.floor(Number(valueAmt) * 1e9));
-      if (valueUnit === 'wei') maxTxValueWei = String(BigInt(valueAmt));
-      else if (valueUnit === 'gwei') maxTxValueWei = String(BigInt(Math.floor(Number(valueAmt) * 1e9)));
-      else if (valueUnit === 'ether') maxTxValueWei = String(BigInt(Math.floor(Number(valueAmt) * 1e9)) * (10n ** 9n));
-    } catch { toast('Invalid value amount', 'err'); return; }
+      maxTxValueWei = decToWei(valueAmt, valueUnit).toString();
+    } catch (e) { toast('Invalid value amount: ' + e.message, 'err'); return; }
     const policy = {
       version: 1,
       killSwitch: fd.get('killSwitch') === 'on',
+      unrestricted: fd.get('unrestricted') === 'on',
       allowedChains,
       allowedToAddresses,
       blockedToAddresses,
@@ -582,7 +609,7 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   // Native balances
   const nativeRows: string[] = [];
   for (const c of chains) {
-    const chain = resolveChain(c);
+    const chain = resolveChainWithCustom(c);
     if (!chain) continue;
     let amount = '?';
     let isZero = false;
@@ -611,7 +638,7 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   const tracked = loadTrackedTokens();
   const tokenRows: string[] = [];
   for (const t of tracked) {
-    const chain = resolveChain(t.chain);
+    const chain = resolveChainWithCustom(t.chain);
     if (!chain) continue;
     let amount = '?';
     let isZero = false;
@@ -651,7 +678,7 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   const activityRows = activity.length === 0
     ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
     : activity.map((a) => {
-        const chain = resolveChain(a.chain);
+        const chain = resolveChainWithCustom(a.chain);
         const explorerLink = chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#';
         const valueEth = fmtEth(BigInt(a.valueWei));
         return `<div class="activity-row">
@@ -698,9 +725,12 @@ interface TabbedOpts {
 
 function renderTabbedDashboard(o: TabbedOpts): string {
   const killOn = !!o.policy.killSwitch;
+  const unrestricted = !!o.policy.unrestricted && !killOn;
   const killBanner = killOn
     ? `<div class="kill-banner"><span><strong>🛑 Kill switch ENGAGED</strong> — every signing operation is refused.</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="off"/><button class="warn small" type="submit">Disable</button></form></div>`
-    : `<div class="kill-banner off"><span>✓ Kill switch off — signing allowed (subject to other rules)</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage</button></form></div>`;
+    : (unrestricted
+        ? `<div class="kill-banner unrestricted"><span><strong>🚨 UNRESTRICTED MODE</strong> — agent can sign any transaction with no policy checks. Kill switch still works (one-click halt below).</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage kill switch</button></form></div>`
+        : `<div class="kill-banner off"><span>✓ Kill switch off — signing allowed (subject to per-tx rules)</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage</button></form></div>`);
 
   // Templates grid
   const templateCards = POLICY_TEMPLATES.map((t) => `
@@ -714,10 +744,12 @@ function renderTabbedDashboard(o: TabbedOpts): string {
     </form>
   `).join('');
 
-  // Form-based policy editor
-  const chainOptions = Object.values(CHAINS).filter((c) => c.chainId !== null).map((c) => {
+  // Form-based policy editor — merged built-in + custom chains
+  const mergedChainList = Object.values(mergedChains()).filter((c) => c.chainId !== null);
+  const chainOptions = mergedChainList.map((c) => {
     const checked = o.policy.allowedChains?.includes(c.chainId!) ? 'checked' : '';
-    return `<label class="inline"><input type="checkbox" name="allowedChains" value="${c.chainId}" ${checked}/> ${escapeHtml(c.name)} <small style="opacity:0.6">(${c.chainId})</small></label>`;
+    const isCustom = !CHAINS[c.slug];
+    return `<label class="inline"><input type="checkbox" name="allowedChains" value="${c.chainId}" ${checked}/> ${escapeHtml(c.name)} <small style="opacity:0.6">(${c.chainId}${isCustom ? ' · custom' : ''})</small></label>`;
   }).join('');
 
   const allowedRows = (o.policy.allowedToAddresses ?? ['']).map((a) =>
@@ -732,10 +764,29 @@ function renderTabbedDashboard(o: TabbedOpts): string {
 
   const maxValueWei = o.policy.maxTxValueWei ?? '0';
 
-  // Token-add chain options
-  const tokenChainOptions = Object.values(CHAINS).filter((c) => c.chainId !== null).map((c) =>
-    `<option value="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</option>`
+  // Token-add chain options — merged built-in + custom
+  const tokenChainOptions = mergedChainList.map((c) =>
+    `<option value="${escapeHtml(c.slug)}">${escapeHtml(c.name)}${!CHAINS[c.slug] ? ' (custom)' : ''}</option>`
   ).join('');
+
+  // Custom-chains listing for the Settings tab
+  const customChainsList = loadCustomChains();
+  const customChainsRows = customChainsList.length === 0
+    ? `<p class="help">No custom chains yet. Use the form above to add one (chain ID, RPC URL, native symbol).</p>`
+    : customChainsList.map((c) => `
+      <div class="balance-row">
+        <div class="left">
+          <span class="chain-pill">${escapeHtml(c.slug.toUpperCase())}</span>
+          <div>
+            <div class="token-name">${escapeHtml(c.name)} <small class="token-label">(chainId ${c.chainId}, ${escapeHtml(c.native)})</small></div>
+            <div class="token-label mono" style="font-size:10px">${escapeHtml(c.rpcUrl)}</div>
+          </div>
+        </div>
+        <form method="POST" action="/api/chains/remove" style="margin:0">
+          <input type="hidden" name="slug" value="${escapeHtml(c.slug)}"/>
+          <button class="ghost small" type="submit" title="Remove">×</button>
+        </form>
+      </div>`).join('');
 
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"/><title>ChainGPT Agent Wallet</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -744,10 +795,10 @@ function renderTabbedDashboard(o: TabbedOpts): string {
 
 <header>
   <div class="brand">
-    <span class="logo-dot ${killOn ? 'killed' : ''}"></span>
+    <span class="logo-dot ${killOn ? 'killed' : unrestricted ? 'unrestricted' : ''}"></span>
     <div class="brand-text">
       <h1>ChainGPT Agent Wallet</h1>
-      <small>${killOn ? 'Kill switch ENGAGED' : 'Operational'} · digest <span class="digest">${escapeHtml(o.digest)}</span></small>
+      <small>${killOn ? 'Kill switch ENGAGED' : unrestricted ? 'UNRESTRICTED MODE' : 'Operational'} · digest <span class="digest">${escapeHtml(o.digest)}</span></small>
     </div>
   </div>
   <div class="actions">
@@ -791,7 +842,14 @@ ${o.flashBlock}
         <label>Label (optional)</label>
         <input type="text" name="label" placeholder="USDC on Base"/>
         <p class="help">Symbol + decimals are fetched automatically via <code>eth_call</code> on add.</p>
-        <div class="bar"><button type="submit">Add token</button></div>
+        <div class="bar">
+          <button type="submit">Add token</button>
+        </div>
+      </form>
+      <hr/>
+      <form method="POST" action="/api/scan-bluechips">
+        <p class="help" style="margin-top:0">Scan the curated blue-chip registry across all chains for tokens the agent already holds and auto-add them. Spam-token defense: only addresses on the static allowlist are eligible.</p>
+        <div class="bar"><button type="submit" class="secondary">🔍 Scan & auto-add blue chips</button></div>
       </form>
     </div>
   </div>
@@ -827,6 +885,14 @@ ${o.flashBlock}
             <input type="checkbox" name="killSwitch" ${killOn ? 'checked' : ''}/>
             <strong>Kill switch</strong> — when ON, every signing operation is refused
           </label>
+        </div>
+
+        <div class="full">
+          <label class="inline" style="color:#ffd591">
+            <input type="checkbox" name="unrestricted" ${o.policy.unrestricted ? 'checked' : ''}/>
+            <strong>🚨 Unrestricted mode</strong> — bypass ALL per-tx checks. Kill switch still works as the master override.
+          </label>
+          <p class="help" style="color:#ffd591">Use only on trusted setups (dev / testnet / fully-audited prompts). When this is on, the agent can send funds to any address with no allowlist or value cap.</p>
         </div>
 
         <div class="full">
@@ -910,11 +976,52 @@ ${o.flashBlock}
 <!-- SETTINGS TAB -->
 <section id="tab-settings" class="tab-pane">
   <div class="card">
+    <div class="card-head"><h2>Custom chains</h2><small>Add EVM chains not in the built-in registry. Persisted to <code>${escapeHtml(customChainsPath())}</code>.</small></div>
+    <form method="POST" action="/api/chains/add">
+      <div class="form-grid">
+        <div>
+          <label>Slug (kebab-case)</label>
+          <input type="text" name="slug" placeholder="zora" pattern="[a-z][a-z0-9-]{1,30}" required/>
+        </div>
+        <div>
+          <label>Chain ID</label>
+          <input type="number" name="chainId" placeholder="7777777" min="1" required/>
+        </div>
+        <div>
+          <label>Display name</label>
+          <input type="text" name="name" placeholder="Zora Network" required/>
+        </div>
+        <div>
+          <label>Native symbol</label>
+          <input type="text" name="native" placeholder="ETH" required/>
+        </div>
+        <div class="full">
+          <label>RPC URL (primary, https)</label>
+          <input type="text" name="rpcUrl" placeholder="https://rpc.zora.energy" pattern="https?://.+" required/>
+        </div>
+        <div class="full">
+          <label>RPC fallbacks (comma-separated, optional)</label>
+          <input type="text" name="rpcFallbacks" placeholder="https://alt1.example, https://alt2.example"/>
+        </div>
+        <div class="full">
+          <label>Block explorer URL (optional)</label>
+          <input type="text" name="explorer" placeholder="https://explorer.zora.energy"/>
+        </div>
+      </div>
+      <div class="bar"><button type="submit">Add chain</button></div>
+    </form>
+    <hr/>
+    <h3 style="font-size:13px;color:#7d8590;margin:8px 0">Currently registered (${customChainsList.length})</h3>
+    ${customChainsRows}
+  </div>
+
+  <div class="card">
     <div class="card-head"><h2>File paths</h2></div>
     <div class="form-grid">
       <div><label>Keystore</label><code class="addr">${escapeHtml(keystorePath())}</code></div>
       <div><label>Policy</label><code class="addr">${escapeHtml(policyPath())}</code></div>
       <div><label>Tracked tokens</label><code class="addr">${escapeHtml(tokensPath())}</code></div>
+      <div><label>Custom chains</label><code class="addr">${escapeHtml(customChainsPath())}</code></div>
       <div><label>Activity log</label><code class="addr">${escapeHtml(policyPath().replace(/policy\.json$/, 'activity.jsonl'))}</code></div>
     </div>
     <p class="help">All files are written with 0600 perms in a 0700 directory. Backups are written with the same perms on every save.</p>
@@ -1025,7 +1132,7 @@ export async function handleAgentWalletTool(
         : ['ethereum', 'base', 'arbitrum'];
       const lines: string[] = [`Agent wallet balances — ${file.address}`, ''];
       for (const c of chains) {
-        const chain = resolveChain(c);
+        const chain = resolveChainWithCustom(c);
         if (!chain) { lines.push(`  ${c}: unknown chain`); continue; }
         try {
           const bal = await getNativeBalance(c, file.address);
@@ -1059,7 +1166,7 @@ export async function handleAgentWalletTool(
         return { content: [{ type: 'text', text: `Agent wallet not initialized. Call chaingpt_agent_wallet_init first.` }] };
       }
       const chainSlug = String(args.chain);
-      const chain = resolveChain(chainSlug);
+      const chain = resolveChainWithCustom(chainSlug);
       if (!chain?.chainId) {
         return { content: [{ type: 'text', text: `Unknown or non-EVM chain: ${chainSlug}` }] };
       }
@@ -1106,7 +1213,7 @@ export async function handleAgentWalletTool(
       try { account = loadAccount(); }
       catch (e: any) { return { content: [{ type: 'text', text: `Keystore load failed: ${e?.message ?? e}` }] }; }
 
-      const endpoints = rpcEndpoints(chainSlug);
+      const endpoints = rpcEndpointsWithCustom(chainSlug);
       if (endpoints.length === 0) {
         return { content: [{ type: 'text', text: `No RPC endpoints configured for ${chainSlug}` }] };
       }
@@ -1342,6 +1449,87 @@ export async function handleAgentWalletTool(
             return;
           }
 
+          // ── POST /api/scan-bluechips ────────────────────────────────
+          // Scans the curated blue-chip registry for tokens the agent already
+          // holds and auto-adds them to the tracked list. Spam-token defense:
+          // only addresses in the static allowlist are eligible.
+          if (method === 'POST' && url === '/api/scan-bluechips') {
+            if (!checkOrigin(req, port)) { res.writeHead(403); res.end('Origin check failed'); return; }
+            const existing = loadTrackedTokens();
+            const key = (chain: string, addr: string) => `${chain}:${addr.toLowerCase()}`;
+            const have = new Set(existing.map((t) => key(t.chain, t.address)));
+            let added = 0;
+            const scanned: string[] = [];
+            for (const [chain, tokens] of Object.entries(BLUE_CHIPS)) {
+              if (!resolveChainWithCustom(chain)) continue;
+              for (const tok of tokens) {
+                if (have.has(key(chain, tok.address))) continue;
+                try {
+                  const bal = await fetchErc20Balance(chain, tok.address, file.address);
+                  if (bal > 0n) {
+                    addTrackedToken({ chain, address: tok.address, symbol: tok.symbol, decimals: tok.decimals, label: tok.label });
+                    have.add(key(chain, tok.address));
+                    added++;
+                    scanned.push(`${tok.symbol} on ${chain}`);
+                  }
+                } catch { /* skip RPC errors */ }
+              }
+            }
+            const msg = added === 0
+              ? 'Scan complete — no untracked blue-chip balances found.'
+              : `Scan complete — added ${added} token${added === 1 ? '' : 's'}: ${scanned.join(', ')}.`;
+            renderDashboard(res, file.address, chains, { kind: 'ok', msg });
+            return;
+          }
+
+          // ── POST /api/chains/add ────────────────────────────────────
+          if (method === 'POST' && url === '/api/chains/add') {
+            if (!checkOrigin(req, port)) { res.writeHead(403); res.end('Origin check failed'); return; }
+            const body = await readBody(req);
+            const fields = parseFormBody(body);
+            const result = addCustomChain({
+              slug: (fields.slug ?? '').toLowerCase().trim(),
+              chainId: Number(fields.chainId ?? 0),
+              name: (fields.name ?? '').trim(),
+              native: (fields.native ?? '').trim().toUpperCase(),
+              rpcUrl: (fields.rpcUrl ?? '').trim(),
+              rpcFallbacks: fields.rpcFallbacks
+                ? fields.rpcFallbacks.split(',').map((s) => s.trim()).filter(Boolean)
+                : undefined,
+              explorer: fields.explorer?.trim() || undefined,
+            });
+            if (!result.ok) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Custom chain rejected: ${result.error}` });
+              return;
+            }
+            renderDashboard(res, file.address, chains, { kind: 'ok', msg: `Custom chain "${fields.slug}" added (chainId ${fields.chainId}).` });
+            return;
+          }
+
+          // ── POST /api/chains/remove ─────────────────────────────────
+          if (method === 'POST' && url === '/api/chains/remove') {
+            if (!checkOrigin(req, port)) { res.writeHead(403); res.end('Origin check failed'); return; }
+            const body = await readBody(req);
+            const fields = parseFormBody(body);
+            try {
+              removeCustomChain(fields.slug ?? '');
+              renderDashboard(res, file.address, chains, { kind: 'ok', msg: `Custom chain "${fields.slug}" removed.` });
+            } catch (e: any) {
+              renderDashboard(res, file.address, chains, { kind: 'err', msg: `Remove failed: ${e?.message ?? e}` });
+            }
+            return;
+          }
+
+          // ── GET /api/chains ─────────────────────────────────────────
+          if (url === '/api/chains') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+              builtIn: Object.values(CHAINS).filter((c) => c.chainId !== null).map((c) => ({ slug: c.slug, chainId: c.chainId, name: c.name, native: c.native })),
+              custom: loadCustomChains(),
+            }, null, 2));
+            return;
+          }
+
           // ── POST /api/tokens/add ────────────────────────────────────
           if (method === 'POST' && url === '/api/tokens/add') {
             if (!checkOrigin(req, port)) { res.writeHead(403); res.end('Origin check failed'); return; }
@@ -1350,7 +1538,7 @@ export async function handleAgentWalletTool(
             const chainSlug = fields.chain ?? '';
             const tokenAddr = (fields.address ?? '').toLowerCase();
             const label = fields.label?.trim() || undefined;
-            if (!resolveChain(chainSlug)) {
+            if (!resolveChainWithCustom(chainSlug)) {
               renderDashboard(res, file.address, chains, { kind: 'err', msg: `Unknown chain: ${chainSlug}` });
               return;
             }

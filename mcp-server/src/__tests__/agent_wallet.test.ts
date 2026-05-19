@@ -268,9 +268,9 @@ describe('Policy validation (admin UI input)', () => {
 
   it('savePolicy writes atomically + backs up the previous file', async () => {
     const { savePolicy, loadPolicy } = await import('../lib/agent-policy.js');
-    const { writeFileSync, existsSync, readFileSync } = await import('node:fs');
-    // Seed an initial file
-    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: true, notes: 'original' }));
+    const { writeFileSync, existsSync, readFileSync, statSync } = await import('node:fs');
+    // Seed an initial file with 0600 perms (mimicking a real save)
+    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: true, notes: 'original' }), { mode: 0o600 });
     expect(loadPolicy().notes).toBe('original');
     // Save new
     const newPolicy = { version: 1 as const, killSwitch: false, notes: 'updated', updatedAt: new Date().toISOString() };
@@ -282,6 +282,9 @@ describe('Policy validation (admin UI input)', () => {
     expect(existsSync(path + '.bak')).toBe(true);
     const bak = JSON.parse(readFileSync(path + '.bak', 'utf8'));
     expect(bak.notes).toBe('original');
+    // SECURITY: backup must NOT leak to 0644 (the prior copyFileSync behavior)
+    const mode = statSync(path + '.bak').mode & 0o777;
+    expect(mode).toBe(0o600);
   });
 });
 
@@ -336,6 +339,106 @@ describe('sign_and_send end-to-end gate', () => {
     expect(t).toContain('Policy digest');
     expect(t).toContain('Kill switch:     ON');
     expect(t).toContain('Passphrase env:  set');
+  });
+});
+
+describe('Unrestricted mode + custom chains + blue chips', () => {
+  beforeEach(() => resetState());
+
+  it('unrestricted=true bypasses every check except killSwitch', async () => {
+    const { checkPolicy } = await import('../lib/agent-policy.js');
+    const intent = {
+      chainId: 999999,  // not in any allowedChains
+      to: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+      value: 10n ** 30n,  // absurd amount
+      data: '0xa9059cbb000000000000000000000000aaaa',
+    };
+    // killSwitch off + unrestricted on → allowed
+    const allowed = checkPolicy(intent, {
+      version: 1, killSwitch: false, unrestricted: true,
+      allowedChains: [1], maxTxValueWei: '100',
+    });
+    expect(allowed.allowed).toBe(true);
+    expect(allowed.reason).toMatch(/unrestricted/i);
+
+    // killSwitch on + unrestricted on → kill switch wins (refused)
+    const blocked = checkPolicy(intent, {
+      version: 1, killSwitch: true, unrestricted: true,
+    });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason).toMatch(/kill switch/i);
+  });
+
+  it('validatePolicyInput accepts unrestricted', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, unrestricted: true });
+    expect(r.ok).toBe(true);
+    expect(r.policy!.unrestricted).toBe(true);
+  });
+
+  it('validatePolicyInput rejects non-boolean unrestricted', async () => {
+    const { validatePolicyInput } = await import('../lib/agent-policy.js');
+    const r = validatePolicyInput({ version: 1, killSwitch: false, unrestricted: 'yes' as any });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/unrestricted/);
+  });
+
+  it('"unrestricted" template exists with the expected fields', async () => {
+    const { findTemplate } = await import('../lib/agent-policy-templates.js');
+    const t = findTemplate('unrestricted');
+    expect(t).toBeDefined();
+    expect(t!.policy.unrestricted).toBe(true);
+    expect(t!.policy.killSwitch).toBe(false);
+  });
+
+  it('custom chains: add then resolve', async () => {
+    process.env.CHAINGPT_CUSTOM_CHAINS_FILE = process.env.CHAINGPT_AGENT_POLICY_FILE!.replace(/policy\.json$/, 'custom-chains.json');
+    const { addCustomChain, resolveChainWithCustom } = await import('../lib/agent-custom-chains.js');
+    const r = addCustomChain({
+      slug: 'zora',
+      chainId: 7777777,
+      name: 'Zora Network',
+      native: 'ETH',
+      rpcUrl: 'https://rpc.zora.energy',
+      explorer: 'https://explorer.zora.energy',
+    });
+    expect(r.ok).toBe(true);
+    const resolved = resolveChainWithCustom('zora');
+    expect(resolved?.chainId).toBe(7777777);
+    expect(resolved?.name).toBe('Zora Network');
+    // Cleanup
+    try { (await import('node:fs')).rmSync(process.env.CHAINGPT_CUSTOM_CHAINS_FILE!, { force: true }); } catch {}
+  });
+
+  it('custom chains rejects invalid input', async () => {
+    process.env.CHAINGPT_CUSTOM_CHAINS_FILE = process.env.CHAINGPT_AGENT_POLICY_FILE!.replace(/policy\.json$/, 'custom-chains.json');
+    const { addCustomChain } = await import('../lib/agent-custom-chains.js');
+    // Bad slug
+    expect(addCustomChain({ slug: 'BadSlug!', chainId: 999, name: 'X', native: 'X', rpcUrl: 'https://x' }).ok).toBe(false);
+    // Slug collision with built-in
+    expect(addCustomChain({ slug: 'ethereum', chainId: 999, name: 'X', native: 'X', rpcUrl: 'https://x' }).ok).toBe(false);
+    // chainId collision with built-in
+    expect(addCustomChain({ slug: 'unique', chainId: 1, name: 'X', native: 'X', rpcUrl: 'https://x' }).ok).toBe(false);
+    // Bad RPC URL
+    expect(addCustomChain({ slug: 'unique', chainId: 999, name: 'X', native: 'X', rpcUrl: 'ftp://x' }).ok).toBe(false);
+    try { (await import('node:fs')).rmSync(process.env.CHAINGPT_CUSTOM_CHAINS_FILE!, { force: true }); } catch {}
+  });
+
+  it('blue-chip registry contains expected mainnet entries', async () => {
+    const { BLUE_CHIPS, getBlueChipsForChain } = await import('../lib/agent-blue-chips.js');
+    expect(BLUE_CHIPS.ethereum.find((t) => t.symbol === 'USDC')).toBeDefined();
+    expect(BLUE_CHIPS.base.find((t) => t.symbol === 'WETH')).toBeDefined();
+    expect(BLUE_CHIPS.arbitrum.find((t) => t.symbol === 'ARB')).toBeDefined();
+    // Spam-defense: every address must be 0x + 40 hex (no nonsense entries)
+    for (const tokens of Object.values(BLUE_CHIPS)) {
+      for (const t of tokens) {
+        expect(t.address).toMatch(/^0x[0-9a-f]{40}$/);
+        expect(t.decimals).toBeGreaterThanOrEqual(0);
+        expect(t.decimals).toBeLessThanOrEqual(36);
+      }
+    }
+    expect(getBlueChipsForChain('ethereum').length).toBeGreaterThan(0);
+    expect(getBlueChipsForChain('nonexistent')).toEqual([]);
   });
 });
 

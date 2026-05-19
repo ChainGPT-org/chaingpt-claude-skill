@@ -58,19 +58,30 @@ function decodeString(hex: string): string {
   }
 }
 
+function isEmptyResponse(hex: string): boolean {
+  return !hex || hex === '0x' || hex === '0x0';
+}
+
 export async function fetchErc20Balance(chain: string, token: string, holder: string): Promise<bigint> {
   const args = [holder.toLowerCase().replace(/^0x/, '')];
   const res = await ethCall(chain, token.toLowerCase(), callData(SEL_BALANCE_OF, args));
+  if (isEmptyResponse(res)) return 0n;  // address has no contract code
   return decodeUint256(res);
 }
 
 export async function fetchErc20Decimals(chain: string, token: string): Promise<number> {
   const res = await ethCall(chain, token.toLowerCase(), SEL_DECIMALS);
+  if (isEmptyResponse(res)) {
+    throw new Error(`No contract code at ${token} on ${chain}, or the address does not implement ERC-20 decimals().`);
+  }
   return decodeUint8(res);
 }
 
 export async function fetchErc20Symbol(chain: string, token: string): Promise<string> {
   const res = await ethCall(chain, token.toLowerCase(), SEL_SYMBOL);
+  if (isEmptyResponse(res)) {
+    throw new Error(`No contract code at ${token} on ${chain}, or the address does not implement ERC-20 symbol().`);
+  }
   return decodeString(res);
 }
 

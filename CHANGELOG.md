@@ -1,5 +1,48 @@
 # Changelog
 
+## [Unreleased] - 2026-05-19
+### Added — Agent-wallet dashboard polish + custom chains + blue-chip auto-scan + unrestricted mode
+Major UX pass on the agent-wallet localhost admin dashboard. The dashboard is now a real wallet UI (MetaMask / Rabby / Trust patterns) instead of a single-column form dump.
+
+**Dashboard rewrite (tabbed):**
+- **Assets / Policy / Activity / Settings** tabs (URL-hash-routable: `#policy`, etc.)
+- **Assets** tab: address card with copy button + larger QR, balance list for all 10 built-in EVM chains + every custom chain, custom token tracker (paste any ERC-20 — symbol/decimals auto-fetched via `eth_call`), 🔍 scan-blue-chips button, hide-zero toggle persisted to localStorage, 30s auto-refresh while on Assets tab.
+- **Policy** tab: kill-switch banner, **9 quick template cards** (one-click apply), form-based editor with chain checkboxes / repeatable address rows / wei-gwei-ether unit dropdown / selector rows / memo toggle / notes, raw JSON editor as power-user fallback.
+- **Activity** tab: every `sign_and_send` appended to `activity.jsonl`, surfaced newest-first with explorer links + memo display.
+- **Settings** tab: custom-chain registration form, file paths, security checklist.
+
+**New features:**
+- **Unrestricted "YOLO" mode** (`policy.unrestricted: true`) — opt-in admin toggle that bypasses every per-tx check. Kill switch still wins (panic button stays functional). Dashboard shows pulsing orange banner + logo dot when active. New **🚨 Unrestricted** template card for one-click apply.
+- **Custom EVM chains** — admin can add chains not in the built-in registry (slug, chainId, name, native symbol, RPC URL, optional fallbacks + explorer). Validated server-side: slug format, chainId/slug collision check against built-ins, https URL check. Persisted to `~/.chaingpt-mcp/agent-wallet/custom-chains.json` (0600, atomic write + `.bak`). Merged into chain lookup so the agent can sign on the new chain immediately.
+- **Blue-chip token auto-scan** with spam filter — a curated allowlist of major stablecoins, wrapped natives, LSTs, and DeFi blue chips per chain (USDC/USDT/DAI/WETH/WBTC/stETH/wstETH/etc.). Click "🔍 Scan & auto-add blue chips" → server calls `balanceOf(agent)` for each entry, auto-tracks the ones with non-zero balance. Only addresses in the static allowlist are eligible — random meme drops can't pollute the wallet view.
+- **Custom token tracker** — paste any ERC-20 contract + chain; symbol + decimals auto-fetched. Friendly error "No contract code at X on Y, or address does not implement ERC-20 decimals()" when the address is wrong.
+- **Default policy is now rich/diverse** — first-load default demonstrates every available policy field with example values + inline comments (chain IDs, router addresses, gas presets, selectors). Still fail-closed (killSwitch=true, no allowed addresses).
+- **Policy templates expanded to 9** (was 5): Locked down · Read-only explore · DCA bot (Base+OpenOcean) · Yield farmer (Aave+Lido+DEX) · Cross-chain rebalancer (Across+DEX) · Power user · ERC-20 only · **🚨 Unrestricted** · 📋 Show all knobs.
+
+**New API endpoints (all require valid admin session + Origin check):**
+- `POST /api/scan-bluechips` — auto-track blue chips with non-zero balance
+- `POST /api/chains/add` / `POST /api/chains/remove` / `GET /api/chains`
+- `POST /api/tokens/add` / `POST /api/tokens/remove` / `GET /api/tokens`
+- `POST /api/policy/template` / `GET /api/templates`
+- `GET /api/activity`
+
+**Security fixes / hardening:**
+- **`.bak` permission leak fixed** — `copyFileSync` was creating backups with 0644 (world-readable) while the source files were 0600. All three save paths (policy / tracked-tokens / custom-chains) now `chmod 0600` immediately after backup. Test asserts the perms.
+- **BigInt-safe wei conversion** in form editor — pure BigInt decimal-to-wei math instead of `Math.floor(Number(x) * 1e9)` which lost precision for big values.
+- **Friendlier error for non-ERC-20 token-add** — was leaking "Cannot convert 0x to a BigInt", now returns "No contract code at X on Y".
+
+**New libs:**
+- `lib/agent-policy-templates.ts` — 9-template registry
+- `lib/agent-tokens.ts` — tracked-token persistence
+- `lib/agent-erc20.ts` — minimal `balanceOf` / `decimals` / `symbol` / `name` via `eth_call` (no viem dep)
+- `lib/agent-activity.ts` — JSONL activity log
+- `lib/agent-custom-chains.ts` — custom EVM chain registry
+- `lib/agent-blue-chips.ts` — curated per-chain allowlist of major tokens
+
+**Tests:** 242 → 249 (+7 covering unrestricted mode, custom-chains validation, blue-chip registry sanity, `.bak` perm assertion).
+
+**Threat model preserved:** still no MCP tool can write the policy file, tracked-tokens file, or custom-chains file. The LLM has no HTTP-issuing tool that could reach the localhost dashboard's POST endpoints. The dashboard binds to `127.0.0.1` only.
+
 ## [1.9.0] - 2026-05-18
 ### Added — Tier 5 agent wallet with admin-controlled policy gate (7 new tools)
 The agent has its own EOA. The admin sets policies the agent CANNOT bypass — even under prompt injection.

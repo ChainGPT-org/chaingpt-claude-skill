@@ -17,7 +17,7 @@
  * must explicitly relax it. This is fail-closed by design.
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -30,8 +30,22 @@ export function policyPath(): string {
 
 export interface AgentPolicy {
   version: 1;
-  /** Master kill switch. If true, every signing operation refuses. */
+  /** Master kill switch. If true, every signing operation refuses. Wins over `unrestricted`. */
   killSwitch: boolean;
+  /**
+   * "YOLO mode" — when true, every signing operation is ALLOWED with no policy
+   * checks (no allowlist, no value cap, no selector blocklist, no memo). The
+   * kill switch still wins (panic button stays functional), but otherwise the
+   * agent has full authority over the wallet.
+   *
+   * Admin opt-in only: same write protection as everything else (no MCP tool
+   * can set this; only the localhost dashboard or a direct file edit). The
+   * dashboard surfaces this with loud red banners when active.
+   *
+   * Intended use: trusted setups, dev/testnet, "I know what I'm doing" mode.
+   * Default: false. Apply via the "Unrestricted" template for one-click.
+   */
+  unrestricted?: boolean;
   /** Allowed EVM chain IDs. Empty/missing means all chains allowed (subject to other rules). */
   allowedChains?: number[];
   /** Allowed to-addresses (lowercase hex). Empty/missing means any address allowed. */
@@ -166,6 +180,13 @@ export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()
     return { allowed: false, reason: 'Policy kill switch is active. Edit policy.json (set killSwitch: false) to allow operations.', policyDigest: digest };
   }
 
+  // Unrestricted "yolo" mode: admin has explicitly opted into no policy checks.
+  // Kill switch still wins (already returned above) so the panic button stays
+  // functional. Everything else is bypassed.
+  if (policy.unrestricted) {
+    return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks)', policyDigest: digest };
+  }
+
   if (policy.allowedChains && policy.allowedChains.length > 0 && !policy.allowedChains.includes(intent.chainId)) {
     return { allowed: false, reason: `Chain ${intent.chainId} is not in allowedChains [${policy.allowedChains.join(', ')}].`, policyDigest: digest };
   }
@@ -226,6 +247,7 @@ export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()
 const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'version',
   'killSwitch',
+  'unrestricted',
   'allowedChains',
   'allowedToAddresses',
   'blockedToAddresses',
@@ -260,6 +282,9 @@ export function validatePolicyInput(input: unknown): ValidationResult {
   }
   if (o.version !== 1) return { ok: false, error: 'version must be 1' };
   if (typeof o.killSwitch !== 'boolean') return { ok: false, error: 'killSwitch must be true or false' };
+  if (o.unrestricted !== undefined && typeof o.unrestricted !== 'boolean') {
+    return { ok: false, error: 'unrestricted must be true or false' };
+  }
 
   if (o.allowedChains !== undefined) {
     if (!Array.isArray(o.allowedChains)) return { ok: false, error: 'allowedChains must be an array of integers' };
@@ -307,6 +332,7 @@ export function validatePolicyInput(input: unknown): ValidationResult {
   const policy: AgentPolicy = {
     version: 1,
     killSwitch: o.killSwitch,
+    unrestricted: o.unrestricted as boolean | undefined,
     allowedChains: o.allowedChains as number[] | undefined,
     allowedToAddresses: o.allowedToAddresses as string[] | undefined,
     blockedToAddresses: o.blockedToAddresses as string[] | undefined,
@@ -334,9 +360,13 @@ export function validatePolicyInput(input: unknown): ValidationResult {
 export function savePolicy(policy: AgentPolicy): { digest: string; path: string } {
   const path = policyPath();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  // Backup current
+  // Backup current — preserve 0600 perms (copyFileSync uses umask default,
+  // which would leak 0644 on the .bak. Chmod immediately after.)
   if (existsSync(path)) {
-    try { copyFileSync(path, path + '.bak'); } catch { /* best-effort */ }
+    try {
+      copyFileSync(path, path + '.bak');
+      chmodSync(path + '.bak', 0o600);
+    } catch { /* best-effort */ }
   }
   // Write to temp then rename (atomic on POSIX)
   const tmp = path + '.tmp';

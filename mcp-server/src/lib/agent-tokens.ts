@@ -6,7 +6,7 @@
  * localhost dashboard — NOT exposed via any MCP tool the agent can call.
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { policyPath } from './agent-policy.js';
@@ -58,7 +58,10 @@ export function saveTrackedTokens(tokens: TrackedToken[]): void {
   const path = tokensPath();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (existsSync(path)) {
-    try { copyFileSync(path, path + '.bak'); } catch { /* best-effort */ }
+    try {
+      copyFileSync(path, path + '.bak');
+      chmodSync(path + '.bak', 0o600);
+    } catch { /* best-effort */ }
   }
   const tmp = path + '.tmp';
   writeFileSync(tmp, JSON.stringify(tokens, null, 2), { mode: 0o600 });
