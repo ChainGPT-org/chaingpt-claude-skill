@@ -218,9 +218,7 @@ export async function handleResearchTool(
     if (name === 'chaingpt_research_trending') {
       const chain = resolveChain(args.chain as string | undefined);
       const limit = Math.min(Number(args.limit ?? 10), 30);
-      const url = chain
-        ? `https://api.dexscreener.com/token-boosts/latest/v1`
-        : `https://api.dexscreener.com/token-boosts/latest/v1`;
+      const url = `https://api.dexscreener.com/token-boosts/latest/v1`;
       const res = await httpJson<any[]>(url);
       const boosted = Array.isArray(res) ? res : [];
       let filtered = boosted;

@@ -184,7 +184,9 @@ export async function handleWalletTool(
       const address = String(args.address || '').trim();
       if (!address) return { content: [{ type: 'text', text: 'Error: address is required.' }] };
 
-      const requestedChains = (args.chains as string[] | undefined) ?? ['ethereum', 'base', 'arbitrum', 'polygon', 'bsc'];
+      const requestedChains = Array.isArray(args.chains)
+        ? (args.chains as unknown[]).filter((c): c is string => typeof c === 'string')
+        : ['ethereum', 'base', 'arbitrum', 'polygon', 'bsc'];
       const includeNative = (args.includeNative as boolean | undefined) ?? true;
       const minUsd = (args.minUsdValue as number | undefined) ?? 1;
       const key = moralisKey();

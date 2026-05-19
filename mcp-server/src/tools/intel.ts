@@ -293,7 +293,9 @@ export async function handleIntelTool(
           }],
         };
       }
-      const requestedChains = (args.chains as string[] | undefined) ?? ['ethereum', 'base', 'arbitrum', 'polygon', 'bsc'];
+      const requestedChains = Array.isArray(args.chains)
+        ? (args.chains as unknown[]).filter((c): c is string => typeof c === 'string')
+        : ['ethereum', 'base', 'arbitrum', 'polygon', 'bsc'];
       const minUsd = Number(args.minUsdValue ?? 100);
       const maxTokens = Number(args.maxTokens ?? 10);
 
@@ -302,19 +304,22 @@ export async function handleIntelTool(
         polygon: 'polygon', bsc: 'bsc', avalanche: 'avalanche', blast: 'blast', linea: 'linea',
       };
 
-      const allHoldings: Array<{ chainSlug: string; token: any }> = [];
-      for (const slug of requestedChains) {
-        if (!moralisMap[slug]) continue;
-        try {
-          const res = await httpJson<{ result: any[] }>(
+      // Fan out chain fetches in parallel. Per-chain failures are caught and ignored so a
+      // single rejected request can't abort the whole portfolio scan.
+      const validChains = requestedChains.filter((slug) => moralisMap[slug]);
+      const chainResults = await Promise.allSettled(
+        validChains.map(async (slug) =>
+          httpJson<{ result: any[] }>(
             `https://deep-index.moralis.io/api/v2.2/wallets/${address}/tokens?chain=${moralisMap[slug]}`,
             { headers: { 'X-API-Key': moralisKey } }
-          );
-          for (const t of res.result ?? []) {
-            if ((t.usd_value ?? 0) >= minUsd) allHoldings.push({ chainSlug: slug, token: t });
-          }
-        } catch {
-          /* skip chain */
+          ).then((res) => ({ slug, tokens: res.result ?? [] }))
+        )
+      );
+      const allHoldings: Array<{ chainSlug: string; token: any }> = [];
+      for (const r of chainResults) {
+        if (r.status !== 'fulfilled') continue;
+        for (const t of r.value.tokens) {
+          if ((t.usd_value ?? 0) >= minUsd) allHoldings.push({ chainSlug: r.value.slug, token: t });
         }
       }
       allHoldings.sort((a, b) => (b.token.usd_value ?? 0) - (a.token.usd_value ?? 0));
@@ -336,9 +341,10 @@ export async function handleIntelTool(
 
       for (const { chainSlug, token } of top) {
         const c = resolveChain(chainSlug);
+        const safeSymbol = String(token.symbol ?? token.name ?? token.token_address ?? '?');
         if (!c?.goplus || token.native_token) {
           lines.push(
-            `  ${token.symbol.padEnd(10)} $${(token.usd_value ?? 0).toFixed(2).padStart(10)}  [${chainSlug}]  (native or risk-skip)`
+            `  ${safeSymbol.padEnd(10)} $${(token.usd_value ?? 0).toFixed(2).padStart(10)}  [${chainSlug}]  (native or risk-skip)`
           );
           continue;
         }
@@ -362,7 +368,7 @@ export async function handleIntelTool(
           verdict = '(check failed)';
         }
         lines.push(
-          `  ${token.symbol.padEnd(10)} $${(token.usd_value ?? 0).toFixed(2).padStart(10)}  [${chainSlug}]  ${verdict}`
+          `  ${safeSymbol.padEnd(10)} $${(token.usd_value ?? 0).toFixed(2).padStart(10)}  [${chainSlug}]  ${verdict}`
         );
       }
       lines.push('');
