@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.7.0] - 2026-05-19
+### Added — Signed-order placement for Hyperliquid + Polymarket
+Closes out the deferred work from 1.6. Both markets can now build signed-order payloads end-to-end. Same custody-free pattern as the rest of the plugin — the plugin builds the EIP-712 typed data; the user's wallet signs externally; a separate `_submit_*` tool broadcasts the signed action.
+
+- **5 new tools (3 Hyperliquid + 2 Polymarket)**:
+  - `chaingpt_hl_place_order_payload` — build action + EIP-712 typed data for an HL limit order. Refuses without `acknowledgeMainnet`.
+  - `chaingpt_hl_cancel_order_payload` — same for cancels (no ack required — cancels can only remove orders).
+  - `chaingpt_hl_submit_signed_action` — POST signed action to HL `/exchange`. Normalizes 0x-hex sigs into `{r,s,v}`.
+  - `chaingpt_pm_place_order_payload` — build Polymarket CTF Exchange order on Polygon mainnet (chainId 137). Supports Neg-Risk exchange too. Refuses without ack.
+  - `chaingpt_pm_submit_signed_order` — POST signed order to Polymarket CLOB. HMAC-authenticated; requires `POLY_CLOB_API_KEY` / `POLY_CLOB_SECRET` / `POLY_CLOB_PASSPHRASE` env (returns friendly setup hint when unset).
+- New helper modules:
+  - `lib/hyperliquid-sign.ts` — msgpack-encoded action hash + phantom-Agent typed-data envelope (matches the py-clob-client reference implementation).
+  - `lib/polymarket-sign.ts` — order builder with USDC.e ↔ outcome-token amount math, EIP-712 typed-data envelope (CTF + Neg-Risk variants), HMAC headers for CLOB auth.
+- Adds `@msgpack/msgpack@^3.1` as runtime dep.
+
+### Fixed — Production readiness pass (from 1.6 smoke tests)
+A live-API smoke harness (`src/smoke-test.ts`) was run against every new tool; surfaced and fixed 4 production bugs that mocked unit tests had missed:
+
+- **Jupiter v6 domain** (`quote-api.jup.ag`) no longer resolves — migrated to `lite-api.jup.ag/swap/v1`.
+- **OpenOcean v4 now requires `gasPrice`** on every call — added an `eth_gasPrice` prefetch via the chain's public-RPC fallback chain when the user doesn't supply one.
+- **Etherscan rejects `YourApiKeyToken` placeholder** — new `lib/etherscan.ts` helper detects the rejection and returns a friendly setup hint (with the get-a-key URL + rate limits) instead of the raw error.
+- **Aave health timed out** on viem's default public RPC — switched to a viem `fallback` transport using our chain registry's primary + fallback RPC list.
+
+### Added — Reliability infrastructure
+- `publicRpcFallbacks: string[]` on every EVM chain in the registry.
+- `rpcEndpoints(slug)` helper returns the ordered list.
+- `jsonRpcFallback()` tries each endpoint in turn; used by wallet (native balance), onchain (gas oracle, block info), and dex (gas-price prefetch).
+- Primary RPC URLs switched from llamarpc to publicnode.com (more stable).
+
+### Added — Documentation
+- `reference/web3-toolkit.md` — Tier 1: wallet / research / risk / on-chain / intel (16 tools)
+- `reference/onchain-execution.md` — Tier 2 + 3a + 3d: deploy / DEX / DeFi (17 tools)
+- `reference/markets-data.md` — Tier 3b + 3c: Hyperliquid + Polymarket (10 tools + signed-order pattern)
+- `examples/js/research-token-and-audit.js` — full research → risk → audit funnel
+- `examples/js/dex-swap-preflight.js` — honeypot check + quote + unsigned-tx build
+- `examples/python/aave_health_monitor.py` — multi-wallet × multi-chain Aave V3 HF monitor
+
+### Changed
+- Plugin to v1.7.0; MCP server to v1.7.0.
+
 ## [1.6.0] - 2026-05-18
 ### Added — Tier 3b + 3c: Hyperliquid + Polymarket read-only data
 Live mainnet data for the two highest-volume non-EVM-aggregator markets in crypto. Read-only in this release — signed order placement (Hyperliquid EIP-712 L1 actions; Polymarket CLOB signed orders) is deferred to a follow-up so each signing scheme can get its own dedicated review.

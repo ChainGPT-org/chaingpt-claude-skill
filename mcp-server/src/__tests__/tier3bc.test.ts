@@ -11,20 +11,26 @@ import { hyperliquidTools, handleHyperliquidTool } from '../tools/hyperliquid.js
 import { polymarketTools, handlePolymarketTool } from '../tools/polymarket.js';
 
 describe('Tier-3b Hyperliquid tool definitions', () => {
-  it('exposes 6 hyperliquid tools', () => {
+  it('exposes the 6 read-only HL tools (signed-order tools live in tier3-signed-orders.test.ts)', () => {
     const names = hyperliquidTools.map((t) => t.name);
-    expect(names).toEqual([
+    for (const expected of [
       'chaingpt_hl_markets',
       'chaingpt_hl_mids',
       'chaingpt_hl_orderbook',
       'chaingpt_hl_account',
       'chaingpt_hl_fills',
       'chaingpt_hl_funding',
-    ]);
+    ]) {
+      expect(names).toContain(expected);
+    }
   });
 
-  it('no hyperliquid tool requires mainnet ack (all read-only)', () => {
-    for (const t of hyperliquidTools) {
+  it('read-only HL tools never require mainnet ack', () => {
+    const readOnly = hyperliquidTools.filter((t) =>
+      ['chaingpt_hl_markets', 'chaingpt_hl_mids', 'chaingpt_hl_orderbook',
+       'chaingpt_hl_account', 'chaingpt_hl_fills', 'chaingpt_hl_funding'].includes(t.name)
+    );
+    for (const t of readOnly) {
       const props = (t.inputSchema as any).properties ?? {};
       expect(props.acknowledgeMainnet).toBeUndefined();
     }
@@ -32,18 +38,24 @@ describe('Tier-3b Hyperliquid tool definitions', () => {
 });
 
 describe('Tier-3c Polymarket tool definitions', () => {
-  it('exposes 4 polymarket tools', () => {
+  it('exposes the 4 read-only PM tools (signed-order tools live in tier3-signed-orders.test.ts)', () => {
     const names = polymarketTools.map((t) => t.name);
-    expect(names).toEqual([
+    for (const expected of [
       'chaingpt_pm_markets',
       'chaingpt_pm_market',
       'chaingpt_pm_orderbook',
       'chaingpt_pm_trades',
-    ]);
+    ]) {
+      expect(names).toContain(expected);
+    }
   });
 
-  it('no polymarket tool requires mainnet ack', () => {
-    for (const t of polymarketTools) {
+  it('read-only PM tools never require mainnet ack', () => {
+    const readOnly = polymarketTools.filter((t) =>
+      ['chaingpt_pm_markets', 'chaingpt_pm_market',
+       'chaingpt_pm_orderbook', 'chaingpt_pm_trades'].includes(t.name)
+    );
+    for (const t of readOnly) {
       const props = (t.inputSchema as any).properties ?? {};
       expect(props.acknowledgeMainnet).toBeUndefined();
     }

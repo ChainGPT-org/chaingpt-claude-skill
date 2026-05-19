@@ -1,5 +1,12 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { httpJson } from '../lib/http.js';
+import {
+  buildOrder,
+  clobHeaders,
+  orderTypedData,
+  readCLOBCreds,
+  type PolymarketOrder,
+} from '../lib/polymarket-sign.js';
 
 /**
  * Tier-3c Polymarket mainnet integration. READ-ONLY in v1.6.
@@ -90,6 +97,63 @@ export const polymarketTools: Tool[] = [
         limit: { type: 'number', description: 'Max trades (default 20).', default: 20 },
       },
       required: ['tokenId'],
+    },
+  },
+
+  // ─── Signed-order payload builders ─────────────────────────────────
+  {
+    name: 'chaingpt_pm_place_order_payload',
+    description:
+      'Build a Polymarket CLOB order + EIP-712 typed-data payload for the user\'s wallet to sign. The plugin ' +
+      'NEVER signs — it returns the typed data and the order JSON. After signing, call ' +
+      'chaingpt_pm_submit_signed_order to broadcast (requires POLY_CLOB_API_KEY env). Requires ' +
+      'acknowledgeMainnet=true. Polymarket settles on Polygon mainnet (chainId 137). 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        maker: { type: 'string', description: 'Wallet placing the order (0x… on Polygon).' },
+        tokenId: { type: 'string', description: 'CLOB token id from chaingpt_pm_market.' },
+        side: { type: 'string', enum: ['BUY', 'SELL'], description: 'BUY = buying outcome tokens, SELL = selling them.' },
+        price: { type: 'string', description: 'Decimal probability 0..1, e.g. "0.42" for 42%.' },
+        size: { type: 'string', description: 'Number of outcome tokens (shares), e.g. "100".' },
+        expirationSec: {
+          type: 'number',
+          description: 'Unix seconds when the order expires. 0 = never. Default 0.',
+          default: 0,
+        },
+        feeRateBps: { type: 'number', default: 0 },
+        negRisk: {
+          type: 'boolean',
+          description:
+            'true if this market is on the Neg-Risk exchange (multi-outcome / scalar). Default false. ' +
+            'Determines which verifyingContract is used in the EIP-712 domain.',
+          default: false,
+        },
+        acknowledgeMainnet: { type: 'boolean', description: 'You must pass true. Polymarket orders are real-money trades.' },
+      },
+      required: ['maker', 'tokenId', 'side', 'price', 'size'],
+    },
+  },
+  {
+    name: 'chaingpt_pm_submit_signed_order',
+    description:
+      'POST a signed Polymarket order to the CLOB. Requires POLY_CLOB_API_KEY, POLY_CLOB_SECRET, and ' +
+      'POLY_CLOB_PASSPHRASE env vars (derive via py-clob-client or the official TypeScript SDK first). ' +
+      'Returns the CLOB response (order hash + status). 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        order: { description: 'The order object exactly as returned by chaingpt_pm_place_order_payload.' },
+        signature: { type: 'string', description: '0x-prefixed signature from the user\'s wallet (eth_signTypedData_v4 over the typed data).' },
+        owner: { type: 'string', description: 'Owner address (usually = maker).' },
+        orderType: {
+          type: 'string',
+          enum: ['GTC', 'FOK', 'GTD'],
+          description: 'Time-in-force: GTC=good-till-cancel, FOK=fill-or-kill, GTD=good-till-date. Default GTC.',
+          default: 'GTC',
+        },
+      },
+      required: ['order', 'signature'],
     },
   },
 ];
@@ -234,6 +298,96 @@ export async function handlePolymarketTool(
         );
       }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    if (name === 'chaingpt_pm_place_order_payload') {
+      if (!args.acknowledgeMainnet) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `⚠ Polymarket mainnet order refused. Pass acknowledgeMainnet: true to receive the signing ` +
+              `payload. Polymarket orders settle on Polygon mainnet — USDC.e is real money.\n` +
+              `Before flipping the flag:\n` +
+              `  1. Run chaingpt_pm_market and chaingpt_pm_orderbook to confirm the market + price.\n` +
+              `  2. Confirm the tokenId matches the YES (or NO) leg you intend.\n` +
+              `  3. Confirm the maker address is the wallet you control.\n` +
+              `Then re-call with acknowledgeMainnet: true.`,
+          }],
+        };
+      }
+      const maker = String(args.maker) as `0x${string}`;
+      const tokenId = String(args.tokenId);
+      const side = String(args.side) as 'BUY' | 'SELL';
+      const price = String(args.price);
+      const size = String(args.size);
+      const expirationSec = Number(args.expirationSec ?? 0);
+      const feeRateBps = Number(args.feeRateBps ?? 0);
+      const negRisk = Boolean(args.negRisk ?? false);
+
+      const order = buildOrder({ maker, tokenId, side, price, size, expirationSec, feeRateBps });
+      const typed = orderTypedData(order, negRisk);
+
+      const usdcCost = (Number(price) * Number(size)).toFixed(4);
+      const lines = [
+        `Polymarket order — sign with your wallet, then call chaingpt_pm_submit_signed_order.`,
+        '',
+        `Side:           ${side}`,
+        `Token id:       ${tokenId}`,
+        `Price:          ${price} (${(Number(price) * 100).toFixed(2)}% implied)`,
+        `Size:           ${size} shares`,
+        `USDC.e cost:    ~$${usdcCost}`,
+        `Expiration:     ${expirationSec === 0 ? 'never' : new Date(expirationSec * 1000).toISOString()}`,
+        `Exchange:       ${negRisk ? 'Neg-Risk' : 'CTF'} (${typed.domain.verifyingContract})`,
+        '',
+        '--- EIP-712 typed data (sign via eth_signTypedData_v4) ---',
+        JSON.stringify(typed, null, 2),
+        '',
+        '--- order (pass back to submit_signed_order) ---',
+        JSON.stringify(order, null, 2),
+      ];
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    if (name === 'chaingpt_pm_submit_signed_order') {
+      const creds = readCLOBCreds();
+      if (!creds) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `Polymarket CLOB credentials are required to submit orders. Set:\n` +
+              `  POLY_CLOB_API_KEY=<api_key>\n` +
+              `  POLY_CLOB_SECRET=<base64_secret>\n` +
+              `  POLY_CLOB_PASSPHRASE=<passphrase>\n\n` +
+              `Derive these once via the official Polymarket clob-client (TS) or py-clob-client. ` +
+              `See https://docs.polymarket.com/quickstart/orderbook-api/auth/`,
+          }],
+        };
+      }
+      const order = args.order as PolymarketOrder;
+      const signature = String(args.signature);
+      const owner = (args.owner as string | undefined) ?? order.maker;
+      const orderType = String(args.orderType ?? 'GTC');
+
+      const body = JSON.stringify({
+        order: { ...order, signature },
+        owner,
+        orderType,
+      });
+      const headers = clobHeaders(creds, 'POST', '/order', body, owner);
+      const res = await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers,
+        body,
+      });
+      const text = await res.text();
+      return {
+        content: [{
+          type: 'text',
+          text: `Polymarket CLOB /order response (HTTP ${res.status}):\n${text}`,
+        }],
+      };
     }
 
     return { content: [{ type: 'text', text: `Unknown Polymarket tool: ${name}` }] };

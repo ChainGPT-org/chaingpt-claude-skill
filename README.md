@@ -6,9 +6,9 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **61 MCP tools** (18 ChainGPT-AI + 16 generic Web3 + 5 mainnet deploy + 5 mainnet DEX + 7 mainnet DeFi + 6 Hyperliquid + 4 Polymarket). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **66 MCP tools** (18 ChainGPT-AI + 16 generic Web3 + 5 mainnet deploy + 5 mainnet DEX + 7 mainnet DeFi + 9 Hyperliquid + 6 Polymarket). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.6.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.7.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
@@ -154,7 +154,7 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 61 Tools
+## 🔌 MCP Server — 66 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 

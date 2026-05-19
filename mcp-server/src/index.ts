@@ -35,7 +35,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.6.0' },
+  { name: 'chaingpt', version: '1.7.0' },
   { capabilities: { tools: {} } }
 );
 
