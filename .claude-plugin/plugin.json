@@ -1,7 +1,7 @@
 {
   "name": "chaingpt",
-  "version": "1.1.0",
-  "description": "Build with ChainGPT's Web3 AI platform — full API/SDK reference, project scaffolding, MCP server, 45+ smart contract patterns, and testing mock server for: AI Chatbot & LLM, NFT Generator, Smart Contract Generator & Auditor, Crypto News, AgenticOS, and Solidity LLM.",
+  "version": "1.2.0",
+  "description": "The Web3 toolkit for Claude Code. AI-powered (ChainGPT chat / NFT / Solidity generator + auditor / crypto news / Solidity LLM) PLUS generic Web3: multi-chain wallet portfolios, token research (DexScreener), risk scanning (GoPlus + Honeypot), on-chain analytics (Etherscan v2), and AI-enriched composed intel calls that funnel ChainGPT credits. 45+ audited Solidity patterns + zero-credit mock server.",
   "author": {
     "name": "ChainGPT",
     "url": "https://www.chaingpt.org"
@@ -9,7 +9,7 @@
   "homepage": "https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk",
   "repository": "https://github.com/ChainGPT-org/chaingpt-claude-skill",
   "license": "MIT",
-  "keywords": ["web3", "blockchain", "ai", "nft", "smart-contracts", "crypto", "defi", "chaingpt", "solidity", "mcp"],
+  "keywords": ["web3", "blockchain", "ai", "nft", "smart-contracts", "crypto", "defi", "chaingpt", "solidity", "mcp", "dexscreener", "goplus", "etherscan", "wallet", "portfolio", "honeypot", "agent"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json"
 }
