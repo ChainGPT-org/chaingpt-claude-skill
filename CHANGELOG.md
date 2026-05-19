@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.0] - 2026-05-18
+### Added — Tier 3b + 3c: Hyperliquid + Polymarket read-only data
+Live mainnet data for the two highest-volume non-EVM-aggregator markets in crypto. Read-only in this release — signed order placement (Hyperliquid EIP-712 L1 actions; Polymarket CLOB signed orders) is deferred to a follow-up so each signing scheme can get its own dedicated review.
+
+- **6 new Hyperliquid tools**:
+  - `chaingpt_hl_markets` / `chaingpt_hl_mids` / `chaingpt_hl_orderbook`
+  - `chaingpt_hl_account` (margin / positions / open orders) / `chaingpt_hl_fills` / `chaingpt_hl_funding`
+  - All via `POST /info` against the public Hyperliquid API. No key required.
+- **4 new Polymarket tools**:
+  - `chaingpt_pm_markets` / `chaingpt_pm_market`
+  - `chaingpt_pm_orderbook` / `chaingpt_pm_trades`
+  - Uses Polymarket Gamma API for market discovery + CLOB API for orderbook and trades.
+- New `skills/hyperliquid/SKILL.md` and `skills/polymarket/SKILL.md`. Both clearly flag the read-only scope and outline the custody-free pattern that signed-orders will use in the follow-up.
+- Ties Polymarket into ChainGPT's existing PredictFi / Foresight AI surface.
+
+### Changed
+- Plugin to v1.6.0; MCP server to v1.6.0.
+
 ## [1.5.0] - 2026-05-18
 ### Added — Tier 3d: MAINNET DeFi protocols
 Custody-free DeFi for the three highest-volume primitives. Same mainnet-first design — plugin builds unsigned tx, user signs externally, `acknowledgeMainnet: true` required for state-changing tools.
