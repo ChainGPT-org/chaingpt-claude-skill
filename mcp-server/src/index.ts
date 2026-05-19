@@ -25,6 +25,8 @@ import { defiTools, handleDefiTool } from './tools/defi.js';
 import { hyperliquidTools, handleHyperliquidTool } from './tools/hyperliquid.js';
 import { polymarketTools, handlePolymarketTool } from './tools/polymarket.js';
 import { strategyTools, handleStrategyTool } from './tools/strategy.js';
+import { bridgeTools, handleBridgeTool } from './tools/bridge.js';
+import { aggregatorTools, handleAggregatorTool } from './tools/aggregators.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -60,6 +62,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...hyperliquidTools,
     ...polymarketTools,
     ...strategyTools,
+    ...bridgeTools,
+    ...aggregatorTools,
   ],
 }));
 
@@ -97,11 +101,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_onchain')) return await handleOnchainTool(name, args);
     if (name.startsWith('chaingpt_intel')) return await handleIntelTool(name, args);
     if (name.startsWith('chaingpt_deploy')) return await handleDeployTool(name, args);
+    if (name.startsWith('chaingpt_dex_1inch') || name.startsWith('chaingpt_dex_cow')) return await handleAggregatorTool(name, args);
     if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
     if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
+    if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {

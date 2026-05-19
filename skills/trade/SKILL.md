@@ -1,6 +1,6 @@
 ---
 name: chaingpt-trade
-description: "Execute live DEX trades on MAINNET via the ChainGPT plugin. EVM swaps via OpenOcean aggregator (10 mainnets, no API key); Solana swaps via Jupiter. Custody-free — the plugin builds the unsigned tx, the user signs externally. Mandatory pre-flight: chaingpt_risk_token on the buy token + chaingpt_dex_quote before chaingpt_dex_build_swap_tx. Triggers: swap, trade, buy, sell, exchange, dex, jupiter, openocean, 1inch, 0x, paraswap, slippage, swap on ethereum, swap on base, swap on solana."
+description: "Execute live DEX trades on MAINNET via the ChainGPT plugin. EVM swaps via OpenOcean (default, no key, 10 mainnets), 1inch v6 (key-gated, better blue-chip routing), or CoW Protocol (MEV-protected intent-based for large trades). Solana swaps via Jupiter. Custody-free — the plugin builds unsigned tx / EIP-712 intent, the user signs externally. Mandatory pre-flight: chaingpt_risk_token on the buy token + a quote tool before any build/create tool. Triggers: swap, trade, buy, sell, exchange, dex, jupiter, openocean, 1inch, cow, cowswap, mev protection, 0x, paraswap, slippage, swap on ethereum, swap on base, swap on solana."
 ---
 
 # ChainGPT Trade Skill
@@ -70,8 +70,26 @@ Solana: mainnet only.
 
 - It does not custody funds. The plugin never sees the private key.
 - It does not execute the trade autonomously. The user must sign in their wallet.
-- It does not protect against MEV / sandwich attacks beyond OpenOcean's routing. For sensitive trades, recommend CoW Protocol (manual integration, not yet a tool) or use a tight `slippageBps`.
 - It does not retry failed trades. If the swap reverts, the user is told what happened; the next attempt is a new call.
+
+## Alternative aggregators (when OpenOcean isn't the right tool)
+
+OpenOcean is the default because it's keyless and covers all 10 EVM chains. Two alternatives are wired in for specific use cases:
+
+### 1inch v6 (`chaingpt_dex_1inch_quote` / `chaingpt_dex_1inch_swap_tx`)
+
+- **When to use:** Better routing on Ethereum + L2s for large blue-chip pairs (USDC↔WETH, etc.) and when OpenOcean returns a worse quote.
+- **Setup:** Requires `ONEINCH_API_KEY` (free tier at https://1inch.dev → Developer Portal). Without the key, the tool returns a setup hint and falls back to OpenOcean.
+- **Networks:** ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
+- **Approval target:** 1inch v6 router (returned in the quote response — use it as the `spender` for `chaingpt_dex_approve_tx`).
+
+### CoW Protocol (`chaingpt_dex_cow_create_order` / `chaingpt_dex_cow_submit_signed_order`)
+
+- **When to use:** Trades >$50k where MEV sandwich attacks would eat a meaningful slice of the trade. CoW uses an intent-based model — solvers compete to fill the order at the best price, and the executor pays gas.
+- **Different signing flow:** The user signs an **EIP-712 order intent** (not a transaction). Then `chaingpt_dex_cow_submit_signed_order` POSTs it to the CoW API and returns an order UID trackable on https://explorer.cow.fi.
+- **Approval target:** CoW **Vault Relayer** `0xC92E8bdf79f0507f65a392b0ab4667716BFE0110` (NOT the Settlement contract). One-time approval per token.
+- **Networks:** ethereum, base, arbitrum_one. (No native ETH — wrap to WETH first.)
+- **Hard rule:** Still gated on `acknowledgeMainnet=true`. Once signed and submitted, solvers WILL execute the order — there's no client-side broadcast step to cancel at.
 
 ## Credit accounting
 
