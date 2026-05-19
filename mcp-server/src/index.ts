@@ -19,6 +19,12 @@ import { researchTools, handleResearchTool } from './tools/research.js';
 import { riskTools, handleRiskTool } from './tools/risk.js';
 import { onchainTools, handleOnchainTool } from './tools/onchain.js';
 import { intelTools, handleIntelTool } from './tools/intel.js';
+import { deployTools, handleDeployTool } from './tools/deploy.js';
+import { dexTools, handleDexTool } from './tools/dex.js';
+import { defiTools, handleDefiTool } from './tools/defi.js';
+import { hyperliquidTools, handleHyperliquidTool } from './tools/hyperliquid.js';
+import { polymarketTools, handlePolymarketTool } from './tools/polymarket.js';
+import { strategyTools, handleStrategyTool } from './tools/strategy.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -30,7 +36,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.2.0' },
+  { name: 'chaingpt', version: '1.8.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -48,6 +54,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...riskTools,
     ...onchainTools,
     ...intelTools,
+    ...deployTools,
+    ...dexTools,
+    ...defiTools,
+    ...hyperliquidTools,
+    ...polymarketTools,
+    ...strategyTools,
   ],
 }));
 
@@ -84,6 +96,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_risk')) return await handleRiskTool(name, args);
     if (name.startsWith('chaingpt_onchain')) return await handleOnchainTool(name, args);
     if (name.startsWith('chaingpt_intel')) return await handleIntelTool(name, args);
+    if (name.startsWith('chaingpt_deploy')) return await handleDeployTool(name, args);
+    if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
+    if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
+    if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
+    if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
+    if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {

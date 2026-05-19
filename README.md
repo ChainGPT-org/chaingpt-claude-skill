@@ -6,9 +6,9 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **34 MCP tools** (18 ChainGPT-AI + 16 generic Web3). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **71 MCP tools** (18 ChainGPT-AI + 16 generic Web3 + 5 mainnet deploy + 5 mainnet DEX + 7 mainnet DeFi + 9 Hyperliquid + 6 Polymarket + 5 strategy/backtest). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.8.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
@@ -84,8 +84,8 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 34 MCP Tools
-Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions — all from the chat.
+### 🤖 61 MCP Tools
+Claude doesn't just _write_ code — it **calls every major Web3 surface directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, deploy contracts to mainnet with the audit-before-deploy gate, swap tokens via OpenOcean + Jupiter, lend on Aave V3, stake on Lido, restake on EigenLayer, read Hyperliquid perp positions + funding rates, AND track Polymarket prediction-market odds — all custody-free, all from the chat.
 
 ### 📋 10 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
@@ -154,7 +154,7 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 34 Tools
+## 🔌 MCP Server — 71 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 
@@ -204,6 +204,72 @@ Works across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, av
 |------|-------------|
 | `chaingpt_intel_token` | One call → DexScreener + GoPlus + ChainGPT news + AI signal. The recommended "research this token" tool. Costs ~1 ChainGPT credit. |
 | `chaingpt_intel_wallet` | Portfolio + per-holding risk-rating across chains. Free read. |
+
+### Mainnet contract deployment (5 tools — new in 1.3)
+
+Custody-free pipeline. The plugin builds an unsigned tx; the user signs externally (MetaMask / Rabby / hardware wallet / ERC-4337 smart account / WalletConnect). MAINNET is the default; testnet is an opt-in via the `network` parameter.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_deploy_compile` | Compile Solidity 0.8.x → bytecode + ABI + warnings |
+| `chaingpt_deploy_estimate` | Preview gas cost on the target mainnet (or testnet) |
+| `chaingpt_deploy_build_tx` | Build the unsigned deployment tx. **Refuses mainnet without `acknowledgeMainnet: true`** |
+| `chaingpt_deploy_verify` | Submit source to Etherscan v2 (works across all major EVM chains) |
+| `chaingpt_deploy_verify_status` | Poll verification GUID |
+
+**Mainnets** (default): ethereum · base · arbitrum · optimism · polygon · bsc · avalanche · blast · linea · scroll.
+**Testnets** (opt-in): sepolia · base-sepolia · arbitrum-sepolia · optimism-sepolia · polygon-amoy · bsc-testnet.
+
+The `chaingpt-deploy` skill enforces the mandatory pipeline: **generate → audit → compile → estimate → confirm → build-tx → user-signs → verify**. Never bypass the audit step on mainnet.
+
+### Mainnet DEX trading (5 tools — new in 1.4)
+
+Custody-free. Plugin builds the unsigned swap tx; user signs externally. Same `acknowledgeMainnet` safety pattern as deploy.
+
+| Tool | What It Does | Backend |
+|------|-------------|---------|
+| `chaingpt_dex_quote` | Live EVM swap quote (price, impact, route) | OpenOcean v4 |
+| `chaingpt_dex_build_swap_tx` | Build unsigned EVM swap. **Mainnet ack required** | OpenOcean v4 |
+| `chaingpt_dex_approve_tx` | ERC-20 approval helper (auto-resolves router) | viem encode |
+| `chaingpt_dex_jupiter_quote` | Live Solana swap quote | Jupiter v6 |
+| `chaingpt_dex_jupiter_build_swap_tx` | Serialized Solana swap tx (base64). **Mainnet ack required** | Jupiter v6 |
+
+EVM chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll. Plus Solana mainnet. The `chaingpt-trade` skill codifies the mandatory pre-flight: **`chaingpt_risk_token` on the buy token + `chaingpt_dex_quote` BEFORE `chaingpt_dex_build_swap_tx`**.
+
+### Mainnet DeFi protocols (7 tools — new in 1.5)
+
+Custody-free. Same `acknowledgeMainnet` safety pattern. The `chaingpt-defi` skill enforces a mandatory `chaingpt_defi_aave_health` check before any borrow / withdraw.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_defi_aave_health` | Read account health factor, collateral, debt, LTV — Aave V3, 7 chains |
+| `chaingpt_defi_aave_supply_tx` | Build supply tx (lend) — Aave V3 |
+| `chaingpt_defi_aave_borrow_tx` | Build borrow tx — Aave V3 |
+| `chaingpt_defi_aave_repay_tx` | Build repay tx (incl. `max` for full repayment) — Aave V3 |
+| `chaingpt_defi_aave_withdraw_tx` | Build withdraw tx — Aave V3 |
+| `chaingpt_defi_lido_stake_tx` | Stake native ETH → stETH on Lido (Ethereum mainnet) |
+| `chaingpt_defi_eigenlayer_deposit_tx` | Restake stETH / rETH / cbETH into EigenLayer (Ethereum mainnet) |
+
+Aave V3 chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
+
+### Hyperliquid + Polymarket (10 tools — new in 1.6)
+
+Live mainnet data from the two highest-volume non-EVM-aggregator markets in crypto. **Read-only** in this release — signed order placement (Hyperliquid EIP-712 L1 actions, Polymarket CLOB orders) is deferred to a follow-up. No API keys required.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_hl_markets` | List Hyperliquid perp + spot universes |
+| `chaingpt_hl_mids` | Live mid prices for all HL assets |
+| `chaingpt_hl_orderbook` | L2 orderbook for one HL asset |
+| `chaingpt_hl_account` | Full account state — margin / positions / open orders |
+| `chaingpt_hl_fills` | Recent fill history for a wallet |
+| `chaingpt_hl_funding` | Funding-rate history (auto-annualized) |
+| `chaingpt_pm_markets` | Discover Polymarket markets, full-text search, volume sort |
+| `chaingpt_pm_market` | Detail on one market — outcomes / prices / token ids |
+| `chaingpt_pm_orderbook` | L2 orderbook for one outcome token |
+| `chaingpt_pm_trades` | Recent fills on one outcome token |
+
+Polymarket tools tie into ChainGPT's existing **PredictFi / Foresight AI** surface — same domain (event-outcome markets), but live mainnet data rather than ChainGPT-curated commentary.
 
 ### Optional API keys (graceful fallback when absent)
 

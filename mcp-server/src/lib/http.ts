@@ -69,6 +69,32 @@ export async function jsonRpc<T = unknown>(
   return res.result as T;
 }
 
+/**
+ * Try a JSON-RPC call against an ordered list of endpoints. Returns the first
+ * non-erroring result. If all endpoints fail, throws the last error.
+ * Used when public RPCs are flaky / rate-limited.
+ */
+export async function jsonRpcFallback<T = unknown>(
+  rpcUrls: string[],
+  method: string,
+  params: unknown[] = [],
+  timeoutMs = 8_000
+): Promise<T> {
+  if (rpcUrls.length === 0) throw new Error('No RPC endpoints provided');
+  let lastErr: unknown;
+  for (const url of rpcUrls) {
+    try {
+      return await jsonRpc<T>(url, method, params, timeoutMs);
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+  }
+  throw lastErr instanceof Error
+    ? new Error(`All RPC endpoints failed for ${method}; last error: ${lastErr.message}`)
+    : new Error(`All RPC endpoints failed for ${method}`);
+}
+
 /** Convert a hex-prefixed value to a JS number. Throws on overflow. */
 export function hexToNumber(hex: string): number {
   const n = Number(BigInt(hex));
