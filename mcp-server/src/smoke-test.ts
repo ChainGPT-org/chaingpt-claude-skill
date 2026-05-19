@@ -401,9 +401,18 @@ let pass = 0;
 let fail = 0;
 const failures: Array<{ name: string; reason: string }> = [];
 
-console.log(`\n${YELLOW}══ ChainGPT plugin smoke test — ${cases.length} cases ══${RESET}\n`);
+// Allow CI / local runs to skip Drift cases when dlob.drift.trade is in a
+// known outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
+const skipDrift = process.env.SKIP_DRIFT_SMOKE === '1';
+const filteredCases = skipDrift
+  ? cases.filter((c) => !/^drift_/.test(c.name))
+  : cases;
 
-for (const c of cases) {
+console.log(`\n${YELLOW}══ ChainGPT plugin smoke test — ${filteredCases.length} cases ══${RESET}`);
+if (skipDrift) console.log(`${YELLOW}  (SKIP_DRIFT_SMOKE=1 — drift cases excluded)${RESET}`);
+console.log();
+
+for (const c of filteredCases) {
   process.stdout.write(`  ${c.name.padEnd(60)} `);
   try {
     const result = await c.fn();
