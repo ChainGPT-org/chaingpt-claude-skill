@@ -105,6 +105,9 @@ describe('Tier-3a quote handlers', () => {
       inToken: '0x0000000000000000000000000000000000000000',
       outToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
       amountIn: '0.1',
+      // Pass explicit gasPriceGwei to skip the eth_gasPrice prefetch the handler does
+      // when gasPrice isn't provided. Keeps this test to a single fetch call.
+      gasPriceGwei: 30,
     });
     const text = res.content[0].text;
     expect(text).toContain('Swap quote');

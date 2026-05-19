@@ -1,6 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { ALL_CHAIN_SLUGS, CHAINS, resolveChain } from '../lib/chains.js';
 import { httpJson } from '../lib/http.js';
+import { detectMissingKey } from '../lib/etherscan.js';
 
 /**
  * Risk & security tools. The whole point of this category is to enforce the
@@ -311,8 +312,10 @@ export async function handleRiskTool(
       const url =
         `${ETHERSCAN_V2_BASE}?chainid=${chain.chainId}&module=contract&action=getsourcecode` +
         `&address=${address}&apikey=${etherscanKey()}`;
-      const res = await httpJson<{ status: string; message: string; result: any[] }>(url);
-      const row = res.result?.[0];
+      const res = await httpJson<{ status: string; message: string; result: any[] | string }>(url);
+      const keyHint = detectMissingKey(res as any);
+      if (keyHint) return { content: [{ type: 'text', text: keyHint }] };
+      const row = Array.isArray(res.result) ? res.result[0] : undefined;
       if (!row || !row.SourceCode) {
         return {
           content: [{

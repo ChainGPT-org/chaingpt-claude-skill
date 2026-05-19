@@ -1,7 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { encodeFunctionData, parseUnits, formatUnits, type Hex } from 'viem';
-import { CHAINS, resolveChain } from '../lib/chains.js';
-import { httpJson } from '../lib/http.js';
+import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { httpJson, jsonRpcFallback } from '../lib/http.js';
 
 /**
  * Tier-3a DEX trading on mainnet. Custody-free.
@@ -36,7 +36,9 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
-const JUPITER_QUOTE_BASE = 'https://quote-api.jup.ag/v6';
+// Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
+// The old domain no longer resolves. Use the new endpoint.
+const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
 
 const EVM_NETWORKS = Object.keys(OPENOCEAN_CHAIN);
 
@@ -248,14 +250,40 @@ export async function handleDexTool(
 
       const account = (args.account as string | undefined) || '0x0000000000000000000000000000000000000000';
       const path = name === 'chaingpt_dex_build_swap_tx' ? 'swap' : 'quote';
+
+      // OpenOcean v4 requires a `gasPrice` query param. If the user didn't supply one,
+      // fetch the current chain gas price via the chain's public RPC and pass it in gwei.
+      let resolvedGasPrice: number;
+      if (gasPriceGwei !== undefined) {
+        resolvedGasPrice = gasPriceGwei;
+      } else {
+        const endpoints = rpcEndpoints(network);
+        if (endpoints.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `OpenOcean requires a gasPrice. No public RPC configured for ${network}; pass gasPriceGwei explicitly.`,
+            }],
+          };
+        }
+        try {
+          const gpHex = await jsonRpcFallback<string>(endpoints, 'eth_gasPrice', []);
+          // convert wei → gwei (truncate; OpenOcean accepts integers)
+          resolvedGasPrice = Number(BigInt(gpHex) / 1_000_000_000n);
+          if (resolvedGasPrice === 0) resolvedGasPrice = 1; // degenerate fallback
+        } catch {
+          resolvedGasPrice = 30; // conservative-ish fallback that works on most chains
+        }
+      }
+
       const params = new URLSearchParams({
         inTokenAddress: inToken,
         outTokenAddress: outToken,
         amount: amountIn,
         slippage: String(slippagePct),
         account,
+        gasPrice: String(resolvedGasPrice),
       });
-      if (gasPriceGwei !== undefined) params.set('gasPrice', String(gasPriceGwei));
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
       const res = await httpJson<any>(url);
       const data = res?.data ?? res;
@@ -321,18 +349,15 @@ export async function handleDexTool(
       const owner = String(args.owner || '');
       const amountInput = String(args.amount ?? 'max');
 
-      // Resolve the OpenOcean router for this chain
+      // Resolve the OpenOcean router for this chain. Known router addresses are stable across chains;
+      // hard-code the canonical Pathfinder router. If the user passes `spender` explicitly we honor it.
+      // (Pre-1.6 we resolved via a probe swap call, but OpenOcean now requires gasPrice on every call,
+      // and a hard-coded address avoids that extra round-trip + RPC dependency.)
       let spender = (args.spender as string | undefined) || '';
       if (!spender) {
-        // The OpenOcean v4 swap response uses the `to` field which is the router. We need it pre-swap, so
-        // call a tiny quote to extract it. Use a 1-wei quote against the same token-pair to keep it cheap.
-        const probe = await httpJson<any>(
-          `${OPENOCEAN_BASE}/${ooChain}/swap?inTokenAddress=${token}&outTokenAddress=${NATIVE_ADDR}&amount=0.000001&slippage=1&account=${owner}`
-        );
-        spender = probe?.data?.to ?? '';
-        if (!spender) {
-          return { content: [{ type: 'text', text: 'Could not resolve OpenOcean router; pass `spender` explicitly.' }] };
-        }
+        // OpenOcean Pathfinder router — same address across all major EVM mainnets via CREATE2.
+        // Source: https://docs.openocean.finance/dev/openocean-api-3.0/api-reference#exchange-contract
+        spender = '0x6352a56caadc4f1e25cd6c75970fa768a3304e64';
       }
 
       // Determine decimals + current allowance via RPC if possible
@@ -382,7 +407,7 @@ export async function handleDexTool(
       const rawAmount = parseUnits(amountIn as `${number}`, decimalsIn).toString();
 
       const quoteUrl =
-        `${JUPITER_QUOTE_BASE}/quote?inputMint=${inputMint}&outputMint=${outputMint}` +
+        `${JUPITER_BASE}/quote?inputMint=${inputMint}&outputMint=${outputMint}` +
         `&amount=${rawAmount}&slippageBps=${slippageBps}`;
       const quote = await httpJson<any>(quoteUrl);
       if (!quote || quote.error) {
@@ -421,7 +446,7 @@ export async function handleDexTool(
       if (!userPublicKey) {
         return { content: [{ type: 'text', text: 'userPublicKey is required for swap-tx build.' }] };
       }
-      const swap = await httpJson<any>(`${JUPITER_QUOTE_BASE}/swap`, {
+      const swap = await httpJson<any>(`${JUPITER_BASE}/swap`, {
         method: 'POST',
         body: {
           quoteResponse: quote,

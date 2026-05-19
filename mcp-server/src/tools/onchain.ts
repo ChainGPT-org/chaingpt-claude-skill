@@ -1,6 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { CHAINS, resolveChain } from '../lib/chains.js';
-import { hexToNumber, hexWeiToGwei, httpJson, jsonRpc } from '../lib/http.js';
+import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { hexToNumber, hexWeiToGwei, httpJson, jsonRpc, jsonRpcFallback } from '../lib/http.js';
+import { detectMissingKey } from '../lib/etherscan.js';
 
 /**
  * On-chain analytics. Read-only. Uses Etherscan v2 multichain endpoint
@@ -215,6 +216,8 @@ export async function handleOnchainTool(
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=account&action=txlist&address=${address}` +
         `&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${etherscanKey()}`;
       const res = await httpJson<{ status: string; message: string; result: EtherscanTxRow[] | string }>(url);
+      const keyHint = detectMissingKey(res);
+      if (keyHint) return { content: [{ type: 'text', text: keyHint }] };
       if (typeof res.result === 'string' || !Array.isArray(res.result)) {
         return {
           content: [{
@@ -268,11 +271,12 @@ export async function handleOnchainTool(
         /* fall through to RPC */
       }
 
-      // RPC fallback
-      if (!chain.publicRpc) {
+      // RPC fallback (try the chain's RPC list)
+      const rpcs = rpcEndpoints(chain.slug);
+      if (rpcs.length === 0) {
         return { content: [{ type: 'text', text: `No gas data available for ${chain.name}.` }] };
       }
-      const gasPriceHex = await jsonRpc<string>(chain.publicRpc, 'eth_gasPrice', []);
+      const gasPriceHex = await jsonRpcFallback<string>(rpcs, 'eth_gasPrice', []);
       const lines = [
         `Gas — ${chain.name} (RPC fallback, no breakdown available)`,
         '',
@@ -299,10 +303,11 @@ export async function handleOnchainTool(
       } else {
         return { content: [{ type: 'text', text: `Invalid block: ${raw}` }] };
       }
-      if (!chain.publicRpc) {
+      const rpcs = rpcEndpoints(chain.slug);
+      if (rpcs.length === 0) {
         return { content: [{ type: 'text', text: `No public RPC available for ${chain.name}.` }] };
       }
-      const block = await jsonRpc<any>(chain.publicRpc, 'eth_getBlockByNumber', [blockTag, false]);
+      const block = await jsonRpcFallback<any>(rpcs, 'eth_getBlockByNumber', [blockTag, false]);
       if (!block) return { content: [{ type: 'text', text: `Block not found: ${raw}` }] };
 
       const lines = [

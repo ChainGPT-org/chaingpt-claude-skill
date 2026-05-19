@@ -9,7 +9,8 @@ import {
   type Address,
 } from 'viem';
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from 'viem/chains';
-import { CHAINS, resolveChain } from '../lib/chains.js';
+import { fallback } from 'viem';
+import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 
 /**
  * Tier-3d DeFi protocols on MAINNET. Custody-free.
@@ -44,7 +45,17 @@ const VIEM_CHAIN_MAP = {
 function publicClientFor(network: string) {
   const chain = (VIEM_CHAIN_MAP as any)[network];
   if (!chain) throw new Error(`Unsupported network: ${network}`);
-  return createPublicClient({ chain, transport: http() });
+  // viem's default transport for `mainnet` falls back to slow/unreliable public endpoints
+  // that frequently rate-limit. Use the explicit RPC list from our chain registry as a
+  // viem `fallback` transport — tries the primary first, then each fallback in turn.
+  const endpoints = rpcEndpoints(network);
+  const transports = endpoints.length > 0
+    ? endpoints.map((url) => http(url, { timeout: 8_000 }))
+    : [http(undefined, { timeout: 8_000 })];
+  return createPublicClient({
+    chain,
+    transport: transports.length === 1 ? transports[0] : fallback(transports),
+  });
 }
 
 // ─── Lido stETH (Ethereum mainnet only) ─────────────────────────────

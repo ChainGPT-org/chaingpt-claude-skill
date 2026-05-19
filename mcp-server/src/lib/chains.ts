@@ -23,6 +23,12 @@ export interface ChainInfo {
   coingecko?: string;
   /** Default public JSON-RPC endpoint (no key). Used for gas oracle fallback. */
   publicRpc?: string;
+  /**
+   * Additional public-RPC fallbacks tried in order if the primary times out or
+   * gets rate-limited. Helpful because llamarpc / cloudflare-eth / merkle.io
+   * all rate-limit shared clients aggressively.
+   */
+  publicRpcFallbacks?: string[];
   /** Block explorer base URL for `tx/`, `address/`, `token/` deeplinks. */
   explorer?: string;
 }
@@ -37,7 +43,12 @@ export const CHAINS: Record<string, ChainInfo> = {
     goplus: '1',
     honeypot: 1,
     coingecko: 'ethereum',
-    publicRpc: 'https://eth.llamarpc.com',
+    publicRpc: 'https://ethereum-rpc.publicnode.com',
+    publicRpcFallbacks: [
+      'https://rpc.ankr.com/eth',
+      'https://eth.llamarpc.com',
+      'https://cloudflare-eth.com',
+    ],
     explorer: 'https://etherscan.io',
   },
   base: {
@@ -49,6 +60,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     goplus: '8453',
     coingecko: 'base',
     publicRpc: 'https://mainnet.base.org',
+    publicRpcFallbacks: ['https://base-rpc.publicnode.com', 'https://base.llamarpc.com'],
     explorer: 'https://basescan.org',
   },
   arbitrum: {
@@ -61,6 +73,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     honeypot: 42161,
     coingecko: 'arbitrum-one',
     publicRpc: 'https://arb1.arbitrum.io/rpc',
+    publicRpcFallbacks: ['https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.llamarpc.com'],
     explorer: 'https://arbiscan.io',
   },
   optimism: {
@@ -72,6 +85,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     goplus: '10',
     coingecko: 'optimistic-ethereum',
     publicRpc: 'https://mainnet.optimism.io',
+    publicRpcFallbacks: ['https://optimism-rpc.publicnode.com', 'https://optimism.llamarpc.com'],
     explorer: 'https://optimistic.etherscan.io',
   },
   polygon: {
@@ -83,6 +97,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     goplus: '137',
     coingecko: 'polygon-pos',
     publicRpc: 'https://polygon-rpc.com',
+    publicRpcFallbacks: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.llamarpc.com'],
     explorer: 'https://polygonscan.com',
   },
   bsc: {
@@ -95,6 +110,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     honeypot: 56,
     coingecko: 'binance-smart-chain',
     publicRpc: 'https://bsc-dataseed.binance.org',
+    publicRpcFallbacks: ['https://bsc-rpc.publicnode.com', 'https://binance.llamarpc.com'],
     explorer: 'https://bscscan.com',
   },
   avalanche: {
@@ -106,6 +122,7 @@ export const CHAINS: Record<string, ChainInfo> = {
     goplus: '43114',
     coingecko: 'avalanche',
     publicRpc: 'https://api.avax.network/ext/bc/C/rpc',
+    publicRpcFallbacks: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://avalanche.llamarpc.com'],
     explorer: 'https://snowtrace.io',
   },
   blast: {
@@ -200,3 +217,13 @@ export const ALL_CHAIN_SLUGS = Object.keys(CHAINS);
 export const EVM_CHAIN_SLUGS = Object.values(CHAINS)
   .filter((c) => c.chainId !== null)
   .map((c) => c.slug);
+
+/** Get the ordered list of RPC endpoints to try for a chain (primary first). */
+export function rpcEndpoints(slug: string): string[] {
+  const c = CHAINS[slug];
+  if (!c) return [];
+  const list: string[] = [];
+  if (c.publicRpc) list.push(c.publicRpc);
+  if (c.publicRpcFallbacks) list.push(...c.publicRpcFallbacks);
+  return list;
+}
