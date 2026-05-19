@@ -33,6 +33,7 @@ import { portfolioTools, handlePortfolioTool } from './tools/portfolio.js';
 import { solanaLendingTools, handleSolanaLendingTool } from './tools/solana_lending.js';
 import { planTools, handlePlanTool } from './tools/plans.js';
 import { agentWalletTools, handleAgentWalletTool } from './tools/agent_wallet.js';
+import { aaTools, handleAaTool } from './tools/aa.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -76,6 +77,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...solanaLendingTools,
     ...planTools,
     ...agentWalletTools,
+    ...aaTools,
   ],
 }));
 
@@ -126,6 +128,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);
     if (name.startsWith('chaingpt_portfolio')) return await handlePortfolioTool(name, args);
+    if (name.startsWith('chaingpt_aa_')) return await handleAaTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {
