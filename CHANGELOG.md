@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.8.0] - 2026-05-19
+### Added — Tier 4 agent infrastructure: strategy planners + backtester
+The agent layer that composes Tier 1-3 tools into multi-step plans. **Strategy tools return plans, they don't execute** — every step the plan lists is a separate `chaingpt_dex_build_swap_tx` / `chaingpt_hl_place_order_payload` / etc. call with its own mainnet ack gate. Keeps the agent surface reviewable and refusal-safe.
+
+- **5 new tools**:
+  - `chaingpt_strategy_dca_plan` — dollar-cost-average schedule (timestamps + sizes)
+  - `chaingpt_strategy_grid_plan` — buy + sell limit ladder around a midpoint (HL / PM / DEX variants)
+  - `chaingpt_strategy_funding_arb_plan` — Hyperliquid funding-rate carry suggester (side / leverage / hourly+daily carry)
+  - `chaingpt_strategy_copy_plan` — mirror a target wallet's recent swaps (with mandatory per-token risk-check)
+  - `chaingpt_backtest_dca` — replay DCA against CoinGecko historical data + B&H baseline
+- New `skills/strategy/SKILL.md` codifies the execution discipline (plan → user confirms → execute step-by-step, never auto-loop).
+
+### Deferred — ERC-4337 session keys + bounded autonomous mode
+Mentioned in the Tier 4 roadmap but intentionally not in this release. Account-abstraction signing + key-revocation flows + spending-limit enforcement need a dedicated security-review pass; bundling them here would dilute review attention. Roadmap stub left in the strategy skill for a follow-up.
+
+### Changed
+- Plugin to v1.8.0; MCP server to v1.8.0.
+
 ## [1.7.0] - 2026-05-19
 ### Added — Signed-order placement for Hyperliquid + Polymarket
 Closes out the deferred work from 1.6. Both markets can now build signed-order payloads end-to-end. Same custody-free pattern as the rest of the plugin — the plugin builds the EIP-712 typed data; the user's wallet signs externally; a separate `_submit_*` tool broadcasts the signed action.

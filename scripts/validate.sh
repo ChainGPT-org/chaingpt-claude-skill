@@ -35,6 +35,7 @@ REQUIRED_FILES=(
   "skills/defi/SKILL.md"
   "skills/hyperliquid/SKILL.md"
   "skills/polymarket/SKILL.md"
+  "skills/strategy/SKILL.md"
   "reference/llm-chatbot.md"
   "reference/nft-generator.md"
   "reference/smart-contract-generator.md"

@@ -24,6 +24,7 @@ import { dexTools, handleDexTool } from './tools/dex.js';
 import { defiTools, handleDefiTool } from './tools/defi.js';
 import { hyperliquidTools, handleHyperliquidTool } from './tools/hyperliquid.js';
 import { polymarketTools, handlePolymarketTool } from './tools/polymarket.js';
+import { strategyTools, handleStrategyTool } from './tools/strategy.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -35,7 +36,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.7.0' },
+  { name: 'chaingpt', version: '1.8.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -58,6 +59,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...defiTools,
     ...hyperliquidTools,
     ...polymarketTools,
+    ...strategyTools,
   ],
 }));
 
@@ -99,6 +101,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
+    if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {

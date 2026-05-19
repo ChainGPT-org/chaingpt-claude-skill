@@ -1,6 +1,6 @@
 {
   "name": "@chaingpt/mcp-server",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "MCP server exposing ChainGPT Web3 AI APIs + generic Web3 tools + mainnet deploy + mainnet DEX + mainnet DeFi + Hyperliquid (read + signed-order payloads) + Polymarket (read + signed-order payloads) as tools for Claude",
   "main": "dist/index.js",
   "bin": {
