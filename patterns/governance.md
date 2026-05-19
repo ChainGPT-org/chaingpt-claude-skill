@@ -76,11 +76,11 @@ contract DAOGovernor is
 
     // Required overrides for Solidity linearization
 
-    function votingDelay() public view override(Governor, GovernorSettings) returns (uint48) {
+    function votingDelay() public view override(Governor, GovernorSettings) returns (uint256) {
         return super.votingDelay();
     }
 
-    function votingPeriod() public view override(Governor, GovernorSettings) returns (uint48) {
+    function votingPeriod() public view override(Governor, GovernorSettings) returns (uint256) {
         return super.votingPeriod();
     }
 

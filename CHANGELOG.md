@@ -87,6 +87,20 @@ Closes three "Next up" roadmap items in one minimal PR: SSE demo, Go example, Ru
 - **README roadmap** — SSE streaming demo and Multi-language SDK examples (Go, Rust) checked off in the "Next up" section.
 
 ## [Unreleased] - 2026-05-19
+### Added — Three new CI gates: solidity pattern compilation, MCP boot smoke, version consistency
+Closes the three top "Next up" items from the roadmap.
+
+- **`scripts/check-patterns.mjs`** — extracts every ```` ```solidity ```` block from `patterns/*.md` (47 blocks) and compiles each with the `solc` package already vendored under `mcp-server/node_modules`. Custom import callback resolves `@openzeppelin/contracts/...` and `@openzeppelin/contracts-upgradeable/...` from node_modules so OZ-imported snippets compile end-to-end. Fails CI on any compilation error; warnings allowed. Caught and fixed 3 real bitrot cases on first run:
+  - `patterns/governance.md` — OZ v5 `votingDelay()` / `votingPeriod()` return `uint256`, not `uint48` (older OZ).
+  - `patterns/security.md` — `event Unpaused` collided with `Pausable.Unpaused`; renamed to `ContractUnpaused`.
+  - `patterns/security.md` — `@openzeppelin/contracts-upgradeable` in a NatSpec comment was lexed as an unknown doc-tag; wrapped under `@custom:install`.
+- **`scripts/mcp-boot-smoke.mjs`** — spawns the built `mcp-server/dist/index.js`, completes the MCP `initialize` handshake, sends a `tools/list` JSON-RPC request over stdio, asserts the response contains ≥ `MIN_EXPECTED_TOOLS` (default 95) unique `chaingpt_*`-prefixed tools with valid `name`/`description`/`inputSchema`. Catches missing-export and double-registration regressions that vitest can't see because they only manifest at boot. Current count: 105 tools.
+- **`scripts/validate.sh` version-consistency section** — asserts `VERSION` ↔ `.claude-plugin/plugin.json` ↔ `mcp-server/package.json` ↔ `mcp-server/src/index.ts` Server() literal ↔ README version badge all agree. `mock-server/package.json` is checked but a mismatch only warns (it's internal infra, not user-facing). Initial run caught `mock-server` at 1.0.0 while everything else is 1.9.0 — kept the WARN, didn't bump.
+- **`scripts/test-all.sh`** — adds two layers (`patterns`, `boot`) between `examples` and `smoke`. Now eight layers total; `--fast` skips only the live smoke as before.
+- **`.github/workflows/ci.yml`** — adds two parallel jobs: `patterns` (npm ci + `node scripts/check-patterns.mjs`) and `boot-smoke` (npm ci + build + `node scripts/mcp-boot-smoke.mjs`). `validate` job already covers the new version-consistency section.
+- **`mcp-server/package.json`** devDeps — pins `@openzeppelin/contracts@5.0.2` and `@openzeppelin/contracts-upgradeable@5.0.2` so the patterns gate has a stable import target.
+- **`TESTING.md`** + **`README.md`** — rewritten "Six-layer" wording to "Eight-layer"; tables list the new layers with pass counts.
+
 ### Added — Unified test harness (`scripts/test-all.sh` + `TESTING.md`)
 - `scripts/test-all.sh` — single orchestrator that runs all six test layers (validate / typecheck / mcp-test / mock-test / examples / live smoke). Supports `--fast` to skip live smoke, `--only <layer>` for a single layer, `--skip-drift` for when `dlob.drift.trade` is in an outage. Summary report with per-layer timing and pass/fail/skip counts.
 - `TESTING.md` — full testing guide. Layer-by-layer reference, what each upstream the smoke test hits, how to add tests for a new capability, failure-mode cheat-sheet, the contract that every PR must add tests in the same PR.
