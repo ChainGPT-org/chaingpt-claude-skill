@@ -631,17 +631,17 @@ chaingpt-claude-skill/
 - [x] **Daily live‑API smoke CI** — catches upstream drift within 24h, opens a labeled GitHub issue on failure
 - [x] Migration guides (OpenAI, Alchemy, custom)
 - [x] Cost optimization & wallet integration docs
+- [x] **ERC‑4337 v0.7 foundation** — userOpHash, PackedUserOperation packing, bundler‑RPC proxy. 4 MCP tools. Per‑provider session‑key issuance (Safe / Kernel / Biconomy / Alchemy SW) queued as follow‑ups.
+- [x] **SSE streaming demo** — `examples/sse/` wraps the General Chat stream as Server‑Sent Events with a browser EventSource client.
+- [x] **Multi‑language SDK examples (Go, Rust)** — `examples/go/` (stdlib only) + `examples/rust/` (reqwest blocking + serde + rustls) calling the public API gateway.
 
 ### In review (open PRs)
-These four PRs are CI‑green and pending review/merge. When they land, the counts above update.
 - [ ] **CI protective gates** (PR #29) — solidity pattern compilation, MCP boot smoke, version consistency. Adds two CI jobs; six → eight test layers.
 - [ ] **Solana signing foundation** (PR #30) — custody‑free `VersionedTransaction` builder + native SOL + SPL transfer tools. +2 tools, +29 tests. Drift/Marginfi/Kamino signed actions queued as follow‑up PRs that layer on this.
-- [ ] **ERC‑4337 v0.7 foundation** (PR #31) — userOpHash, packing, bundler RPC. +4 tools, +30 tests. Per‑provider session‑key issuance (Safe / Kernel / Biconomy / Alchemy SW) queued as follow‑up PRs.
-- [ ] **SSE streaming demo + Go/Rust examples** (PR #32) — Server‑Sent Events wrapper for the chat stream, stdlib‑only Go example, reqwest+rustls Rust example.
 
 ### Next up
 - [ ] **Drift / Marginfi / Kamino signed actions** — bring each from read‑only to signed execution on top of PR #30's Solana foundation
-- [ ] **Per‑provider ERC‑4337 session‑key issuance** — Safe, Kernel (ZeroDev), Biconomy, Alchemy SW on top of PR #31's foundation
+- [ ] **Per‑provider ERC‑4337 session‑key issuance** — Safe, Kernel (ZeroDev), Biconomy, Alchemy SW on top of the foundation already shipped
 - [ ] Claude Code plugin marketplace listing
 - [ ] Video tutorials & walkthroughs
 - [ ] Community template submissions

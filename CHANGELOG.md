@@ -30,6 +30,28 @@ Custody-free shared primitives for every v0.7 smart-contract wallet. The plugin 
 
 Why this is a "foundation" rather than a full session-key flow: each major SCW provider (Safe + Zodiac, Kernel/ZeroDev, Biconomy, Alchemy SW) has its own validator-module ABI for session keys. Picking one would lock the plugin into a single vendor. Shipping the shared primitives that every v0.7 SCW needs lets provider-specific PRs layer on top without re-engineering the foundation.
 
+### Added — SSE streaming demo + Go/Rust SDK examples
+Closes three "Next up" roadmap items in one minimal PR: SSE demo, Go example, Rust example. Each is intentionally self-contained (own README, own deps) so users can copy a single directory out and run it.
+
+- **`examples/sse/`** — Server-Sent Events demo around `GeneralChat.createChatStream(...)`:
+  - `server.js` — Express endpoint `GET /sse/chat?q=...` that pipes the chat stream to the browser as SSE. Sends named `token` / `done` / `error` events. 15s `: keep-alive` heartbeat prevents intermediate proxies from idling the connection out. Sets `x-accel-buffering: no` so nginx/CDNs don't buffer.
+  - `client.html` — single-file browser EventSource client. Renders tokens as they arrive, closes the connection on `done`, displays errors inline.
+  - `README.md` — run instructions + SSE wire-format primer + "why SSE over WebSockets" rationale.
+- **`examples/go/`** — stdlib-only Go program calling `POST /news/getNews`:
+  - `main.go` — `net/http` + `encoding/json`, single file, no SDK dep. Honors `CHAINGPT_API_BASE` so it can target the mock server.
+  - `go.mod` — module declaration (`go 1.21`, zero deps).
+  - `README.md` — run + override instructions, link to the gateway docs.
+- **`examples/rust/`** — reqwest (blocking, rustls-tls) + serde program calling the same news endpoint:
+  - `src/main.rs` — single source file with friendly error reporting and `CHAINGPT_API_BASE` override.
+  - `Cargo.toml` — pinned reqwest 0.12 with rustls instead of native-tls so the binary works in Alpine/scratch containers without OpenSSL.
+  - `README.md` — run + override instructions, "why blocking", "why rustls" rationale.
+- **`scripts/test-all.sh`** — examples layer extended:
+  - `find examples/js examples/sse` instead of just `examples/js` (catches the new SSE server).
+  - When `go` is on PATH, runs `go vet ./...` under `examples/go/`.
+  - When `cargo` is on PATH, runs `cargo check` under `examples/rust/`.
+  - Both Go and Rust report `skip` (not `fail`) when the toolchain is absent, so the layer stays green on machines without those compilers.
+- **README roadmap** — SSE streaming demo and Multi-language SDK examples (Go, Rust) checked off in the "Next up" section.
+
 ## [Unreleased] - 2026-05-19
 ### Added — Unified test harness (`scripts/test-all.sh` + `TESTING.md`)
 - `scripts/test-all.sh` — single orchestrator that runs all six test layers (validate / typecheck / mcp-test / mock-test / examples / live smoke). Supports `--fast` to skip live smoke, `--only <layer>` for a single layer, `--skip-drift` for when `dlob.drift.trade` is in an outage. Summary report with per-layer timing and pass/fail/skip counts.
