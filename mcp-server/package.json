@@ -1,6 +1,6 @@
 {
   "name": "@chaingpt/mcp-server",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "MCP server exposing ChainGPT Web3 AI APIs + generic Web3 tools + mainnet deploy + mainnet DEX (OpenOcean + 1inch + CoW + Jupiter) + mainnet DeFi (Aave + Lido + EigenLayer + Pendle + Morpho) + perps (Hyperliquid + Drift) + Polymarket + Across cross-chain bridge + multi-protocol portfolio snapshot as tools for Claude",
   "main": "dist/index.js",
   "bin": {
@@ -23,6 +23,7 @@
     "@chaingpt/smartcontractgenerator": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@msgpack/msgpack": "^3.1.3",
+    "@solana/web3.js": "^1.95.4",
     "dotenv": "^16.0.0",
     "qrcode": "^1.5.4",
     "solc": "^0.8.34",

@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.10.0] - 2026-05-19
+### Added — Tier 6.5 Solana signing foundation + native/SPL transfer (2 new tools)
+Custody-free Solana transaction building lands. The plugin now constructs unsigned `VersionedTransaction`s that the user signs in Phantom / Backpack / Solflare / hardware wallet and submits via their preferred RPC.
+
+- **`mcp-server/src/lib/solana-sign.ts`** — foundation:
+  - Public RPC fallback (`api.mainnet-beta.solana.com` → `solana-rpc.publicnode.com` for mainnet; devnet + testnet endpoints for the other networks). Override via `SOLANA_RPC_URL`.
+  - `makeConnection(network)` with per-(network,endpoint) cache.
+  - `parseAddress(addr, label)` — friendly base58 validation that surfaces the field name in the error.
+  - `buildVersionedTransaction({ payer, instructions, connection })` — fetches a fresh blockhash, compiles a v0 message, returns an unsigned tx plus the blockhash + lastValidBlockHeight.
+  - `serializeUnsigned` / `deserializeUnsigned` — base64 ser/de of `VersionedTransaction`.
+  - SPL instruction builders: `buildSolTransferInstruction`, `buildSplTransferCheckedInstruction` (discriminator 12, always emits mint + decimals so the runtime catches mint-mismatch), `buildCreateAtaIdempotentInstruction` (discriminator 1, safe to always include before a first-time-recipient SPL transfer).
+  - `deriveAssociatedTokenAccount(owner, mint, tokenProgramId?)` — canonical ATA PDA for both classic Token and Token-2022.
+  - `fetchMintInfo(conn, mint)` — decodes mint decimals + auto-detects Token vs Token-2022 from the account owner.
+- **`mcp-server/src/tools/solana.ts`** — tool surface:
+  - `chaingpt_solana_build_transfer_tx` — native SOL or SPL token transfer. Decimals auto-fetched from the mint. ATAs auto-derived. Idempotent create-ATA prepended so first-time-recipient transfers work without an extra setup step. `acknowledgeMainnet:true` required on `network=mainnet`.
+  - `chaingpt_solana_decode_tx` — decode an unsigned base64 versioned transaction (payer, blockhash, instruction list with program-id annotations for System / SPL Token / Token-2022 / Associated Token / Compute Budget).
+- **`mcp-server/src/__tests__/solana.test.ts`** — 29 new vitest cases:
+  - Tool surface assertions (exact names, schema validity).
+  - "No tool accepts a secret-key-shaped parameter" — belt-and-suspenders custody-free guard that breaks the build if a future addition adds `privateKey` / `mnemonic` / `seedPhrase` to any schema.
+  - `parseAddress` happy + error paths.
+  - `decimalToBaseUnits` — whole, fractional, zero, over-precision, malformed, non-string.
+  - ATA derivation determinism + Token-vs-Token-2022 divergence.
+  - Instruction-builder layout assertions (discriminators, account ordering, writable/signer flags, amount + decimals byte positions).
+  - `buildVersionedTransaction` round-trip — serialize, deserialize, assert structural identity.
+  - Mainnet ack gate (refusal text + the explicit checklist).
+  - Devnet happy path with mocked `Connection.getLatestBlockhash`.
+  - Decode tool: full annotated output, error on garbage base64, error on missing arg.
+  - Unknown tool name returns the friendly error path.
+- **`skills/solana/SKILL.md`** — new sub-skill documenting the surface, custody model, mainnet gate, typical flow, why `TransferChecked` over `Transfer`, RPC override knob, and what is deliberately *not* yet implemented (Drift / Marginfi / Kamino signed actions — they reuse this foundation in follow-up PRs).
+- **`@solana/web3.js@1.95.4`** added as a runtime dep on `mcp-server`. ~1MB transitive footprint.
+- **Version bumped to 1.10.0** across `VERSION`, `.claude-plugin/plugin.json`, `mcp-server/package.json`, `mcp-server/src/index.ts` Server() literal, and the README badge.
+
+Why this PR is foundational rather than full Drift/Marginfi/Kamino signing: each of those protocols needs careful per-instruction encoding (Anchor IDLs, oracle pubkeys, PDA derivation, market accounts). Doing all three at once in one autonomous PR is too much surface to land safely. The transfer tool exercises the entire pipeline (RPC, blockhash, instruction encoding, v0 message, base64 ser/de) end-to-end, and per-protocol signed actions can be layered on top in subsequent PRs without changing the foundation.
+
 ## [Unreleased] - 2026-05-19
 ### Added — Tier 7 ERC-4337 v0.7 account-abstraction foundation (4 new tools)
 Custody-free shared primitives for every v0.7 smart-contract wallet. The plugin never sees an owner key or session key; it computes the userOpHash the signer signs and proxies read-only bundler-RPC calls. Provider-specific session-key issuance (Safe / Kernel / Biconomy / Alchemy SW) is queued as follow-up PRs that layer on this foundation.
