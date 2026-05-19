@@ -29,6 +29,7 @@ import { bridgeTools, handleBridgeTool } from './tools/bridge.js';
 import { aggregatorTools, handleAggregatorTool } from './tools/aggregators.js';
 import { yieldTools, handleYieldTool } from './tools/yield.js';
 import { driftTools, handleDriftTool } from './tools/drift.js';
+import { portfolioTools, handlePortfolioTool } from './tools/portfolio.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -68,6 +69,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...aggregatorTools,
     ...yieldTools,
     ...driftTools,
+    ...portfolioTools,
   ],
 }));
 
@@ -114,6 +116,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);
+    if (name.startsWith('chaingpt_portfolio')) return await handlePortfolioTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {
