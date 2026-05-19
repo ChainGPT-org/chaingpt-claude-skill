@@ -6,26 +6,54 @@ on:
   pull_request:
     branches: ["**"]
 
+# Split CI into parallel jobs so a single failure point gets fast feedback
+# instead of waiting for the whole serial pipeline.
 jobs:
-  test:
+  typecheck:
+    name: TypeScript (tsc --noEmit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: |
-            mcp-server/package-lock.json
-            mock-server/package-lock.json
+          cache-dependency-path: mcp-server/package-lock.json
+      - name: Install mcp-server deps
+        run: cd mcp-server && npm ci
+      - name: Type-check
+        run: cd mcp-server && node node_modules/typescript/bin/tsc --noEmit
 
+  test-mcp:
+    name: vitest (mcp-server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
       - name: Install and test mcp-server
         run: cd mcp-server && npm ci && npm test
 
+  test-mock:
+    name: vitest (mock-server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mock-server/package-lock.json
       - name: Install and test mock-server
         run: cd mock-server && npm ci && npm test
 
+  validate:
+    name: validate.sh (file/frontmatter checks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Run validate.sh
         run: bash scripts/validate.sh
