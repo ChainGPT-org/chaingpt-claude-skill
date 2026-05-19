@@ -10,16 +10,50 @@ Full API reference. **~99 MCP tools** spanning ChainGPT AI products, EVM + Solan
 
 [![npm version](https://img.shields.io/badge/version-1.9.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen?style=flat-square)](#-249-passing-tests)
+[![Tests](https://img.shields.io/badge/tests-250%20%2B%2026%20%2B%20157%20%2B%2039-brightgreen?style=flat-square)](#-testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Get Started](#-quickstart) · [Features](#-what-you-get) · [Agent Wallet](#agent-wallet--give-the-ai-agent-its-own-wallet-with-admin-policy-gates-7-tools--new-in-19) · [MCP Server](#-mcp-server--99-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Get Started](#-quickstart) · [Features](#-what-you-get) · [Agent Wallet](#-the-agent-wallet-dashboard) · [MCP Server](#-mcp-server--99-tools) · [Templates](#-11-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
 ---
+
+<br/>
+
+## 🖥️ The Agent Wallet Dashboard
+
+Ships with a real localhost wallet UI for the AI agent — not just a CLI. Encrypted EOA keystore, admin-controlled policy gate the agent **cannot bypass** even under prompt injection, kill switch, 9 policy templates including 🚨 unrestricted mode, custom EVM chain registration, blue-chip auto-scan.
+
+<p align="center">
+  <a href="docs/screenshots/agent-wallet-dashboard.png">
+    <img src="docs/screenshots/agent-wallet-dashboard.png" alt="Agent Wallet admin dashboard — Assets tab showing deposit address, QR code, custom token form, and multi-chain balance list" width="900" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="docs/screenshots/agent-wallet-policy.png"><img src="docs/screenshots/agent-wallet-policy.png" alt="Policy tab — kill-switch banner + 9 one-click templates" width="290" /></a>
+  <a href="docs/screenshots/agent-wallet-activity.png"><img src="docs/screenshots/agent-wallet-activity.png" alt="Activity tab — agent-initiated transactions" width="290" /></a>
+  <a href="docs/screenshots/agent-wallet-settings.png"><img src="docs/screenshots/agent-wallet-settings.png" alt="Settings tab — custom EVM chains + file paths" width="290" /></a>
+</p>
+
+**Launch it locally in 30 seconds:**
+
+```bash
+# 1. Set a strong passphrase (>=16 chars) for the encrypted keystore
+export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-here-min-16-chars"
+
+# 2. Try the dashboard without touching your real ~/.chaingpt-mcp/ files
+node scripts/demo-agent-wallet-dashboard.mjs
+```
+
+Open **`http://127.0.0.1:8787/`**. The console prints a one-time admin token — paste it at the login screen.
+
+> Bound to `127.0.0.1` only — never `0.0.0.0`. Origin + Referer check on every POST. Session cookie is HttpOnly + SameSite=Strict + 1h sliding TTL. Admin token rotates on every restart.
+
+The skill also ships a **mock API server** at `http://localhost:3001` for zero-credit local development against the ChainGPT API surface — that one is a JSON endpoint, no UI. See [Testing](#-testing) for details.
 
 <br/>
 
