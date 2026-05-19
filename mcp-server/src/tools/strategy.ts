@@ -117,6 +117,27 @@ export const strategyTools: Tool[] = [
       required: ['coinId'],
     },
   },
+  {
+    name: 'chaingpt_backtest_grid',
+    description:
+      'Backtest a grid-trading strategy against historical prices. Replays a fixed buy/sell ladder between ' +
+      'priceLow and priceHigh through the full window, tracking trades triggered, average fill, final inventory, ' +
+      'and grid P&L vs buy-and-hold. Uses CoinGecko historical data. 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        coinId: { type: 'string', description: 'CoinGecko coin id.' },
+        vs: { type: 'string', description: 'Quote currency. Default "usd".', default: 'usd' },
+        days: { type: 'number', description: 'Lookback window in days. Default 30.', default: 30 },
+        priceLow: { type: 'number', description: 'Lower bound of the grid (quote currency).' },
+        priceHigh: { type: 'number', description: 'Upper bound of the grid (quote currency).' },
+        levels: { type: 'number', description: 'Number of grid levels per side. Default 10.', default: 10 },
+        totalBudget: { type: 'number', description: 'Total quote-currency budget (split equally per buy level). Default 1000.', default: 1000 },
+        feeBps: { type: 'number', description: 'Per-trade fee in basis points. Default 10 (0.10%).', default: 10 },
+      },
+      required: ['coinId', 'priceLow', 'priceHigh'],
+    },
+  },
 ];
 
 function formatUsd(n: number): string {
@@ -389,6 +410,135 @@ export async function handleStrategyTool(
         dcaPnlPct > bhPnlPct
           ? '→ DCA outperformed in this period (price probably trended down then up).'
           : '→ B&H outperformed (price probably trended up; DCA missed the early entry).',
+      ];
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    if (name === 'chaingpt_backtest_grid') {
+      const coinId = String(args.coinId).toLowerCase();
+      const vs = String(args.vs ?? 'usd');
+      const days = Math.max(1, Math.min(Number(args.days ?? 30), 365));
+      const priceLow = Number(args.priceLow);
+      const priceHigh = Number(args.priceHigh);
+      const levels = Math.max(2, Math.min(Number(args.levels ?? 10), 50));
+      const totalBudget = Number(args.totalBudget ?? 1000);
+      const feeBps = Math.max(0, Math.min(Number(args.feeBps ?? 10), 1000));
+
+      if (priceLow >= priceHigh) {
+        return { content: [{ type: 'text', text: 'priceLow must be less than priceHigh.' }] };
+      }
+
+      const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=${vs}&days=${days}`;
+      const res = await httpJson<{ prices: Array<[number, number]> }>(url);
+      const prices = res.prices ?? [];
+      if (prices.length < 10) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Not enough price data: got ${prices.length} candles. Try a longer window.`,
+          }],
+        };
+      }
+
+      // Build grid: `levels` buy levels below mid, `levels` sell levels above mid.
+      const mid = (priceLow + priceHigh) / 2;
+      const buyLevels: number[] = [];
+      const sellLevels: number[] = [];
+      for (let i = 1; i <= levels; i++) {
+        buyLevels.push(priceLow + ((mid - priceLow) * (i - 1)) / levels);
+        sellLevels.push(mid + ((priceHigh - mid) * i) / levels);
+      }
+      // Allocate budget evenly across buy levels (quote-currency per level)
+      const perBuyQuote = totalBudget / levels;
+      const feeRate = feeBps / 10_000;
+
+      // Track inventory: { tokens, costBasis, buyOrders (open levels), sellOrders }
+      // At each price tick: any unfilled buy whose price ≥ current candle gets filled;
+      // any unfilled sell whose price ≤ current candle gets filled.
+      // After a buy fills, place a sell order at the next-higher level.
+      // After a sell fills, place a buy order at the next-lower level.
+      type Order = { side: 'buy' | 'sell'; price: number; size: number };
+      const openOrders: Order[] = buyLevels.map((p) => ({ side: 'buy', price: p, size: perBuyQuote / p }));
+      let cashQuote = totalBudget;
+      let tokensHeld = 0;
+      let realizedQuotePnl = 0;
+      let totalFees = 0;
+      let buysFilled = 0;
+      let sellsFilled = 0;
+
+      for (const [, candlePrice] of prices) {
+        // Iterate buy fills first (a buy gets hit when candle dips at/below its price)
+        for (let i = openOrders.length - 1; i >= 0; i--) {
+          const o = openOrders[i];
+          if (o.side === 'buy' && candlePrice <= o.price) {
+            const cost = o.size * o.price;
+            if (cashQuote < cost) continue; // skip if out of cash
+            const fee = cost * feeRate;
+            cashQuote -= cost + fee;
+            totalFees += fee;
+            tokensHeld += o.size;
+            buysFilled++;
+            // Replace with a sell order one level up (or at mid+step if at top of buy ladder)
+            const sellTarget = sellLevels.find((p) => p > o.price && !openOrders.some((x) => x.side === 'sell' && Math.abs(x.price - p) < 1e-9));
+            if (sellTarget !== undefined) {
+              openOrders.splice(i, 1, { side: 'sell', price: sellTarget, size: o.size });
+            } else {
+              openOrders.splice(i, 1);
+            }
+          } else if (o.side === 'sell' && candlePrice >= o.price) {
+            const proceeds = o.size * o.price;
+            const fee = proceeds * feeRate;
+            cashQuote += proceeds - fee;
+            totalFees += fee;
+            tokensHeld -= o.size;
+            // Realized PnL = sell - buy (we assume FIFO matching at grid step pricing)
+            // Approximate: each grid sell captures the (sellPrice - nextLowerBuyPrice) spread × size
+            const buyMatch = buyLevels.find((p) => p < o.price && !openOrders.some((x) => x.side === 'buy' && Math.abs(x.price - p) < 1e-9));
+            if (buyMatch !== undefined) {
+              realizedQuotePnl += (o.price - buyMatch) * o.size;
+              openOrders.splice(i, 1, { side: 'buy', price: buyMatch, size: o.size });
+            } else {
+              openOrders.splice(i, 1);
+            }
+            sellsFilled++;
+          }
+        }
+      }
+
+      const endPrice = prices[prices.length - 1][1];
+      const startPrice = prices[0][1];
+      const finalValue = cashQuote + tokensHeld * endPrice;
+      const gridPnl = finalValue - totalBudget;
+      const gridPnlPct = (gridPnl / totalBudget) * 100;
+      const bhTokens = totalBudget / startPrice;
+      const bhFinal = bhTokens * endPrice;
+      const bhPnl = bhFinal - totalBudget;
+      const bhPnlPct = (bhPnl / totalBudget) * 100;
+
+      const lines = [
+        `Backtest — Grid on ${coinId} over ${days}d`,
+        '',
+        `Range:              $${priceLow.toFixed(4)} – $${priceHigh.toFixed(4)}    Levels per side: ${levels}`,
+        `Start price:        $${startPrice.toFixed(4)}    End price: $${endPrice.toFixed(4)}    Move: ${(((endPrice - startPrice) / startPrice) * 100).toFixed(2)}%`,
+        `Total budget:       ${formatUsd(totalBudget)}    Fee: ${(feeBps / 100).toFixed(2)}%`,
+        '',
+        'Grid results:',
+        `  Buys filled:      ${buysFilled}`,
+        `  Sells filled:     ${sellsFilled}`,
+        `  Total fees paid:  ${formatUsd(totalFees)}`,
+        `  Realized P&L from grid spreads:  ${formatUsd(realizedQuotePnl)}`,
+        `  Inventory held:   ${tokensHeld.toFixed(6)} tokens (worth ${formatUsd(tokensHeld * endPrice)} at end)`,
+        `  Cash remaining:   ${formatUsd(cashQuote)}`,
+        `  Final value:      ${formatUsd(finalValue)}`,
+        `  Net P&L:          ${gridPnl >= 0 ? '+' : ''}${formatUsd(gridPnl)}    (${gridPnlPct >= 0 ? '+' : ''}${gridPnlPct.toFixed(2)}%)`,
+        '',
+        'Buy-and-hold baseline (all at start price):',
+        `  Final value:      ${formatUsd(bhFinal)}    P&L: ${bhPnlPct >= 0 ? '+' : ''}${bhPnlPct.toFixed(2)}%`,
+        '',
+        `Delta Grid vs B&H: ${(gridPnlPct - bhPnlPct).toFixed(2)} pct points`,
+        gridPnlPct > bhPnlPct
+          ? '→ Grid outperformed (mean-reverting / range-bound regime).'
+          : '→ B&H outperformed (trending regime — grid sold winners too early).',
       ];
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }

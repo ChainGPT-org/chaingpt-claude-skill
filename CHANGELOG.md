@@ -1,6 +1,26 @@
 # Changelog
 
 ## [1.9.0] - 2026-05-18
+### Added — Tier 6.5 Solana lending (4 new tools)
+Completes the Solana DeFi triad alongside Drift (perps).
+- **Marginfi v2** (`chaingpt_defi_marginfi_banks / account`) — list banks with supply/borrow APYs + utilization; user account view with deposits/borrows + health ratio.
+- **Kamino** (`chaingpt_defi_kamino_markets / vaults`) — lending markets + vault strategies (Kamino Multiply, automated yield).
+- Read-only. Defensive endpoint parsing: tries v2 then falls back to legacy paths; surfaces a friendly error pointing at the official UI when both endpoints fail.
+
+### Added — Strategy plan persistence (4 new tools)
+File-backed save/load/list/delete for multi-session strategies.
+- `chaingpt_strategy_save_plan / load_plan / list_plans / delete_plan`
+- Stored as JSON under `~/.chaingpt-mcp/plans/` (overridable via `$CHAINGPT_PLAN_DIR`).
+- Plans stay on the user's machine — no remote upload.
+- Filesystem-safe name sanitization prevents path-traversal.
+- `delete_plan` requires explicit `confirm: true`.
+
+### Added — Grid backtester (1 new tool)
+`chaingpt_backtest_grid` replays a buy/sell ladder against historical CoinGecko prices. Reports buys filled, sells filled, total fees paid, realized P&L from grid spreads, inventory held, and the delta vs buy-and-hold. Catches the "oscillating range = grid wins, trending = B&H wins" intuition empirically.
+
+### Changed — CI split for fast feedback
+`.github/workflows/ci.yml` now runs four parallel jobs: `typecheck` (`tsc --noEmit`), `test-mcp` (vitest mcp-server), `test-mock` (vitest mock-server), and `validate` (file/frontmatter checks). Previously these were serial — a vitest failure delayed seeing the validate failure by minutes.
+
 ### Added — Tier 6 protocol breadth (~17 new tools)
 Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
 
@@ -30,8 +50,8 @@ Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
 - Plugin to v1.9.0; MCP server to v1.9.0.
 
 ### Test count
-- Unit tests: 142 → 192 (+50 across 5 new test files: bridge, aggregators, yield, drift, portfolio).
-- Live-API smoke: 28 → 38 cases wired.
+- Unit tests: 142 → 210 (+68 across 7 new test files: bridge, aggregators, yield, drift, portfolio, solana_lending, plans).
+- Live-API smoke: 28 → 43 cases wired.
 
 ## [1.8.0] - 2026-05-19
 ### Added — Tier 4 agent infrastructure: strategy planners + backtester

@@ -9,7 +9,7 @@ process.env.CHAINGPT_API_KEY = 'test-key';
 import { strategyTools, handleStrategyTool } from '../tools/strategy.js';
 
 describe('Strategy tool definitions', () => {
-  it('exposes 5 strategy / backtest tools', () => {
+  it('exposes 6 strategy / backtest tools', () => {
     const names = strategyTools.map((t) => t.name);
     expect(names).toEqual([
       'chaingpt_strategy_dca_plan',
@@ -17,6 +17,7 @@ describe('Strategy tool definitions', () => {
       'chaingpt_strategy_funding_arb_plan',
       'chaingpt_strategy_copy_plan',
       'chaingpt_backtest_dca',
+      'chaingpt_backtest_grid',
     ]);
   });
 
@@ -117,6 +118,56 @@ describe('Copy planner', () => {
     expect(t).toContain('chaingpt_onchain_address');
     expect(t).toContain('chaingpt_risk_token');
     expect(t).toContain('chaingpt_dex_build_swap_tx');
+  });
+});
+
+describe('Grid backtester', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('captures fills when price oscillates inside the range', async () => {
+    // Sinusoidal price between 90 and 110 over 100 candles — should trigger many grid fills.
+    const now = Date.now();
+    const prices: Array<[number, number]> = [];
+    for (let i = 0; i < 100; i++) {
+      const ts = now - (100 - i) * 3600 * 1000;
+      const p = 100 + Math.sin(i / 5) * 8; // oscillates 92..108
+      prices.push([ts, p]);
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ prices }), { status: 200, headers: { 'content-type': 'application/json' } })
+    );
+    const r = await handleStrategyTool('chaingpt_backtest_grid', {
+      coinId: 'ethereum',
+      days: 5,
+      priceLow: 90,
+      priceHigh: 110,
+      levels: 5,
+      totalBudget: 1000,
+      feeBps: 10,
+    });
+    const t = r.content[0].text;
+    expect(t).toContain('Backtest — Grid');
+    expect(t).toContain('Buys filled');
+    expect(t).toContain('Sells filled');
+    expect(t).toContain('Realized P&L from grid spreads');
+    expect(t).toContain('Inventory held');
+    expect(t).toContain('Buy-and-hold baseline');
+    // The oscillating regime should trigger > 0 buys + sells
+    const buysMatch = t.match(/Buys filled:\s+(\d+)/);
+    const sellsMatch = t.match(/Sells filled:\s+(\d+)/);
+    expect(buysMatch).not.toBeNull();
+    expect(sellsMatch).not.toBeNull();
+    expect(Number(buysMatch![1])).toBeGreaterThan(0);
+    expect(Number(sellsMatch![1])).toBeGreaterThan(0);
+  });
+
+  it('refuses priceLow >= priceHigh', async () => {
+    const r = await handleStrategyTool('chaingpt_backtest_grid', {
+      coinId: 'ethereum',
+      priceLow: 100,
+      priceHigh: 50,
+    });
+    expect(r.content[0].text).toContain('priceLow must be less than priceHigh');
   });
 });
 

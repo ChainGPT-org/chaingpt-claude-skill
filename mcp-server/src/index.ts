@@ -30,6 +30,8 @@ import { aggregatorTools, handleAggregatorTool } from './tools/aggregators.js';
 import { yieldTools, handleYieldTool } from './tools/yield.js';
 import { driftTools, handleDriftTool } from './tools/drift.js';
 import { portfolioTools, handlePortfolioTool } from './tools/portfolio.js';
+import { solanaLendingTools, handleSolanaLendingTool } from './tools/solana_lending.js';
+import { planTools, handlePlanTool } from './tools/plans.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -70,6 +72,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...yieldTools,
     ...driftTools,
     ...portfolioTools,
+    ...solanaLendingTools,
+    ...planTools,
   ],
 }));
 
@@ -110,9 +114,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_dex_1inch') || name.startsWith('chaingpt_dex_cow')) return await handleAggregatorTool(name, args);
     if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
     if (name.startsWith('chaingpt_defi_pendle') || name.startsWith('chaingpt_defi_morpho')) return await handleYieldTool(name, args);
+    if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) return await handleSolanaLendingTool(name, args);
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
+    if (name === 'chaingpt_strategy_save_plan' || name === 'chaingpt_strategy_load_plan' || name === 'chaingpt_strategy_list_plans' || name === 'chaingpt_strategy_delete_plan') return await handlePlanTool(name, args);
     if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);

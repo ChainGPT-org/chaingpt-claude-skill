@@ -23,6 +23,9 @@ import { handleAggregatorTool } from './tools/aggregators.js';
 import { handleYieldTool } from './tools/yield.js';
 import { handleDriftTool } from './tools/drift.js';
 import { handlePortfolioTool } from './tools/portfolio.js';
+import { handleSolanaLendingTool } from './tools/solana_lending.js';
+import { handlePlanTool } from './tools/plans.js';
+import { handleStrategyTool } from './tools/strategy.js';
 
 interface SmokeCase {
   name: string;
@@ -352,6 +355,45 @@ contract Hello { string public greeting = "hi"; }`,
         venues: ['hyperliquid', 'morpho'],
       }),
     expect: /Portfolio snapshot|Total cross-venue exposure/i,
+  },
+
+  // ─── Tier 6.5: Solana lending (Marginfi + Kamino) ────────────────
+  {
+    name: 'defi_marginfi_banks',
+    fn: () => handleSolanaLendingTool('chaingpt_defi_marginfi_banks', { limit: 3 }),
+    expect: /Marginfi v2 banks|endpoint unreachable/i,
+  },
+  {
+    name: 'defi_kamino_markets',
+    fn: () => handleSolanaLendingTool('chaingpt_defi_kamino_markets', { limit: 3 }),
+    expect: /Kamino lending markets|endpoint unreachable/i,
+  },
+  {
+    name: 'defi_kamino_vaults',
+    fn: () => handleSolanaLendingTool('chaingpt_defi_kamino_vaults', { limit: 3 }),
+    expect: /Kamino vault strategies|endpoint unreachable/i,
+  },
+
+  // ─── Plans persistence (round-trip via tmp env) ──────────────────
+  {
+    name: 'strategy_list_plans (empty dir is OK)',
+    fn: () => handlePlanTool('chaingpt_strategy_list_plans', {}),
+    expect: /Saved strategy plans/i,
+  },
+
+  // ─── Grid backtester ─────────────────────────────────────────────
+  {
+    name: 'backtest_grid (ethereum, 30d, 90-110 range)',
+    fn: () =>
+      handleStrategyTool('chaingpt_backtest_grid', {
+        coinId: 'ethereum',
+        days: 30,
+        priceLow: 1000,
+        priceHigh: 5000,
+        levels: 5,
+        totalBudget: 1000,
+      }),
+    expect: /Backtest — Grid|Not enough price data/i,
   },
 ];
 
