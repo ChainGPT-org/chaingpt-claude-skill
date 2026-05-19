@@ -1,6 +1,27 @@
 # Changelog
 
 ## [1.9.0] - 2026-05-18
+### Added — Tier 5 agent wallet with admin-controlled policy gate (7 new tools)
+The agent has its own EOA. The admin sets policies the agent CANNOT bypass — even under prompt injection.
+
+- **Encrypted keystore** at `~/.chaingpt-mcp/agent-wallet/keystore.json`. AES-256-GCM + scrypt (N=2^14) KDF. Passphrase from `CHAINGPT_AGENT_WALLET_PASSPHRASE` env var; agent never sees it. File 0600, dir 0700.
+- **Policy file** at `~/.chaingpt-mcp/agent-wallet/policy.json`. Admin edits with a text editor. **No MCP tool writes this file** — that's the defense against prompt-injected "relax your own rules" attacks.
+- **Defaults fail-closed:** new policy is `killSwitch: true`. Agent refuses every signing op until admin opts in.
+- **Deterministic policy gate** runs on every `chaingpt_agent_wallet_sign_and_send` call: chain whitelist, allow/block address lists, max value, max gas, blocked function selectors, optional memo requirement. Loaded fresh on each call.
+
+Tools:
+- `chaingpt_agent_wallet_init` — generate + encrypt + persist (one-shot, refuses overwrite)
+- `chaingpt_agent_wallet_address` — public address (for receiving funds, no decryption)
+- `chaingpt_agent_wallet_status` — full overview + policy digest + kill-switch state
+- `chaingpt_agent_wallet_balances` — multi-chain native-coin balances
+- `chaingpt_agent_wallet_policy` — display current policy (read-only)
+- `chaingpt_agent_wallet_sign_and_send` — the only fund-moving tool; policy-gated
+- `chaingpt_agent_wallet_serve_ui` — local HTML dashboard on `127.0.0.1:8787` (read-only)
+
+New `skills/agent-wallet/SKILL.md` documents the threat model, policy file format, and setup flow.
+
+22 new tests covering keystore round-trip, all policy refusal paths, sign-and-send gate, and a hard test that the tool surface contains NO "set policy" or "unlock" or "export key" surface (catches future regressions).
+
 ### Added — Tier 6.5 Solana lending (4 new tools)
 Completes the Solana DeFi triad alongside Drift (perps).
 - **Marginfi v2** (`chaingpt_defi_marginfi_banks / account`) — list banks with supply/borrow APYs + utilization; user account view with deposits/borrows + health ratio.
@@ -50,8 +71,8 @@ Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
 - Plugin to v1.9.0; MCP server to v1.9.0.
 
 ### Test count
-- Unit tests: 142 → 210 (+68 across 7 new test files: bridge, aggregators, yield, drift, portfolio, solana_lending, plans).
-- Live-API smoke: 28 → 43 cases wired.
+- Unit tests: 142 → 232 (+90 across 8 new test files: bridge, aggregators, yield, drift, portfolio, solana_lending, plans, agent_wallet).
+- Live-API smoke: 28 → 43 cases wired (agent-wallet tests are local-only — no remote endpoints).
 
 ## [1.8.0] - 2026-05-19
 ### Added — Tier 4 agent infrastructure: strategy planners + backtester
