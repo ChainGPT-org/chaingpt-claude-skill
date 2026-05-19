@@ -43,12 +43,21 @@ export function loadCustomChains(): CustomChain[] {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((c): c is CustomChain =>
-      typeof c === 'object' && c !== null &&
-      typeof c.slug === 'string' && typeof c.chainId === 'number' &&
-      typeof c.name === 'string' && typeof c.native === 'string' &&
-      typeof c.rpcUrl === 'string'
-    );
+    return parsed.filter((c): c is CustomChain => {
+      if (typeof c !== 'object' || c === null) return false;
+      if (typeof c.slug !== 'string' || c.slug.length === 0) return false;
+      if (typeof c.chainId !== 'number' || !Number.isInteger(c.chainId) || c.chainId < 1) return false;
+      if (typeof c.name !== 'string' || c.name.length === 0) return false;
+      if (typeof c.native !== 'string' || c.native.length === 0) return false;
+      if (typeof c.rpcUrl !== 'string' || !/^https?:\/\//i.test(c.rpcUrl)) return false;
+      if (typeof c.addedAt !== 'string') return false;
+      if (c.rpcFallbacks !== undefined) {
+        if (!Array.isArray(c.rpcFallbacks)) return false;
+        if (!c.rpcFallbacks.every((u: unknown) => typeof u === 'string' && /^https?:\/\//i.test(u))) return false;
+      }
+      if (c.explorer !== undefined && (typeof c.explorer !== 'string' || !/^https?:\/\//i.test(c.explorer))) return false;
+      return true;
+    });
   } catch {
     return [];
   }
@@ -94,7 +103,9 @@ export function addCustomChain(input: Omit<CustomChain, 'addedAt'>): { ok: true;
 }
 
 export function removeCustomChain(slug: string): CustomChain[] {
-  const list = loadCustomChains().filter((c) => c.slug !== slug);
+  // Case-insensitive match — admin may pass "Zora" or "ZORA" via the UI form
+  const normalized = slug.toLowerCase();
+  const list = loadCustomChains().filter((c) => c.slug.toLowerCase() !== normalized);
   saveCustomChains(list);
   return list;
 }
@@ -135,7 +146,9 @@ export function resolveChainWithCustom(input: string | number | undefined | null
 }
 
 export function rpcEndpointsWithCustom(slug: string): string[] {
-  const c = mergedChains()[slug];
+  // Case-insensitive lookup so "Base" and "base" both resolve.
+  const merged = mergedChains();
+  const c = merged[slug] ?? merged[slug.toLowerCase()];
   if (!c) return [];
   const list: string[] = [];
   if (c.publicRpc) list.push(c.publicRpc);

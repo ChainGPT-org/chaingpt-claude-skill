@@ -80,7 +80,11 @@ const DEFAULT_POLICY: AgentPolicy = {
   version: 1,
   killSwitch: true,
   allowedChains: [
-    // Chain IDs the agent may transact on. Empty array = none allowed.
+    // Chain IDs the agent may transact on.
+    // Semantics:
+    //   field omitted (undefined) → any chain allowed
+    //   empty array []            → NO chain allowed (explicit-empty = fail-closed)
+    //   non-empty                 → only listed chains allowed
     // 1     = Ethereum mainnet
     // 8453  = Base
     // 42161 = Arbitrum One
@@ -91,8 +95,11 @@ const DEFAULT_POLICY: AgentPolicy = {
     // 81457 = Blast    59144 = Linea    534352 = Scroll
   ],
   allowedToAddresses: [
-    // 0x-prefixed 20-byte hex. Lowercase recommended. Empty = nothing
-    // allowed (combined with killSwitch=true → fail-closed default).
+    // 0x-prefixed 20-byte hex. Lowercase recommended.
+    // Semantics:
+    //   field omitted (undefined) → any destination allowed
+    //   empty array []            → NO destination allowed (explicit-empty = fail-closed)
+    //   non-empty                 → only listed addresses allowed
     // Example router addresses you might allow (uncomment to use):
     //   "0x6352a56caadc4f1e25cd6c75970fa768a3304e64",  // OpenOcean v4 (multi-chain)
     //   "0x111111125421ca6dc452d289314280a0f8842a65",  // 1inch v6 (multi-chain)
@@ -187,8 +194,22 @@ export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()
     return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks)', policyDigest: digest };
   }
 
-  if (policy.allowedChains && policy.allowedChains.length > 0 && !policy.allowedChains.includes(intent.chainId)) {
-    return { allowed: false, reason: `Chain ${intent.chainId} is not in allowedChains [${policy.allowedChains.join(', ')}].`, policyDigest: digest };
+  // Semantics for the two allow-lists:
+  //   undefined  → no check (any allowed)
+  //   []         → EXPLICIT EMPTY: nothing allowed (refuse everything)
+  //   [a, b, …]  → must be in the list
+  //
+  // The explicit-empty branch is what makes the "Read-only explore" template
+  // actually read-only. Previously, [] was treated identically to undefined,
+  // which silently turned the read-only template into a "send anywhere" gate.
+  if (policy.allowedChains !== undefined && !policy.allowedChains.includes(intent.chainId)) {
+    return {
+      allowed: false,
+      reason: policy.allowedChains.length === 0
+        ? `allowedChains is explicitly empty — no chain is permitted.`
+        : `Chain ${intent.chainId} is not in allowedChains [${policy.allowedChains.join(', ')}].`,
+      policyDigest: digest,
+    };
   }
 
   const toLower = intent.to.toLowerCase();
@@ -197,9 +218,15 @@ export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()
     return { allowed: false, reason: `To-address ${intent.to} is in blockedToAddresses.`, policyDigest: digest };
   }
 
-  if (policy.allowedToAddresses && policy.allowedToAddresses.length > 0) {
+  if (policy.allowedToAddresses !== undefined) {
     if (!policy.allowedToAddresses.some((a) => a.toLowerCase() === toLower)) {
-      return { allowed: false, reason: `To-address ${intent.to} is not in allowedToAddresses (${policy.allowedToAddresses.length} entries).`, policyDigest: digest };
+      return {
+        allowed: false,
+        reason: policy.allowedToAddresses.length === 0
+          ? `allowedToAddresses is explicitly empty — no destination is permitted.`
+          : `To-address ${intent.to} is not in allowedToAddresses (${policy.allowedToAddresses.length} entries).`,
+        policyDigest: digest,
+      };
     }
   }
 

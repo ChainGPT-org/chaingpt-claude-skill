@@ -5,7 +5,7 @@
  * the user's real ~/.chaingpt-mcp/agent-wallet/ during tests.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -470,6 +470,9 @@ describe('Admin dashboard HTTP endpoints', () => {
   const PORT = 18790;
 
   beforeEach(() => resetState());
+  // Guaranteed teardown — a test that fails early would otherwise leave the
+  // UI server bound to its port and cascade-fail subsequent tests.
+  afterEach(() => _stopUiForTests());
 
   it('GET / shows login form when not authed', async () => {
     await handleAgentWalletTool('chaingpt_agent_wallet_init', {});

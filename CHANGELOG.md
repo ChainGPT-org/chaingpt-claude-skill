@@ -109,7 +109,7 @@ Plugin grows from "EVM trading + DeFi" into a multi-protocol Web3 toolkit.
 ### Added — Tier 10 live-API smoke CI
 - New `.github/workflows/smoke.yml` runs the smoke harness daily at 09:00 UTC + on-demand via `workflow_dispatch`.
 - On scheduled-run failure, opens a deduplicated GitHub issue labeled `smoke-failure` / `live-api` so endpoint drift gets caught within 24h.
-- Extended `src/smoke-test.ts` with 10 new cases for the tier-6 / tier-8 surface. Total smoke surface: 38 cases (up from 28).
+- Extended `src/smoke-test.ts` with new cases for the tier-6 / tier-8 / blue-chip / plans surface. Total smoke surface: **43 cases** (up from 28 at the start of this release cycle).
 
 ### Added — Skills
 - `skills/bridge/SKILL.md` — Across cross-chain pipeline (quote → approve → build_deposit → status).

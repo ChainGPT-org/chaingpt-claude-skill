@@ -10,12 +10,12 @@ Full API reference. **~99 MCP tools** spanning ChainGPT AI products, EVM + Solan
 
 [![npm version](https://img.shields.io/badge/version-1.9.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen?style=flat-square)](#-249-passing-tests)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Get Started](#-quickstart) · [Features](#-what-you-get) · [Agent Wallet](#agent-wallet--give-the-ai-agent-its-own-wallet-with-admin-policy-gates-7-tools--new-in-19) · [MCP Server](#-mcp-server--71-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Get Started](#-quickstart) · [Features](#-what-you-get) · [Agent Wallet](#agent-wallet--give-the-ai-agent-its-own-wallet-with-admin-policy-gates-7-tools--new-in-19) · [MCP Server](#-mcp-server--99-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -97,7 +97,7 @@ Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. M
 Audited, battle-tested smart contract patterns Claude composes from — ERC-20 variants, NFTs, DeFi, governance, security.
 
 ### 🧪 249 Passing Tests
-53 MCP server unit tests + 26 mock server endpoint tests. CI-ready out of the box.
+~223 MCP server unit tests across 16 files + 26 mock server endpoint tests, plus 43 live-API smoke cases (scheduled daily). CI-ready out of the box.
 
 ### 🛠️ Developer Tools
 Interactive playground, debug assistant, hackathon scaffolder, cost estimator, and migration guides from OpenAI/Alchemy.
@@ -433,7 +433,7 @@ Point your `CHAINGPT_BASE_URL` at `http://localhost:3001` and everything works e
 
 ### Run the full test suite
 
-**79 tests passing** across two suites:
+**249 tests passing** across two suites:
 
 ```bash
 # MCP Server tests (53 tests)
@@ -511,7 +511,7 @@ chaingpt-claude-skill/
 - [x] 10 project templates including multi-product compositions
 - [x] 45+ audited Solidity patterns
 - [x] Mock server for zero-credit testing
-- [x] 79 passing tests (MCP + mock server)
+- [x] 249 passing tests (MCP + mock server)
 - [x] Migration guides (OpenAI, Alchemy, custom)
 - [x] Cost optimization & wallet integration docs
 - [ ] Claude Code plugin marketplace listing

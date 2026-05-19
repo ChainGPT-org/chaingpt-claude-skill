@@ -444,6 +444,16 @@ export async function handleHyperliquidTool(
       if (!action || !sigInput) {
         return { content: [{ type: 'text', text: 'action and signature are required.' }] };
       }
+      // Same vault-address validation we apply in payload-building (actionHash).
+      // Without it, a malformed vault here would be sent straight to HL /exchange.
+      if (vaultAddress) {
+        const clean = vaultAddress.startsWith('0x') ? vaultAddress.slice(2) : vaultAddress;
+        if (!/^[0-9a-fA-F]{40}$/.test(clean)) {
+          return {
+            content: [{ type: 'text', text: `Invalid vaultAddress: ${vaultAddress} (must be 0x + 40 hex chars)` }],
+          };
+        }
+      }
 
       // Normalize signature into the {r, s, v} object Hyperliquid expects.
       let signature: { r: string; s: string; v: number };
