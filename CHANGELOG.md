@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased] - 2026-05-19
+### Added — Unified test harness (`scripts/test-all.sh` + `TESTING.md`)
+- `scripts/test-all.sh` — single orchestrator that runs all six test layers (validate / typecheck / mcp-test / mock-test / examples / live smoke). Supports `--fast` to skip live smoke, `--only <layer>` for a single layer, `--skip-drift` for when `dlob.drift.trade` is in an outage. Summary report with per-layer timing and pass/fail/skip counts.
+- `TESTING.md` — full testing guide. Layer-by-layer reference, what each upstream the smoke test hits, how to add tests for a new capability, failure-mode cheat-sheet, the contract that every PR must add tests in the same PR.
+- README "Testing" section rewritten to point at `test-all.sh` + `TESTING.md` with a six-layer summary table.
+- `CONTRIBUTING.md` Testing Requirements section rewritten — every PR adding a capability must add tests in the same PR.
+- `smoke-test.ts` honors `SKIP_DRIFT_SMOKE=1` to skip Drift cases when the public DLOB endpoint is down (it 503s periodically).
+
+### Fixed — Test infrastructure
+- `mock-server/src/index.ts` no longer calls `app.listen()` at module load when `process.env.VITEST` is set. Eliminates `EADDRINUSE :3001` noise when running `npm test` while another process holds port 3001.
+- `mcp-server/package.json` and `mock-server/package.json` `"build"` scripts now invoke `node ./node_modules/typescript/bin/tsc` directly, sidestepping the rogue transitive `tsc@2.0.4` shim package (pulled in by `@chaingpt/smartcontractgenerator`) that printed "This is not the tsc command you are looking for" and aborted the build.
+- New `"smoke"` npm script in `mcp-server`: `npm run smoke` builds + runs the live smoke in one shot.
+
 ### Added — Creator Sidekick template (11th project template)
 - `templates/creator-sidekick.md` — full-stack template for creator-economy platforms combining 3 ChainGPT products (LLM + NFT + News). Targets the previously-uncovered crypto-native creator vertical (video, podcast, streaming) with tipping coach, script-to-thumbnail pipeline (text + actual PNG), and daily creator brief. Includes documented workarounds for SDK error-handler edge cases and JSON shape drift.
 - README updated to reflect 11 project templates (was 10).
