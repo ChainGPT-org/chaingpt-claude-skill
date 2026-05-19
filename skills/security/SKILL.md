@@ -15,7 +15,7 @@ Whenever the user mentions an upcoming action — "I'm about to swap X", "I want
 
 ### For a token (about to buy, swap, or approve)
 
-```
+```text
 chaingpt_risk_token       address="…" chain="…"     # GoPlus flags
 chaingpt_risk_honeypot    address="…" chain="…"     # buy+sell simulation (if supported chain)
 ```
@@ -24,7 +24,7 @@ If any flag fires, surface it loudly. Only then offer to continue.
 
 ### For a contract (about to interact with or deploy)
 
-```
+```text
 chaingpt_risk_contract_source  address="…" chain="…"     # is it verified?
 chaingpt_audit_contract        sourceCode="…"            # AI security audit (1 credit)
 ```
@@ -33,7 +33,7 @@ The audit is the ChainGPT-native moat — it uses ChainGPT's Solidity-specialise
 
 ### For a destination address (about to send)
 
-```
+```text
 chaingpt_risk_address    address="…" chain="…"     # GoPlus malicious-address check
 chaingpt_onchain_address address="…" chain="…"     # recent activity sanity check
 ```
@@ -44,7 +44,7 @@ Look for: sanctions hits, phishing labels, brand-new wallet with no history, mix
 
 This is the most important gate. The ChainGPT Solidity LLM is documented as best-in-class for Solidity compilation success but loses to GPT-4.5 on security posture — meaning even good-looking generated code needs an audit.
 
-```
+```text
 chaingpt_generate_contract  description="…"               # generate (1 credit)
 chaingpt_audit_contract     sourceCode="<generated>"      # audit (1 credit) — MANDATORY
 ```
