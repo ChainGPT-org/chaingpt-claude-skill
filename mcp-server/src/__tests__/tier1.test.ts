@@ -5,7 +5,7 @@
  * intel tool groups and runs a smoke handler test for each with mocked HTTP.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 // Mock @chaingpt/ainews used by intel.ts before any imports
 vi.mock('@chaingpt/ainews', () => ({
@@ -16,13 +16,23 @@ vi.mock('@chaingpt/ainews', () => ({
   })),
 }));
 
-process.env.CHAINGPT_API_KEY = 'test-key';
+// Save + restore CHAINGPT_API_KEY around the test run so we don't pollute
+// the global env for sibling test files.
+const ORIGINAL_API_KEY = process.env.CHAINGPT_API_KEY;
+beforeAll(() => {
+  process.env.CHAINGPT_API_KEY = 'test-key';
+});
+afterAll(() => {
+  if (ORIGINAL_API_KEY === undefined) delete process.env.CHAINGPT_API_KEY;
+  else process.env.CHAINGPT_API_KEY = ORIGINAL_API_KEY;
+});
 
 import { walletTools, handleWalletTool } from '../tools/wallet.js';
 import { researchTools, handleResearchTool } from '../tools/research.js';
 import { riskTools, handleRiskTool } from '../tools/risk.js';
 import { onchainTools, handleOnchainTool } from '../tools/onchain.js';
 import { intelTools, handleIntelTool } from '../tools/intel.js';
+import { ALL_CHAIN_SLUGS } from '../lib/chains.js';
 
 // ─── Tool definitions ────────────────────────────────────────────────
 
@@ -80,13 +90,17 @@ describe('Tier-1 tool definitions', () => {
 
   it('every chain-taking tool restricts to known chain slugs', () => {
     const all = [...walletTools, ...researchTools, ...riskTools, ...onchainTools, ...intelTools];
+    const allowed = new Set(ALL_CHAIN_SLUGS);
     for (const t of all) {
       const props = (t.inputSchema as any).properties ?? {};
       const chain = props.chain;
       if (chain && chain.enum) {
-        // Must be a non-empty array of strings
         expect(Array.isArray(chain.enum)).toBe(true);
         expect(chain.enum.length).toBeGreaterThan(0);
+        for (const slug of chain.enum) {
+          expect(typeof slug).toBe('string');
+          expect(allowed.has(slug)).toBe(true);
+        }
       }
     }
   });

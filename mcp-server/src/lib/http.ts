@@ -21,15 +21,16 @@ export async function httpJson<T = unknown>(url: string, opts: HttpOpts = {}): P
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   try {
+    const hasBody = opts.body !== undefined;
     const res = await fetch(url, {
       method: opts.method ?? 'GET',
       headers: {
         accept: 'application/json',
         'user-agent': USER_AGENT,
-        ...(opts.body ? { 'content-type': 'application/json' } : {}),
+        ...(hasBody ? { 'content-type': 'application/json' } : {}),
         ...(opts.headers ?? {}),
       },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      body: hasBody ? JSON.stringify(opts.body) : undefined,
       signal: controller.signal,
     });
 
@@ -81,7 +82,9 @@ export function hexWeiToGwei(hex: string): string {
   const gwei = wei / 1_000_000_000n;
   const remainder = wei % 1_000_000_000n;
   if (remainder === 0n) return gwei.toString();
-  // Show up to 3 decimal places of gwei
-  const decimals = (Number(remainder) / 1e9).toFixed(3).replace(/^0\./, '.');
-  return `${gwei}${decimals}`;
+  // Truncate (not round) to 3 decimal places of gwei to avoid carry into the integer part
+  // for remainders near 1e9. We do this via integer math, then zero-pad.
+  const millis = (remainder * 1000n) / 1_000_000_000n; // 0..999
+  const padded = millis.toString().padStart(3, '0');
+  return `${gwei}.${padded}`;
 }

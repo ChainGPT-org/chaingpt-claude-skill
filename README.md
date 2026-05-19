@@ -6,7 +6,7 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **34 MCP tools** (12 ChainGPT-AI + 12 generic Web3 + 5 mainnet deploy + 5 mainnet DEX trading). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **44 MCP tools** (18 ChainGPT-AI + 16 generic Web3 + 5 mainnet deploy + 5 mainnet DEX trading). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
 [![npm version](https://img.shields.io/badge/version-1.4.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -84,7 +84,7 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 34 MCP Tools
+### 🤖 44 MCP Tools
 Claude doesn't just _write_ code — it **calls APIs, the chain, and DEX aggregators directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, deploy contracts to mainnet with the audit-before-deploy gate, AND swap tokens on 10 EVM mainnets + Solana via OpenOcean and Jupiter — all custody-free, all from the chat.
 
 ### 📋 10 Project Templates
@@ -154,11 +154,11 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 34 Tools
+## 🔌 MCP Server — 44 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 
-### ChainGPT AI products (12 tools)
+### ChainGPT AI products (18 tools)
 
 | Tool | What It Does |
 |------|-------------|
@@ -175,7 +175,9 @@ The MCP server gives Claude **direct API and on-chain access** — not just code
 | `chaingpt_news_categories` | List available news categories |
 | `chaingpt_estimate_credits` / `chaingpt_check_balance` | Cost + balance utilities |
 
-### Generic Web3 toolkit (12 tools — new in 1.2)
+### Generic Web3 toolkit (16 tools — new in 1.2)
+
+Broken into 4 utility groups (14 tools) plus 2 AI-enriched composed tools.
 
 Works across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll, solana.
 

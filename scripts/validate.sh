@@ -23,11 +23,15 @@ echo ""
 echo "--- Required Files ---"
 
 REQUIRED_FILES=(
-  "SKILL.md"
   "README.md"
   "LICENSE"
   "VERSION"
-  "plugin.json"
+  ".claude-plugin/plugin.json"
+  "skills/chaingpt/SKILL.md"
+  "skills/research/SKILL.md"
+  "skills/security/SKILL.md"
+  "skills/deploy/SKILL.md"
+  "skills/trade/SKILL.md"
   "reference/llm-chatbot.md"
   "reference/nft-generator.md"
   "reference/smart-contract-generator.md"
@@ -99,14 +103,14 @@ echo ""
 # -----------------------------------------------------------
 echo "--- SKILL.md Frontmatter ---"
 
-SKILL_FILE="$SKILL_ROOT/SKILL.md"
+SKILL_FILE="$SKILL_ROOT/skills/chaingpt/SKILL.md"
 
 if [[ -f "$SKILL_FILE" ]]; then
   # Check for frontmatter delimiters
   FIRST_LINE=$(head -1 "$SKILL_FILE")
   if [[ "$FIRST_LINE" == "---" ]]; then
     # Extract frontmatter (between first and second ---)
-    FRONTMATTER=$(sed -n '2,/^---$/p' "$SKILL_FILE" | head -n -1)
+    FRONTMATTER=$(sed -n '2,/^---$/p' "$SKILL_FILE" | sed '$d')
 
     # Check required fields
     if echo "$FRONTMATTER" | grep -q "^name:"; then
@@ -239,7 +243,7 @@ for skill_dir in "$SKILL_ROOT"/skills/*/; do
     if [[ -f "$SUB_SKILL" ]]; then
       SUB_FIRST=$(head -1 "$SUB_SKILL")
       if [[ "$SUB_FIRST" == "---" ]]; then
-        SUB_FM=$(sed -n '2,/^---$/p' "$SUB_SKILL" | head -n -1)
+        SUB_FM=$(sed -n '2,/^---$/p' "$SUB_SKILL" | sed '$d')
         if echo "$SUB_FM" | grep -q "^name:"; then
           pass "skills/$SKILL_NAME/SKILL.md has 'name' field"
         else

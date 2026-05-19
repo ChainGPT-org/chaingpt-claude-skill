@@ -11,7 +11,7 @@ When a user wants to research a token, wallet, or contract — your job is to or
 
 If the user asks "research X" without further qualifiers, prefer the single AI-enriched call:
 
-```
+```text
 chaingpt_intel_token   query="X"
 ```
 
@@ -19,11 +19,11 @@ It composes market + risk + ChainGPT news + AI signals in one response and costs
 
 For a wallet:
 
-```
+```text
 chaingpt_intel_wallet  address="0x…"
 ```
 
-Composes portfolio + per-holding risk-rating. Free read.
+Composes portfolio (Moralis) + per-holding risk-rating (GoPlus). **Requires `MORALIS_API_KEY`** for the portfolio scan — without it, the tool returns a setup hint pointing to https://moralis.io (free 25k req/month tier). The GoPlus risk-rating layer is always free.
 
 ## When to fan out to specific tools
 
@@ -60,7 +60,7 @@ Some tools degrade gracefully when optional API keys are absent:
 
 When the research surfaces a contract that looks interesting or suspicious, the next step is the existing ChainGPT audit tool:
 
-```
+```text
 chaingpt_risk_contract_source  address="…" chain="…"      # get source
 chaingpt_audit_contract        sourceCode="…"             # AI audit
 ```
