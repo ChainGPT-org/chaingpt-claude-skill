@@ -273,6 +273,73 @@ done
 echo ""
 
 # -----------------------------------------------------------
+# 8. Version consistency — VERSION ↔ plugin.json ↔ package.json ↔ README badge ↔ Server() literal
+# -----------------------------------------------------------
+echo "--- Version Consistency ---"
+
+if [[ -f "$SKILL_ROOT/VERSION" ]]; then
+  CANONICAL_VERSION=$(tr -d '[:space:]' < "$SKILL_ROOT/VERSION")
+  pass "VERSION file: $CANONICAL_VERSION"
+
+  check_version() {
+    local label="$1"
+    local found="$2"
+    if [[ -z "$found" ]]; then
+      fail "$label: could not extract a version string"
+    elif [[ "$found" == "$CANONICAL_VERSION" ]]; then
+      pass "$label = $found"
+    else
+      fail "$label = $found (expected $CANONICAL_VERSION)"
+    fi
+  }
+
+  # .claude-plugin/plugin.json
+  PLUGIN_JSON="$SKILL_ROOT/.claude-plugin/plugin.json"
+  if [[ -f "$PLUGIN_JSON" ]]; then
+    PLUGIN_VER=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PLUGIN_JSON" | head -1)
+    check_version ".claude-plugin/plugin.json" "$PLUGIN_VER"
+  fi
+
+  # mcp-server/package.json
+  MCP_PKG="$SKILL_ROOT/mcp-server/package.json"
+  if [[ -f "$MCP_PKG" ]]; then
+    MCP_VER=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MCP_PKG" | head -1)
+    check_version "mcp-server/package.json" "$MCP_VER"
+  fi
+
+  # mock-server/package.json (internal dev infra — drift is a soft warning)
+  MOCK_PKG="$SKILL_ROOT/mock-server/package.json"
+  if [[ -f "$MOCK_PKG" ]]; then
+    MOCK_VER=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MOCK_PKG" | head -1)
+    if [[ -z "$MOCK_VER" ]]; then
+      warn "mock-server/package.json: could not extract version"
+    elif [[ "$MOCK_VER" == "$CANONICAL_VERSION" ]]; then
+      pass "mock-server/package.json = $MOCK_VER"
+    else
+      warn "mock-server/package.json = $MOCK_VER (canonical $CANONICAL_VERSION) — internal infra, not user-facing"
+    fi
+  fi
+
+  # mcp-server/src/index.ts — Server() constructor version literal
+  MCP_INDEX="$SKILL_ROOT/mcp-server/src/index.ts"
+  if [[ -f "$MCP_INDEX" ]]; then
+    SERVER_VER=$(sed -n "s/.*version:[[:space:]]*['\"]\\([0-9][^'\"]*\\)['\"].*/\\1/p" "$MCP_INDEX" | head -1)
+    check_version "MCP Server() version literal" "$SERVER_VER"
+  fi
+
+  # README.md — version badge ("version-1.9.0-blue")
+  README="$SKILL_ROOT/README.md"
+  if [[ -f "$README" ]]; then
+    README_VER=$(sed -n 's/.*version-\([0-9][^-]*\)-blue.*/\1/p' "$README" | head -1)
+    check_version "README.md version badge" "$README_VER"
+  fi
+else
+  fail "VERSION file missing"
+fi
+
+echo ""
+
+# -----------------------------------------------------------
 # Summary
 # -----------------------------------------------------------
 echo "========================================="

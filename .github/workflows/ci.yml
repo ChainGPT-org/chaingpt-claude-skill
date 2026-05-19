@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: ["**"]
 
+# Least-privilege at workflow level: no job in this file needs write access.
+# Individual jobs can opt up if/when needed.
+permissions:
+  contents: read
+
 # Split CI into parallel jobs so a single failure point gets fast feedback
 # instead of waiting for the whole serial pipeline.
 jobs:
@@ -14,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -29,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -42,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -51,9 +62,45 @@ jobs:
         run: cd mock-server && npm ci && npm test
 
   validate:
-    name: validate.sh (file/frontmatter checks)
+    name: validate.sh (file/frontmatter/version checks)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Run validate.sh
         run: bash scripts/validate.sh
+
+  patterns:
+    name: solc compile patterns/*.md
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - name: Install mcp-server deps (solc + @openzeppelin/*)
+        run: cd mcp-server && npm ci
+      - name: Compile every Solidity block under patterns/
+        run: node scripts/check-patterns.mjs
+
+  boot-smoke:
+    name: MCP server boot smoke (tools/list)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - name: Build mcp-server
+        run: cd mcp-server && npm ci && npm run build
+      - name: Spawn server and assert tools/list response
+        run: node scripts/mcp-boot-smoke.mjs
