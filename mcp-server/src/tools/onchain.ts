@@ -1,6 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { CHAINS, resolveChain } from '../lib/chains.js';
-import { hexToNumber, hexWeiToGwei, httpJson, jsonRpc } from '../lib/http.js';
+import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { hexToNumber, hexWeiToGwei, httpJson, jsonRpc, jsonRpcFallback } from '../lib/http.js';
+import { detectMissingKey } from '../lib/etherscan.js';
 
 /**
  * On-chain analytics. Read-only. Uses Etherscan v2 multichain endpoint
@@ -161,11 +162,15 @@ export async function handleOnchainTool(
         return { content: [{ type: 'text', text: `chain must be an EVM chain.` }] };
       }
 
-      // Use Etherscan's proxy module which is RPC-shaped
+      // Use Etherscan's proxy module which is RPC-shaped. detectMissingKey()
+      // returns a friendly hint if the request failed due to a missing key
+      // (Etherscan v2 rejects the legacy YourApiKeyToken placeholder).
       const txUrl =
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=proxy&action=eth_getTransactionByHash` +
-        `&txhash=${hash}&apikey=${etherscanKey()}`;
+        `&txhash=${hash}&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
       const txRes = await httpJson<{ result: any }>(txUrl);
+      const txKeyHint = detectMissingKey(txRes);
+      if (txKeyHint) return { content: [{ type: 'text', text: txKeyHint }] };
       const tx = txRes.result;
       if (!tx) {
         return { content: [{ type: 'text', text: `No transaction found for ${hash} on ${chain.name}.` }] };
@@ -173,8 +178,10 @@ export async function handleOnchainTool(
 
       const receiptUrl =
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=proxy&action=eth_getTransactionReceipt` +
-        `&txhash=${hash}&apikey=${etherscanKey()}`;
+        `&txhash=${hash}&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
       const receiptRes = await httpJson<{ result: any }>(receiptUrl);
+      const receiptKeyHint = detectMissingKey(receiptRes);
+      if (receiptKeyHint) return { content: [{ type: 'text', text: receiptKeyHint }] };
       const receipt = receiptRes.result;
 
       const lines: string[] = [];
@@ -215,6 +222,8 @@ export async function handleOnchainTool(
         `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=account&action=txlist&address=${address}` +
         `&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${etherscanKey()}`;
       const res = await httpJson<{ status: string; message: string; result: EtherscanTxRow[] | string }>(url);
+      const keyHint = detectMissingKey(res);
+      if (keyHint) return { content: [{ type: 'text', text: keyHint }] };
       if (typeof res.result === 'string' || !Array.isArray(res.result)) {
         return {
           content: [{
@@ -247,10 +256,14 @@ export async function handleOnchainTool(
       if (!chain || chain.chainId === null) {
         return { content: [{ type: 'text', text: `chain must be an EVM chain.` }] };
       }
-      // Try Etherscan gas tracker (ethereum + a few others)
+      // Try Etherscan gas tracker (ethereum + a few others). Falls through
+      // to the public-RPC fallback below if Etherscan rejects (e.g. missing key).
       try {
-        const url = `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=gastracker&action=gasoracle&apikey=${etherscanKey()}`;
+        const url = `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=gastracker&action=gasoracle&apikey=${etherscanKey() ?? 'YourApiKeyToken'}`;
         const res = await httpJson<{ status: string; result: any }>(url);
+        // detectMissingKey is intentionally NOT used here — gas tracker has a
+        // graceful fallback to RPC eth_gasPrice below; we'd rather degrade
+        // silently than block the user on the key.
         if (res.status === '1' && res.result) {
           const r = res.result;
           const lines = [
@@ -268,11 +281,12 @@ export async function handleOnchainTool(
         /* fall through to RPC */
       }
 
-      // RPC fallback
-      if (!chain.publicRpc) {
+      // RPC fallback (try the chain's RPC list)
+      const rpcs = rpcEndpoints(chain.slug);
+      if (rpcs.length === 0) {
         return { content: [{ type: 'text', text: `No gas data available for ${chain.name}.` }] };
       }
-      const gasPriceHex = await jsonRpc<string>(chain.publicRpc, 'eth_gasPrice', []);
+      const gasPriceHex = await jsonRpcFallback<string>(rpcs, 'eth_gasPrice', []);
       const lines = [
         `Gas — ${chain.name} (RPC fallback, no breakdown available)`,
         '',
@@ -299,10 +313,11 @@ export async function handleOnchainTool(
       } else {
         return { content: [{ type: 'text', text: `Invalid block: ${raw}` }] };
       }
-      if (!chain.publicRpc) {
+      const rpcs = rpcEndpoints(chain.slug);
+      if (rpcs.length === 0) {
         return { content: [{ type: 'text', text: `No public RPC available for ${chain.name}.` }] };
       }
-      const block = await jsonRpc<any>(chain.publicRpc, 'eth_getBlockByNumber', [blockTag, false]);
+      const block = await jsonRpcFallback<any>(rpcs, 'eth_getBlockByNumber', [blockTag, false]);
       if (!block) return { content: [{ type: 'text', text: `Block not found: ${raw}` }] };
 
       const lines = [

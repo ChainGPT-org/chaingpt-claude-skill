@@ -20,7 +20,7 @@ vi.mock('@chaingpt/ainews', () => ({
 // the global env for sibling test files.
 const ORIGINAL_API_KEY = process.env.CHAINGPT_API_KEY;
 beforeAll(() => {
-  process.env.CHAINGPT_API_KEY = 'test-key';
+  process.env.CHAINGPT_API_KEY = process.env.CHAINGPT_API_KEY || 'stub-test-fixture';
 });
 afterAll(() => {
   if (ORIGINAL_API_KEY === undefined) delete process.env.CHAINGPT_API_KEY;

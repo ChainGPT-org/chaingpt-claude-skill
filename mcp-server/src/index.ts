@@ -19,6 +19,20 @@ import { researchTools, handleResearchTool } from './tools/research.js';
 import { riskTools, handleRiskTool } from './tools/risk.js';
 import { onchainTools, handleOnchainTool } from './tools/onchain.js';
 import { intelTools, handleIntelTool } from './tools/intel.js';
+import { deployTools, handleDeployTool } from './tools/deploy.js';
+import { dexTools, handleDexTool } from './tools/dex.js';
+import { defiTools, handleDefiTool } from './tools/defi.js';
+import { hyperliquidTools, handleHyperliquidTool } from './tools/hyperliquid.js';
+import { polymarketTools, handlePolymarketTool } from './tools/polymarket.js';
+import { strategyTools, handleStrategyTool } from './tools/strategy.js';
+import { bridgeTools, handleBridgeTool } from './tools/bridge.js';
+import { aggregatorTools, handleAggregatorTool } from './tools/aggregators.js';
+import { yieldTools, handleYieldTool } from './tools/yield.js';
+import { driftTools, handleDriftTool } from './tools/drift.js';
+import { portfolioTools, handlePortfolioTool } from './tools/portfolio.js';
+import { solanaLendingTools, handleSolanaLendingTool } from './tools/solana_lending.js';
+import { planTools, handlePlanTool } from './tools/plans.js';
+import { agentWalletTools, handleAgentWalletTool } from './tools/agent_wallet.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -30,7 +44,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.2.0' },
+  { name: 'chaingpt', version: '1.9.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -48,6 +62,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...riskTools,
     ...onchainTools,
     ...intelTools,
+    ...deployTools,
+    ...dexTools,
+    ...defiTools,
+    ...hyperliquidTools,
+    ...polymarketTools,
+    ...strategyTools,
+    ...bridgeTools,
+    ...aggregatorTools,
+    ...yieldTools,
+    ...driftTools,
+    ...portfolioTools,
+    ...solanaLendingTools,
+    ...planTools,
+    ...agentWalletTools,
   ],
 }));
 
@@ -84,6 +112,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_risk')) return await handleRiskTool(name, args);
     if (name.startsWith('chaingpt_onchain')) return await handleOnchainTool(name, args);
     if (name.startsWith('chaingpt_intel')) return await handleIntelTool(name, args);
+    if (name.startsWith('chaingpt_deploy')) return await handleDeployTool(name, args);
+    if (name.startsWith('chaingpt_dex_1inch') || name.startsWith('chaingpt_dex_cow')) return await handleAggregatorTool(name, args);
+    if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
+    if (name.startsWith('chaingpt_defi_pendle') || name.startsWith('chaingpt_defi_morpho')) return await handleYieldTool(name, args);
+    if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) return await handleSolanaLendingTool(name, args);
+    if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
+    if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
+    if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
+    if (name.startsWith('chaingpt_agent_wallet')) return await handleAgentWalletTool(name, args);
+    if (name === 'chaingpt_strategy_save_plan' || name === 'chaingpt_strategy_load_plan' || name === 'chaingpt_strategy_list_plans' || name === 'chaingpt_strategy_delete_plan') return await handlePlanTool(name, args);
+    if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
+    if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
+    if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);
+    if (name.startsWith('chaingpt_portfolio')) return await handlePortfolioTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
 
     return {

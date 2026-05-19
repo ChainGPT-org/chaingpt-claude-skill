@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { ALL_CHAIN_SLUGS, CHAINS, EVM_CHAIN_SLUGS, resolveChain } from '../lib/chains.js';
-import { httpJson, jsonRpc, hexToNumber } from '../lib/http.js';
+import { ALL_CHAIN_SLUGS, CHAINS, EVM_CHAIN_SLUGS, resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { httpJson, jsonRpc, jsonRpcFallback, hexToNumber } from '../lib/http.js';
 
 /**
  * Wallet & portfolio tools. Read-only. Multi-chain.
@@ -145,9 +145,11 @@ async function fetchMoralisBalances(
 
 async function fetchNativeBalanceViaRpc(address: string, chainSlug: string): Promise<{ balance: string; symbol: string } | null> {
   const chain = CHAINS[chainSlug];
-  if (!chain || !chain.publicRpc || chain.chainId === null) return null;
+  if (!chain || chain.chainId === null) return null;
+  const endpoints = rpcEndpoints(chainSlug);
+  if (endpoints.length === 0) return null;
   try {
-    const hex = await jsonRpc<string>(chain.publicRpc, 'eth_getBalance', [address, 'latest']);
+    const hex = await jsonRpcFallback<string>(endpoints, 'eth_getBalance', [address, 'latest']);
     const wei = BigInt(hex);
     // Format with 4 decimal places for display
     const whole = wei / 10n ** 18n;

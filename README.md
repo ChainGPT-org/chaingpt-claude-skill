@@ -6,16 +6,16 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. **34 MCP tools** (18 ChainGPT-AI + 16 generic Web3). 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **~99 MCP tools** spanning ChainGPT AI products, EVM + Solana DEX trading (OpenOcean + 1inch v6 + CoW Protocol + Jupiter), perps (Hyperliquid + Drift), prediction markets (Polymarket), DeFi (Aave + Lido + EigenLayer + Pendle + Morpho), Solana lending (Marginfi + Kamino), cross-chain bridging (Across), multi-protocol portfolio snapshot, strategy plan persistence, **and an agent wallet with localhost admin dashboard + prompt-injection-resistant policy gate**. 45+ Solidity patterns. 10 project templates. Daily live-API smoke CI. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.9.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen?style=flat-square)](#-249-passing-tests)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Get Started](#-quickstart) · [Features](#-what-you-get) · [MCP Server](#-mcp-server--12-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Get Started](#-quickstart) · [Features](#-what-you-get) · [Agent Wallet](#agent-wallet--give-the-ai-agent-its-own-wallet-with-admin-policy-gates-7-tools--new-in-19) · [MCP Server](#-mcp-server--99-tools) · [Templates](#-10-project-templates) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -84,8 +84,8 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 34 MCP Tools
-Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions — all from the chat.
+### 🤖 ~99 MCP Tools
+Claude doesn't just _write_ code — it **calls every major Web3 surface directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions, deploy contracts to mainnet with the audit-before-deploy gate, swap tokens via OpenOcean + Jupiter, lend on Aave V3, stake on Lido, restake on EigenLayer, read Hyperliquid perp positions + funding rates, AND track Polymarket prediction-market odds — all custody-free, all from the chat.
 
 ### 📋 10 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
@@ -96,8 +96,8 @@ Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. M
 ### 🔐 45+ Solidity Patterns
 Audited, battle-tested smart contract patterns Claude composes from — ERC-20 variants, NFTs, DeFi, governance, security.
 
-### 🧪 79 Passing Tests
-53 MCP server unit tests + 26 mock server endpoint tests. CI-ready out of the box.
+### 🧪 249 Passing Tests
+~223 MCP server unit tests across 16 files + 26 mock server endpoint tests, plus 43 live-API smoke cases (scheduled daily). CI-ready out of the box.
 
 ### 🛠️ Developer Tools
 Interactive playground, debug assistant, hackathon scaffolder, cost estimator, and migration guides from OpenAI/Alchemy.
@@ -154,7 +154,7 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 34 Tools
+## 🔌 MCP Server — ~99 Tools
 
 The MCP server gives Claude **direct API and on-chain access** — not just code generation.
 
@@ -204,6 +204,113 @@ Works across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, av
 |------|-------------|
 | `chaingpt_intel_token` | One call → DexScreener + GoPlus + ChainGPT news + AI signal. The recommended "research this token" tool. Costs ~1 ChainGPT credit. |
 | `chaingpt_intel_wallet` | Portfolio + per-holding risk-rating across chains. Free read. |
+
+### Mainnet contract deployment (5 tools — new in 1.3)
+
+Custody-free pipeline. The plugin builds an unsigned tx; the user signs externally (MetaMask / Rabby / hardware wallet / ERC-4337 smart account / WalletConnect). MAINNET is the default; testnet is an opt-in via the `network` parameter.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_deploy_compile` | Compile Solidity 0.8.x → bytecode + ABI + warnings |
+| `chaingpt_deploy_estimate` | Preview gas cost on the target mainnet (or testnet) |
+| `chaingpt_deploy_build_tx` | Build the unsigned deployment tx. **Refuses mainnet without `acknowledgeMainnet: true`** |
+| `chaingpt_deploy_verify` | Submit source to Etherscan v2 (works across all major EVM chains) |
+| `chaingpt_deploy_verify_status` | Poll verification GUID |
+
+**Mainnets** (default): ethereum · base · arbitrum · optimism · polygon · bsc · avalanche · blast · linea · scroll.
+**Testnets** (opt-in): sepolia · base-sepolia · arbitrum-sepolia · optimism-sepolia · polygon-amoy · bsc-testnet.
+
+The `chaingpt-deploy` skill enforces the mandatory pipeline: **generate → audit → compile → estimate → confirm → build-tx → user-signs → verify**. Never bypass the audit step on mainnet.
+
+### Mainnet DEX trading (5 tools — new in 1.4)
+
+Custody-free. Plugin builds the unsigned swap tx; user signs externally. Same `acknowledgeMainnet` safety pattern as deploy.
+
+| Tool | What It Does | Backend |
+|------|-------------|---------|
+| `chaingpt_dex_quote` | Live EVM swap quote (price, impact, route) | OpenOcean v4 |
+| `chaingpt_dex_build_swap_tx` | Build unsigned EVM swap. **Mainnet ack required** | OpenOcean v4 |
+| `chaingpt_dex_approve_tx` | ERC-20 approval helper (auto-resolves router) | viem encode |
+| `chaingpt_dex_jupiter_quote` | Live Solana swap quote | Jupiter v6 |
+| `chaingpt_dex_jupiter_build_swap_tx` | Serialized Solana swap tx (base64). **Mainnet ack required** | Jupiter v6 |
+
+EVM chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll. Plus Solana mainnet. The `chaingpt-trade` skill codifies the mandatory pre-flight: **`chaingpt_risk_token` on the buy token + `chaingpt_dex_quote` BEFORE `chaingpt_dex_build_swap_tx`**.
+
+### Mainnet DeFi protocols (7 tools — new in 1.5)
+
+Custody-free. Same `acknowledgeMainnet` safety pattern. The `chaingpt-defi` skill enforces a mandatory `chaingpt_defi_aave_health` check before any borrow / withdraw.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_defi_aave_health` | Read account health factor, collateral, debt, LTV — Aave V3, 7 chains |
+| `chaingpt_defi_aave_supply_tx` | Build supply tx (lend) — Aave V3 |
+| `chaingpt_defi_aave_borrow_tx` | Build borrow tx — Aave V3 |
+| `chaingpt_defi_aave_repay_tx` | Build repay tx (incl. `max` for full repayment) — Aave V3 |
+| `chaingpt_defi_aave_withdraw_tx` | Build withdraw tx — Aave V3 |
+| `chaingpt_defi_lido_stake_tx` | Stake native ETH → stETH on Lido (Ethereum mainnet) |
+| `chaingpt_defi_eigenlayer_deposit_tx` | Restake stETH / rETH / cbETH into EigenLayer (Ethereum mainnet) |
+
+Aave V3 chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
+
+### Hyperliquid + Polymarket (10 tools — new in 1.6)
+
+Live mainnet data from the two highest-volume non-EVM-aggregator markets in crypto. **Read-only** in this release — signed order placement (Hyperliquid EIP-712 L1 actions, Polymarket CLOB orders) is deferred to a follow-up. No API keys required.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_hl_markets` | List Hyperliquid perp + spot universes |
+| `chaingpt_hl_mids` | Live mid prices for all HL assets |
+| `chaingpt_hl_orderbook` | L2 orderbook for one HL asset |
+| `chaingpt_hl_account` | Full account state — margin / positions / open orders |
+| `chaingpt_hl_fills` | Recent fill history for a wallet |
+| `chaingpt_hl_funding` | Funding-rate history (auto-annualized) |
+| `chaingpt_pm_markets` | Discover Polymarket markets, full-text search, volume sort |
+| `chaingpt_pm_market` | Detail on one market — outcomes / prices / token ids |
+| `chaingpt_pm_orderbook` | L2 orderbook for one outcome token |
+| `chaingpt_pm_trades` | Recent fills on one outcome token |
+
+Polymarket tools tie into ChainGPT's existing **PredictFi / Foresight AI** surface — same domain (event-outcome markets), but live mainnet data rather than ChainGPT-curated commentary.
+
+### Agent wallet — give the AI agent its own wallet, with admin policy gates (7 tools — new in 1.9)
+
+The agent gets an encrypted EOA on disk. **The admin (you, in your shell) sets policies the agent CANNOT bypass even if a malicious prompt injects it.** The trust boundary is the tool code, not the LLM.
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_agent_wallet_init` | Generate a new EOA, AES-256-GCM encrypt with `CHAINGPT_AGENT_WALLET_PASSPHRASE` |
+| `chaingpt_agent_wallet_address` | Return the public address (for receiving funds; no decryption needed) |
+| `chaingpt_agent_wallet_status` | Address + policy digest + kill-switch state + passphrase-env status |
+| `chaingpt_agent_wallet_balances` | Multi-chain native balances |
+| `chaingpt_agent_wallet_policy` | Display current policy (read-only — agent has NO write tool) |
+| `chaingpt_agent_wallet_sign_and_send` | **Only fund-moving tool.** Policy gate runs deterministically; refuses with reason on violation |
+| `chaingpt_agent_wallet_serve_ui` | Start a localhost admin dashboard on `127.0.0.1:8787` (token-gated) |
+
+**Why this is prompt-injection-resistant:**
+
+1. Policy lives in a JSON file (`~/.chaingpt-mcp/agent-wallet/policy.json`). **No MCP tool can write it** — admin edits via the localhost dashboard or a text editor.
+2. Every `sign_and_send` call loads the policy file fresh and runs `checkPolicy(intent)` — pure deterministic code that doesn't see the LLM's context. Refuses if any rule fails (kill switch, chain whitelist, address allow/blocklist, value cap, gas cap, selector blocklist, memo requirement).
+3. The LLM has no MCP tool that issues arbitrary HTTP requests, so it cannot reach the localhost dashboard's edit endpoints either.
+4. Default policy is fail-closed (`killSwitch: true`). Admin must explicitly opt in.
+
+**Localhost admin dashboard:** call `chaingpt_agent_wallet_serve_ui` → open `http://127.0.0.1:8787` → paste the admin token (rotated each restart, printed in tool output + saved 0600).
+
+Dashboard features:
+- **Assets tab:** address with QR + copy button, balance list for all 10 built-in EVM chains + every custom chain you add, custom token tracker (paste any ERC-20 — `symbol`+`decimals` auto-fetched), **🔍 scan blue chips** button (auto-add curated allowlist tokens with non-zero balance, spam-filtered), hide-zero toggle, 30s auto-refresh.
+- **Policy tab:** kill-switch banner with one-click toggle, **9 quick templates** (Locked down · Read-only · DCA bot · Yield farmer · Cross-chain · Power user · ERC-20 only · **🚨 Unrestricted (full access)** · 📋 Show all knobs), form-based editor (no JSON required: chain checkboxes, repeatable address rows with +/-, value with `wei`/`gwei`/`ether` unit dropdown, BigInt-safe), raw JSON editor as power-user fallback.
+- **Activity tab:** every `sign_and_send` that the policy allows is appended to `activity.jsonl` and shown newest-first with explorer links.
+- **Settings tab:** custom-chain registration form (add EVM chains not in the built-in registry — chainId, RPC URL, native symbol, optional fallbacks + explorer), file paths, security checklist, logout.
+
+**Security:** bound to `127.0.0.1` only, login required (token rotated each restart), session cookie HttpOnly + SameSite=Strict + 1h sliding TTL, Origin/Referer check on every POST, strict server-side schema validation, atomic write + `.bak` backup at 0600, BigInt-safe decimal-to-wei conversion.
+
+### Solana lending + cross-chain + portfolio (10 tools — new in 1.9)
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_bridge_quote` / `_build_deposit_tx` / `_status` | Across Protocol v3 cross-chain bridging across 10 EVM mainnets |
+| `chaingpt_defi_marginfi_banks` / `_account` | Marginfi v2 Solana lending banks + user positions |
+| `chaingpt_defi_kamino_markets` / `_vaults` | Kamino markets + automated yield vaults |
+| `chaingpt_portfolio_snapshot` | Fan-out parallel to Hyperliquid + Polymarket + Morpho + Drift for one user |
+| `chaingpt_strategy_save_plan` / `_load_plan` / `_list_plans` / `_delete_plan` | Persist strategy plans across sessions to `~/.chaingpt-mcp/plans/` |
 
 ### Optional API keys (graceful fallback when absent)
 
@@ -326,7 +433,7 @@ Point your `CHAINGPT_BASE_URL` at `http://localhost:3001` and everything works e
 
 ### Run the full test suite
 
-**79 tests passing** across two suites:
+**249 tests passing** across two suites:
 
 ```bash
 # MCP Server tests (53 tests)
@@ -404,7 +511,7 @@ chaingpt-claude-skill/
 - [x] 10 project templates including multi-product compositions
 - [x] 45+ audited Solidity patterns
 - [x] Mock server for zero-credit testing
-- [x] 79 passing tests (MCP + mock server)
+- [x] 249 passing tests (MCP + mock server)
 - [x] Migration guides (OpenAI, Alchemy, custom)
 - [x] Cost optimization & wallet integration docs
 - [ ] Claude Code plugin marketplace listing
