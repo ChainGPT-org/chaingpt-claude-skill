@@ -96,8 +96,8 @@ Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. M
 ### 🔐 45+ Solidity Patterns
 Audited, battle-tested smart contract patterns Claude composes from — ERC-20 variants, NFTs, DeFi, governance, security.
 
-### 🧪 249 Passing Tests
-~223 MCP server unit tests across 16 files + 26 mock server endpoint tests, plus 43 live-API smoke cases (scheduled daily). CI-ready out of the box.
+### 🧪 Six-Layer Test Harness
+One command (`./scripts/test-all.sh`) runs validate · typecheck · mcp-test (250 vitest) · mock-test (26 vitest) · examples (`node --check` + `python -m ast`) · live smoke (39 cases vs real mainnet APIs). Daily scheduled smoke catches upstream drift within 24h. See [`TESTING.md`](TESTING.md).
 
 ### 🛠️ Developer Tools
 Interactive playground, debug assistant, hackathon scaffolder, cost estimator, and migration guides from OpenAI/Alchemy.
@@ -115,15 +115,15 @@ Interactive playground, debug assistant, hackathon scaffolder, cost estimator, a
 │                        Claude Code                              │
 │                                                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
-│  │   SKILL.md   │  │  Reference   │  │    Templates &     │    │
-│  │  Entry Point  │  │  16 docs     │  │    Patterns (56)   │    │
+│  │  16 SKILLs   │  │  Reference   │  │    Templates &     │    │
+│  │  + routing   │  │  19 docs     │  │    Patterns (57)   │    │
 │  └──────┬───────┘  └──────┬───────┘  └────────┬───────────┘    │
 │         │                 │                    │                │
 │         └────────┬────────┴────────────────────┘                │
 │                  ▼                                              │
 │         ┌────────────────┐         ┌──────────────────┐        │
-│         │   MCP Server   │────────▶│  ChainGPT APIs   │        │
-│         │   12 tools     │         │  api.chaingpt.org │        │
+│         │   MCP Server   │────────▶│  ChainGPT + DEX  │        │
+│         │   ~99 tools    │         │  + DeFi + perps  │        │
 │         └────────────────┘         └──────────────────┘        │
 │                  │                                              │
 │                  ▼                                              │
@@ -462,51 +462,56 @@ CI runs the first four on every push and PR ([`.github/workflows/ci.yml`](.githu
 ## 🗂️ Project Structure
 
 <details>
-<summary><b>Click to expand (76 files)</b></summary>
+<summary><b>Click to expand (~153 files)</b></summary>
 
 ```
 chaingpt-claude-skill/
 ├── .claude-plugin/
 │   └── plugin.json                   # Plugin manifest (name, version, author)
 ├── .mcp.json                         # MCP server configuration
-├── VERSION                           # Semantic version
+├── VERSION                           # Semantic version (1.9.0)
 ├── README.md
 ├── CONTRIBUTING.md
 ├── CHANGELOG.md
+├── TESTING.md                        # Testing guide — six-layer harness
 ├── LICENSE
 │
-├── skills/                           # All skills (auto-discovered)
-│   ├── chaingpt/SKILL.md             #   Main skill — API reference (341 lines)
-│   ├── playground/SKILL.md           #   Interactive API testing
+├── skills/                           # 16 sub-skills (auto-discovered)
+│   ├── chaingpt/SKILL.md             #   Main skill — API reference + tool routing
+│   ├── agent-wallet/SKILL.md         #   AI's own EOA with admin policy gate
+│   ├── bridge/SKILL.md               #   Across cross-chain
 │   ├── debug/SKILL.md                #   Troubleshoot API errors
+│   ├── defi/SKILL.md                 #   Aave + Lido + EigenLayer + Pendle + Morpho
+│   ├── deploy/SKILL.md               #   Mainnet contract deployment
+│   ├── drift/SKILL.md                #   Drift perps on Solana (read-only)
 │   ├── hackathon/SKILL.md            #   60-second project scaffolder
+│   ├── hyperliquid/SKILL.md          #   Hyperliquid perps
+│   ├── playground/SKILL.md           #   Interactive API testing
+│   ├── polymarket/SKILL.md           #   Polymarket prediction markets
+│   ├── research/SKILL.md             #   Token research + DexScreener
+│   ├── security/SKILL.md             #   Honeypot + risk + audit
+│   ├── strategy/SKILL.md             #   Plan persistence + backtest
+│   ├── trade/SKILL.md                #   OpenOcean / 1inch / CoW / Jupiter
 │   └── update/SKILL.md               #   Check for skill updates
 │
-├── reference/                        # API & SDK documentation (16 files)
-│   ├── llm-chatbot.md                #   Web3 AI Chatbot & LLM
-│   ├── nft-generator.md              #   AI NFT Generator
-│   ├── smart-contract-generator.md   #   Smart Contract Generator
-│   ├── smart-contract-auditor.md     #   Smart Contract Auditor
-│   ├── crypto-news.md                #   AI Crypto News
-│   ├── agenticos.md                  #   AgenticOS (Twitter AI)
-│   ├── solidity-llm.md               #   Solidity LLM (HuggingFace)
-│   ├── saas-whitelabel.md            #   Whitelabel SaaS products
-│   ├── pricing.md                    #   Credit costs & billing
-│   ├── error-codes.md                #   Error handling reference
-│   ├── product-selection.md          #   Decision matrix
-│   ├── wallet-integration.md         #   MetaMask, WalletConnect
-│   ├── advanced-patterns.md          #   Streaming, caching, circuit breaker
-│   ├── deployment.md                 #   Vercel, Railway, Docker, Lambda
-│   ├── cost-optimization.md          #   Save ~84% on credits
-│   └── typescript-types.md           #   Complete TS interfaces
+├── reference/                        # API & SDK documentation (19 files)
+│   ├── llm-chatbot.md · nft-generator.md · smart-contract-generator.md
+│   ├── smart-contract-auditor.md · crypto-news.md · agenticos.md
+│   ├── solidity-llm.md · saas-whitelabel.md · pricing.md
+│   ├── error-codes.md · product-selection.md · wallet-integration.md
+│   ├── advanced-patterns.md · deployment.md · cost-optimization.md
+│   ├── typescript-types.md
+│   ├── web3-toolkit.md               #   Generic Web3 tools (research/risk/onchain)
+│   ├── onchain-execution.md          #   Custody-free signing flows
+│   └── markets-data.md               #   DEX + perp + prediction-market refs
 │
-├── templates/                        # Project scaffolding (12 files)
-├── patterns/                         # Solidity patterns (5 files, 45+ patterns)
+├── templates/                        # 11 project templates (+ composition guide)
+├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
-├── mcp-server/                       # MCP server — 12 tools, 53 tests
-├── mock-server/                      # Testing mock server — 26 tests
-├── scripts/                          # Validation tooling
-└── examples/                         # Working code — JS + Python (8 files)
+├── mcp-server/                       # MCP server — ~99 tools, 250 vitest cases
+├── mock-server/                      # Mock API for zero-credit dev — 26 tests
+├── scripts/                          # validate.sh + test-all.sh + demo launcher
+└── examples/                         # Working code — JS + Python (11 files)
 ```
 
 </details>
@@ -515,14 +520,25 @@ chaingpt-claude-skill/
 
 ## 🗺️ Roadmap
 
-- [x] Complete API reference for all 7 products
-- [x] MCP server with 12 direct-access tools
-- [x] 11 project templates including multi-product compositions
+### Shipped (1.0 → 1.9)
+- [x] Complete API reference for all 7 ChainGPT products
+- [x] **~99 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross-chain (Across), Solana lending (Marginfi · Kamino), multi-protocol portfolio snapshot, strategy plan persistence + backtest
+- [x] **Agent wallet** — encrypted keystore + prompt-injection-resistant admin policy gate + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
+- [x] **Custody-free signing** — every state-changing tool returns an unsigned tx / EIP-712 intent; the plugin never sees a private key. `acknowledgeMainnet: true` gate on every mainnet write
+- [x] 11 project templates including multi-product compositions (NFT marketplace, DeFi dashboard, Creator Sidekick)
 - [x] 45+ audited Solidity patterns
-- [x] Mock server for zero-credit testing
-- [x] 249 passing tests (MCP + mock server)
+- [x] Mock server for zero-credit development (26 endpoint tests)
+- [x] **Unified test harness** — `./scripts/test-all.sh` runs six layers (validate · typecheck · mcp-test · mock-test · examples · live smoke). 250 vitest + 26 mock + 157 validate + 39 live-API cases
+- [x] **Daily live-API smoke CI** — catches upstream drift within 24h, opens a labeled GitHub issue on failure
 - [x] Migration guides (OpenAI, Alchemy, custom)
 - [x] Cost optimization & wallet integration docs
+
+### Next up
+- [ ] **Solidity pattern compilation gate** — extract code from every `patterns/*.md`, compile with `solc`, fail CI on bitrot
+- [ ] **MCP server boot smoke** — spawn `chaingpt-mcp`, send `tools/list`, assert tool count
+- [ ] **Version consistency check** — `VERSION` ↔ `package.json` ↔ `plugin.json` ↔ README badge
+- [ ] **Solana program-instruction signing path** — bring Drift / Marginfi / Kamino from read-only to full execution
+- [ ] **ERC-4337 session-key flow** — alternative to the EOA + policy-file agent wallet
 - [ ] Claude Code plugin marketplace listing
 - [ ] Video tutorials & walkthroughs
 - [ ] SSE streaming demo server
