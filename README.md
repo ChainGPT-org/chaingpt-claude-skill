@@ -6,9 +6,9 @@
 
 **The only Claude Code skill that turns your AI assistant into a Web3 engineering co-pilot.**
 
-Full API reference. 12 MCP tools. 45+ Solidity patterns. 10 project templates. Zero context-switching.
+Full API reference. **24 MCP tools** (12 ChainGPT-AI + 12 generic Web3). 45+ Solidity patterns. 10 project templates. Zero context-switching.
 
-[![npm version](https://img.shields.io/badge/version-1.1.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-79_passing-brightgreen?style=flat-square)](#testing)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
@@ -84,8 +84,8 @@ Now open Claude Code and ask it anything about ChainGPT — it just works.
 ### 📖 Complete API Reference
 Every endpoint, parameter, and response format for all **7 products** — with real API response examples, credit costs, and SDK snippets in JS + Python.
 
-### 🤖 12 MCP Tools
-Claude doesn't just _write_ code — it **calls the APIs directly**. Generate images, mint NFTs, audit contracts, fetch news — all from the chat.
+### 🤖 24 MCP Tools
+Claude doesn't just _write_ code — it **calls APIs and the chain directly**. Generate images, mint NFTs, audit contracts, fetch news, scan wallets across 11 chains, run rug checks, decode transactions — all from the chat.
 
 ### 📋 10 Project Templates
 Production-ready scaffolds for Next.js, React Native, Express, Nuxt, and more. Multi-product compositions included.
@@ -154,13 +154,16 @@ Plus **SaaS & Whitelabel** references — Launchpad, Staking, Vesting, Telegram 
 
 <br/>
 
-## 🔌 MCP Server — 12 Tools
+## 🔌 MCP Server — 24 Tools
 
-The MCP server gives Claude **direct API access** — not just code generation:
+The MCP server gives Claude **direct API and on-chain access** — not just code generation.
+
+### ChainGPT AI products (12 tools)
 
 | Tool | What It Does |
 |------|-------------|
-| `chaingpt_chat_ask` | Ask the Web3 AI chatbot anything |
+| `chaingpt_chat` | Ask the Web3 AI chatbot anything |
+| `chaingpt_chat_with_context` | Chat with custom company/token context injection |
 | `chaingpt_chat_history` | Retrieve past conversations |
 | `chaingpt_nft_generate_image` | Generate AI art from text prompts |
 | `chaingpt_nft_enhance_prompt` | AI-improve prompts for better results |
@@ -170,8 +173,42 @@ The MCP server gives Claude **direct API access** — not just code generation:
 | `chaingpt_generate_contract` | Generate smart contracts from descriptions |
 | `chaingpt_news_fetch` | Fetch crypto news with category filtering |
 | `chaingpt_news_categories` | List available news categories |
-| `chaingpt_get_credit_balance` | Check remaining API credits |
-| `chaingpt_estimate_cost` | Estimate costs before execution |
+| `chaingpt_estimate_credits` / `chaingpt_check_balance` | Cost + balance utilities |
+
+### Generic Web3 toolkit (12 tools — new in 1.2)
+
+Works across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll, solana.
+
+| Tool | What It Does | Backend |
+|------|-------------|---------|
+| `chaingpt_wallet_balances` | Multi-chain wallet native + ERC-20 balances | Moralis (opt) + public RPC |
+| `chaingpt_wallet_positions` | DeFi positions (Aave / Uniswap / Lido / etc.) | Moralis |
+| `chaingpt_wallet_pnl` | Realized + unrealized profit/loss | Moralis |
+| `chaingpt_research_token` | Live price, liquidity, volume, market cap | DexScreener |
+| `chaingpt_research_pairs` | All trading pairs for a token | DexScreener |
+| `chaingpt_research_trending` | Trending tokens across chains | DexScreener |
+| `chaingpt_risk_token` | Honeypot / mintable / proxy / tax flags | GoPlus |
+| `chaingpt_risk_honeypot` | Buy + sell simulation | Honeypot.is |
+| `chaingpt_risk_address` | Sanctions / phishing / mixer check | GoPlus |
+| `chaingpt_risk_contract_source` | Fetch verified source code + ABI | Etherscan v2 |
+| `chaingpt_onchain_tx` | Decode any transaction by hash | Etherscan v2 |
+| `chaingpt_onchain_address` | Recent activity for any address | Etherscan v2 |
+| `chaingpt_onchain_gas` | Multi-chain gas oracle | Etherscan v2 + RPC |
+| `chaingpt_onchain_block` | Block info by number or "latest" | Public RPC |
+
+### AI-enriched composed tools (the strategic differentiator)
+
+| Tool | What It Does |
+|------|-------------|
+| `chaingpt_intel_token` | One call → DexScreener + GoPlus + ChainGPT news + AI signal. The recommended "research this token" tool. Costs ~1 ChainGPT credit. |
+| `chaingpt_intel_wallet` | Portfolio + per-holding risk-rating across chains. Free read. |
+
+### Optional API keys (graceful fallback when absent)
+
+| Env var | Unlocks | Get one |
+|---|---|---|
+| `MORALIS_API_KEY` | Full multi-chain ERC-20 scan + DeFi positions + P&L | https://moralis.io (25k req/month free) |
+| `ETHERSCAN_API_KEY` | Higher Etherscan rate limit (works across all EVM chains via v2) | https://etherscan.io/myapikey (free) |
 
 <details>
 <summary><b>Setup MCP Server (optional)</b></summary>
