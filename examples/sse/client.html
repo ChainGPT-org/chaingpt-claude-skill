@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChainGPT SSE chat demo</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 720px; }
+    #out { background: #111; color: #ddd; padding: 1rem; border-radius: 6px; white-space: pre-wrap; min-height: 8rem; }
+    input { width: 100%; padding: .5rem; font: inherit; box-sizing: border-box; margin-bottom: .5rem; }
+    button { padding: .5rem 1rem; font: inherit; cursor: pointer; }
+    .status { color: #888; font-size: .85rem; margin-top: .5rem; }
+    .err    { color: #c33; }
+  </style>
+</head>
+<body>
+  <h1>ChainGPT SSE chat demo</h1>
+  <p>Type a question, press <kbd>Enter</kbd>. The server streams the answer back via Server-Sent Events.</p>
+  <input id="q" placeholder="Explain Uniswap V3 concentrated liquidity in two sentences." autofocus>
+  <button id="go">Ask</button>
+  <div id="out"></div>
+  <div class="status" id="status"></div>
+
+  <script>
+    const q = document.getElementById('q');
+    const out = document.getElementById('out');
+    const status = document.getElementById('status');
+    const go = document.getElementById('go');
+
+    let es = null;
+
+    function ask() {
+      const question = q.value.trim();
+      if (!question) return;
+      // Close any prior stream so we don't leak EventSources.
+      if (es) es.close();
+      out.textContent = '';
+      status.textContent = 'connecting…';
+      status.className = 'status';
+
+      es = new EventSource('/sse/chat?q=' + encodeURIComponent(question));
+      es.addEventListener('token', (e) => {
+        out.textContent += e.data;
+        status.textContent = 'streaming…';
+      });
+      es.addEventListener('done', () => {
+        status.textContent = 'done.';
+        es.close();
+      });
+      es.addEventListener('error', (e) => {
+        // EventSource fires `error` both on transport failures and on server-emitted `event: error`.
+        // We only have access to e.data on the named event; transport errors leave it undefined.
+        const detail = e?.data ?? 'connection lost';
+        status.textContent = 'error: ' + detail;
+        status.className = 'status err';
+        es.close();
+      });
+    }
+
+    go.addEventListener('click', ask);
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
+  </script>
+</body>
+</html>

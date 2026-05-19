@@ -123,7 +123,7 @@ layer_examples() {
     while IFS= read -r f; do
       node --check "$f" 2>&1 | sed "s|^|  $f: |" && echo "  ${GREEN}ok${RESET} $f" \
         || { echo "  ${RED}FAIL${RESET} $f"; fail=1; }
-    done < <(find examples/js -type f -name "*.js" 2>/dev/null)
+    done < <(find examples/js examples/sse -type f -name "*.js" 2>/dev/null)
   fi
   if command -v python3 >/dev/null 2>&1; then
     while IFS= read -r f; do
@@ -131,6 +131,26 @@ layer_examples() {
         && echo "  ${GREEN}ok${RESET} $f" \
         || { echo "  ${RED}FAIL${RESET} $f"; fail=1; }
     done < <(find examples/python -type f -name "*.py" 2>/dev/null)
+  fi
+  # Go: prefer `go vet` (catches more than `gofmt -l`) when the toolchain is present.
+  if command -v go >/dev/null 2>&1 && [[ -d examples/go ]]; then
+    if (cd examples/go && go vet ./... 2>&1); then
+      echo "  ${GREEN}ok${RESET} examples/go (go vet)"
+    else
+      echo "  ${RED}FAIL${RESET} examples/go (go vet)"; fail=1
+    fi
+  elif [[ -d examples/go ]]; then
+    echo "  ${YELLOW}skip${RESET} examples/go (no go toolchain)"
+  fi
+  # Rust: `cargo check` is the cheapest type-check that doesn't link.
+  if command -v cargo >/dev/null 2>&1 && [[ -d examples/rust ]]; then
+    if (cd examples/rust && cargo check --offline 2>/dev/null || cargo check 2>&1); then
+      echo "  ${GREEN}ok${RESET} examples/rust (cargo check)"
+    else
+      echo "  ${RED}FAIL${RESET} examples/rust (cargo check)"; fail=1
+    fi
+  elif [[ -d examples/rust ]]; then
+    echo "  ${YELLOW}skip${RESET} examples/rust (no cargo toolchain)"
   fi
   return $fail
 }

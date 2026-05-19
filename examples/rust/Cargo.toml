@@ -1,0 +1,17 @@
+[package]
+name = "chaingpt-news-example"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal Rust example calling the ChainGPT AI News public endpoint."
+license = "MIT"
+
+[dependencies]
+# reqwest is the de-facto async HTTP client. blocking feature keeps the example
+# single-file without a runtime dep.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "chaingpt-news"
+path = "src/main.rs"
