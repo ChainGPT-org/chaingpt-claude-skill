@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import './_setup.js';
+// Never touch the real OS keychain from tests — force env-var-only resolution.
+process.env.CHAINGPT_DISABLE_KEYCHAIN = '1';
 process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = 'super-long-passphrase-for-tests-only-1234';
 
 const TMP = mkdtempSync(join(tmpdir(), 'chaingpt-agent-wallet-test-'));
@@ -100,6 +102,45 @@ describe('Keystore', () => {
     const old = process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
     process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = 'short';
     expect(() => initKeystore()).toThrow(/at least 16/i);
+    process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = old;
+  });
+
+  it('init reports passphrase source = env when the env var is set', () => {
+    resetState();
+    const r = initKeystore();
+    expect(r.passphraseSource).toBe('env');
+  });
+
+  it('with keychain disabled AND no env var, init fails closed with a clear message', () => {
+    resetState();
+    const old = process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
+    delete process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
+    // CHAINGPT_DISABLE_KEYCHAIN=1 (set at top) → no keychain backend → must error, never silently open.
+    expect(() => initKeystore()).toThrow(/no keystore passphrase available/i);
+    process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = old;
+  });
+});
+
+describe('Passphrase resolver (agent-secret)', () => {
+  it('env var wins and reports source=env', async () => {
+    const { resolvePassphrase } = await import('../lib/agent-secret.js');
+    const r = resolvePassphrase();
+    expect(r.source).toBe('env');
+    expect(r.value).toBe(process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE);
+  });
+
+  it('detectKeychainBackend returns null when CHAINGPT_DISABLE_KEYCHAIN=1', async () => {
+    const { detectKeychainBackend } = await import('../lib/agent-secret.js');
+    expect(detectKeychainBackend()).toBeNull();
+  });
+
+  it('with no env var and keychain disabled, resolves to source=none (no real keychain access)', async () => {
+    const { resolvePassphrase } = await import('../lib/agent-secret.js');
+    const old = process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
+    delete process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
+    const r = resolvePassphrase();
+    expect(r.source).toBe('none');
+    expect(r.value).toBeNull();
     process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = old;
   });
 });

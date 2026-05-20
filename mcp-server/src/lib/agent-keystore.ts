@@ -22,6 +22,13 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import type { PrivateKeyAccount } from 'viem/accounts';
+import {
+  resolvePassphrase,
+  provisionKeychainPassphrase,
+  detectKeychainBackend,
+  describeSecretSource,
+  type SecretSource,
+} from './agent-secret.js';
 
 const SCRYPT_N = 16384;  // 2^14 — slow enough to resist brute force, fast enough not to block startup
 const KEY_LEN = 32;
@@ -36,8 +43,15 @@ export function keystorePath(): string {
 }
 
 function passphrase(): string | null {
-  return process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE?.trim() || null;
+  return resolvePassphrase().value;
 }
+
+/** Where the passphrase currently resolves from — surfaced in status output. */
+export function passphraseSource(): SecretSource {
+  return resolvePassphrase().source;
+}
+
+export { describeSecretSource };
 
 function deriveKey(pass: string, salt: Buffer): Buffer {
   return scryptSync(pass, salt, KEY_LEN, { N: SCRYPT_N });
@@ -74,7 +88,7 @@ export function readKeystoreFile(): KeystoreFile | null {
  * Refuses to overwrite an existing keystore (use a different path or
  * delete the file manually with shell access).
  */
-export function initKeystore(): { address: `0x${string}`; path: string } {
+export function initKeystore(): { address: `0x${string}`; path: string; passphraseSource: SecretSource } {
   const path = keystorePath();
   if (isKeystoreInitialized()) {
     throw new Error(
@@ -82,12 +96,26 @@ export function initKeystore(): { address: `0x${string}`; path: string } {
       `Refusing to overwrite — delete the file manually if you want to regenerate.`
     );
   }
-  const pass = passphrase();
+  // Resolve the passphrase. Priority: env var → existing keychain entry →
+  // auto-generate into the keychain (if a backend is available).
+  let resolved = resolvePassphrase();
+  let source: SecretSource = resolved.source;
+  let pass = resolved.value;
   if (!pass) {
-    throw new Error(
-      'CHAINGPT_AGENT_WALLET_PASSPHRASE env var is required to initialize the keystore. ' +
-      'Set it in your shell BEFORE starting the MCP server. Min 16 chars.'
-    );
+    const backend = detectKeychainBackend();
+    if (backend) {
+      // No env var, no existing keychain entry, but a keychain is available:
+      // generate a strong random passphrase and store it. Zero-setup UX.
+      const provisioned = provisionKeychainPassphrase();
+      pass = provisioned.value;
+      source = 'keychain';
+    } else {
+      throw new Error(
+        'No keystore passphrase available. Either set CHAINGPT_AGENT_WALLET_PASSPHRASE ' +
+        '(min 16 chars) in your shell BEFORE starting the MCP server, or run on a host with ' +
+        'an OS keychain (macOS Keychain / Linux libsecret) so one can be auto-generated.'
+      );
+    }
   }
   if (pass.length < MIN_PASS_LEN) {
     throw new Error(`Passphrase must be at least ${MIN_PASS_LEN} characters.`);
@@ -120,15 +148,17 @@ export function initKeystore(): { address: `0x${string}`; path: string } {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, JSON.stringify(file, null, 2), { mode: 0o600 });
   try { chmodSync(dirname(path), 0o700); } catch { /* best-effort */ }
-  return { address: account.address, path };
+  return { address: account.address, path, passphraseSource: source };
 }
 
 export function loadAccount(): PrivateKeyAccount {
   const pass = passphrase();
   if (!pass) {
     throw new Error(
-      'CHAINGPT_AGENT_WALLET_PASSPHRASE env var is not set; cannot decrypt the keystore. ' +
-      'Set it in your shell before starting the MCP server.'
+      'No keystore passphrase available; cannot decrypt the keystore. ' +
+      'Set CHAINGPT_AGENT_WALLET_PASSPHRASE in your shell before starting the MCP server, ' +
+      'or ensure the OS keychain entry created at init is still present (it may have been ' +
+      'deleted, or the keychain is locked).'
     );
   }
   const file = readKeystoreFile();
