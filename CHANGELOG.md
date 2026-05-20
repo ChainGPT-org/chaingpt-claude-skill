@@ -113,11 +113,6 @@ Closes the three top "Next up" items from the roadmap.
 - `mcp-server/package.json` and `mock-server/package.json` `"build"` scripts now invoke `node ./node_modules/typescript/bin/tsc` directly, sidestepping the rogue transitive `tsc@2.0.4` shim package (pulled in by `@chaingpt/smartcontractgenerator`) that printed "This is not the tsc command you are looking for" and aborted the build.
 - New `"smoke"` npm script in `mcp-server`: `npm run smoke` builds + runs the live smoke in one shot.
 
-### Added — Creator Sidekick template (11th project template)
-- `templates/creator-sidekick.md` — full-stack template for creator-economy platforms combining 3 ChainGPT products (LLM + NFT + News). Targets the previously-uncovered crypto-native creator vertical (video, podcast, streaming) with tipping coach, script-to-thumbnail pipeline (text + actual PNG), and daily creator brief. Includes documented workarounds for SDK error-handler edge cases and JSON shape drift.
-- README updated to reflect 11 project templates (was 10).
-- `skills/chaingpt/SKILL.md` template-routing table updated with creator-sidekick request triggers.
-
 ### Added — Agent-wallet dashboard polish + custom chains + blue-chip auto-scan + unrestricted mode
 Major UX pass on the agent-wallet localhost admin dashboard. The dashboard is now a real wallet UI (MetaMask / Rabby / Trust patterns) instead of a single-column form dump.
 

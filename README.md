@@ -6,7 +6,7 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-One install gives Claude Code 111 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 11 project templates. Daily live‑API smoke CI.
+One install gives Claude Code 111 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
 [![npm version](https://img.shields.io/badge/version-1.10.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -109,7 +109,7 @@ Building with Web3 AI APIs means juggling **seven different domains in one task*
 |---|---|
 | **Solo Web3 dev** | Skip the "30 SDKs, 3 docs sites, 12 schema versions" tax. Build a deploy pipeline, an MEV‑protected swap, or a portfolio dashboard from chat. |
 | **DeFi power user** | Health‑factor monitor + automated stake/unstake + cross‑chain rebalance, all custody‑free, no on‑chain bot infrastructure required. |
-| **Hackathon team** | The `chaingpt-hackathon` skill scaffolds a working 5‑file Web3 + AI project in 60 seconds. 11 templates including a Creator Sidekick combining 3 ChainGPT products. |
+| **Hackathon team** | The `chaingpt-hackathon` skill scaffolds a working 5‑file Web3 + AI project in 60 seconds. 10 templates including multi‑product compositions (NFT Marketplace, DeFi Dashboard). |
 | **Quant / desk** | Hyperliquid + Drift + Polymarket live data, Pendle yield discovery, Morpho vault analytics, strategy plan persistence + grid backtester, all from one toolkit. |
 | **Smart‑contract engineer** | 45+ audited Solidity patterns Claude composes from. Mainnet deploy with mandatory audit gate. Verification via Etherscan v2 across every major EVM chain. |
 | **Agent builder** | The agent gets its own EOA + policy file the LLM cannot bypass. Localhost admin dashboard with 9 policy templates + kill switch. Build "bounded autonomous" trading/yield bots safely. |
@@ -167,7 +167,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
 
 2. **Reference docs** (`reference/*.md`, 19 files) — every endpoint, parameter, response shape, credit cost, and error code for the seven ChainGPT products. The skill loads these into Claude's context on demand so it never has to guess a parameter name.
 
-3. **Templates + Patterns** (`templates/` + `patterns/`, 11 templates + 45+ Solidity patterns) — production‑ready scaffolds (Next.js chatbot, NFT marketplace, DeFi dashboard, Creator Sidekick, …) and audited Solidity (ERC‑20 variants, ERC‑4626 vaults, UUPS upgradeable, Governor, role‑based access, timelocks, …). Claude composes from these instead of regenerating boilerplate from scratch.
+3. **Templates + Patterns** (`templates/` + `patterns/`, 10 templates + 45+ Solidity patterns) — production‑ready scaffolds (Next.js chatbot, NFT marketplace, DeFi dashboard, React Native wallet, Nuxt news app, …) and audited Solidity (ERC‑20 variants, ERC‑4626 vaults, UUPS upgradeable, Governor, role‑based access, timelocks, …). Claude composes from these instead of regenerating boilerplate from scratch.
 
 4. **MCP Server** (`mcp-server/`, 111 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
 
@@ -605,7 +605,7 @@ chaingpt-claude-skill/
 │   └── update/SKILL.md               #   Check for skill updates
 │
 ├── reference/                        # API & SDK documentation (19 files)
-├── templates/                        # 11 project templates (+ composition guide)
+├── templates/                        # 10 project templates (+ composition guide)
 ├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
 ├── mcp-server/                       # MCP server — 111 tools, 250 vitest cases
@@ -625,7 +625,7 @@ chaingpt-claude-skill/
 - [x] **111 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
 - [x] **Agent wallet** — encrypted keystore + prompt‑injection‑resistant admin policy gate + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
 - [x] **Custody‑free signing** — every state‑changing tool returns an unsigned tx / EIP‑712 intent; the plugin never sees a private key. `acknowledgeMainnet: true` gate on every mainnet write
-- [x] 11 project templates including multi‑product compositions
+- [x] 10 project templates including multi‑product compositions
 - [x] 45+ audited Solidity patterns
 - [x] Mock server for zero‑credit development (26 endpoint tests)
 - [x] **Unified test harness** — `./scripts/test-all.sh` runs six layers. 250 vitest + 26 mock + 159 validate + 39 live‑API cases
