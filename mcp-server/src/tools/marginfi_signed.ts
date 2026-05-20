@@ -190,10 +190,13 @@ async function buildMarginfiAction(kind: 'deposit' | 'withdraw', args: any): Pro
     preloadedBankAddresses: [targetBankAddress],
   } as any);
 
-  const bank =
-    (wantMint ? client.getBankByMint(wantMint) : undefined) ??
-    (args.symbol ? client.getBankByTokenSymbol(args.symbol) : undefined) ??
-    (client as any).getBankByPk?.(targetBankAddress);
+  // We preloaded exactly targetBankAddress, so resolving by its pubkey is the
+  // most direct + reliable path. The symbol/mint getters are fallbacks only.
+  // Each getter is called inside an explicit guard so it never receives
+  // undefined (getBankByMint/getBankByTokenSymbol throw on a nullish arg).
+  let bank = client.getBankByPk(targetBankAddress);
+  if (!bank && wantMint) bank = client.getBankByMint(wantMint);
+  if (!bank && args.symbol) bank = client.getBankByTokenSymbol(args.symbol);
   if (!bank) {
     throw new Error(`Resolved bank ${targetBankAddress.toBase58()} but the SDK did not load it. The bank may be deprecated or the metadata is stale.`);
   }
