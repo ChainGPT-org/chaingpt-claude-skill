@@ -36,6 +36,7 @@ import { agentWalletTools, handleAgentWalletTool } from './tools/agent_wallet.js
 import { aaTools, handleAaTool } from './tools/aa.js';
 import { solanaTools, handleSolanaTool } from './tools/solana.js';
 import { marginfiSignedTools, handleMarginfiSignedTool } from './tools/marginfi_signed.js';
+import { kaminoSignedTools, handleKaminoSignedTool } from './tools/kamino_signed.js';
 import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
@@ -82,6 +83,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...portfolioTools,
     ...solanaLendingTools,
     ...marginfiSignedTools,
+    ...kaminoSignedTools,
     ...planTools,
     ...agentWalletTools,
     ...aaTools,
@@ -128,6 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
     if (name.startsWith('chaingpt_defi_pendle') || name.startsWith('chaingpt_defi_morpho')) return await handleYieldTool(name, args);
     if (name === 'chaingpt_defi_marginfi_deposit_tx' || name === 'chaingpt_defi_marginfi_withdraw_tx') return await handleMarginfiSignedTool(name, args);
+    if (name === 'chaingpt_defi_kamino_deposit_tx' || name === 'chaingpt_defi_kamino_withdraw_tx') return await handleKaminoSignedTool(name, args);
     if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) return await handleSolanaLendingTool(name, args);
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
