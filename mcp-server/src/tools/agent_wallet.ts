@@ -195,6 +195,50 @@ async function getNativeBalance(chainSlug: string, address: string): Promise<big
   return BigInt(hex);
 }
 
+// Upper bound for a single balance fetch during dashboard render. Kept short so
+// the page stays responsive even when a public RPC is slow/rate-limiting; a
+// timed-out cell just shows "RPC error" and the user can hit Refresh.
+const BALANCE_RENDER_TIMEOUT_MS = 3500;
+
+// Resolve/reject `p`, but reject after `ms` if it hasn't settled. The original
+// promise is left to settle in the background (its rejection is swallowed so it
+// can't surface as an unhandledRejection); we just stop awaiting it.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  p.catch(() => {});
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`balance fetch timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Short-lived balance cache. The dashboard re-renders on every POST (policy
+// save, kill-switch flip, …) and auto-reloads every 30s, so without a cache a
+// degraded RPC is hit on each interaction. Successful balances are cached
+// briefly; failures are cached for a shorter window so a recovered RPC shows
+// fresh data soon. This keeps the page responsive and cuts redundant RPC load.
+type BalanceCacheEntry = { ok: boolean; value?: bigint; expiry: number };
+const balanceCache = new Map<string, BalanceCacheEntry>();
+const BAL_TTL_OK_MS = 30_000;
+const BAL_TTL_ERR_MS = 15_000;
+
+async function cachedBalance(key: string, fetchFn: () => Promise<bigint>): Promise<bigint> {
+  const now = Date.now();
+  const hit = balanceCache.get(key);
+  if (hit && hit.expiry > now) {
+    if (hit.ok) return hit.value as bigint;
+    throw new Error('cached RPC error');
+  }
+  try {
+    const v = await withTimeout(fetchFn(), BALANCE_RENDER_TIMEOUT_MS);
+    balanceCache.set(key, { ok: true, value: v, expiry: now + BAL_TTL_OK_MS });
+    return v;
+  } catch (e) {
+    balanceCache.set(key, { ok: false, expiry: now + BAL_TTL_ERR_MS });
+    throw e;
+  }
+}
+
 let runningServer: Server | null = null;
 let runningPort: number | null = null;
 
@@ -707,19 +751,27 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   const policy = loadPolicy();
   const digest = policyDigest(policy);
 
-  // Native balances
+  // Balances are fetched in PARALLEL with a short per-call timeout so a slow
+  // or unreachable RPC can't block the whole dashboard render. Previously each
+  // chain/token was awaited sequentially against an 8s-per-endpoint fallback,
+  // so a degraded public RPC stacked into a multi-second (or timed-out) render
+  // on every page load. Each cell now degrades independently to "RPC error".
+  const nativeResults = await Promise.all(
+    chains.map(async (c) => {
+      const chain = resolveChainWithCustom(c);
+      if (!chain) return null;
+      try {
+        const bal = await cachedBalance(`native:${c}:${address}`, () => getNativeBalance(c, address));
+        return { c, chain, amount: fmtEth(bal), isZero: bal === 0n, isError: false };
+      } catch {
+        return { c, chain, amount: '?', isZero: false, isError: true };
+      }
+    }),
+  );
   const nativeRows: string[] = [];
-  for (const c of chains) {
-    const chain = resolveChainWithCustom(c);
-    if (!chain) continue;
-    let amount = '?';
-    let isZero = false;
-    let isError = false;
-    try {
-      const bal = await getNativeBalance(c, address);
-      amount = fmtEth(bal);
-      isZero = bal === 0n;
-    } catch { isError = true; }
+  for (const r of nativeResults) {
+    if (!r) continue;
+    const { c, chain, amount, isZero, isError } = r;
     const zeroClass = isZero ? ' zero-balance' : '';
     const valueCell = isError
       ? `<span style="color:#7d8590">RPC error</span>`
@@ -735,20 +787,24 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
     );
   }
 
-  // Tracked tokens
+  // Tracked tokens — same parallel + timeout treatment.
   const tracked = loadTrackedTokens();
+  const tokenResults = await Promise.all(
+    tracked.map(async (t) => {
+      const chain = resolveChainWithCustom(t.chain);
+      if (!chain) return null;
+      try {
+        const raw = await cachedBalance(`erc20:${t.chain}:${t.address}:${address}`, () => fetchErc20Balance(t.chain, t.address, address));
+        return { t, chain, amount: formatTokenAmount(raw, t.decimals), isZero: raw === 0n, isError: false };
+      } catch {
+        return { t, chain, amount: '?', isZero: false, isError: true };
+      }
+    }),
+  );
   const tokenRows: string[] = [];
-  for (const t of tracked) {
-    const chain = resolveChainWithCustom(t.chain);
-    if (!chain) continue;
-    let amount = '?';
-    let isZero = false;
-    let isError = false;
-    try {
-      const raw = await fetchErc20Balance(t.chain, t.address, address);
-      amount = formatTokenAmount(raw, t.decimals);
-      isZero = raw === 0n;
-    } catch { isError = true; }
+  for (const r of tokenResults) {
+    if (!r) continue;
+    const { t, chain, amount, isZero, isError } = r;
     const zeroClass = isZero ? ' zero-balance' : '';
     const valueCell = isError
       ? `<span style="color:#7d8590">RPC error</span>`
