@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased] - 2026-05-19
+### Removed — Creator Sidekick template (security policy, reverts PR #18)
+- Deleted `templates/creator-sidekick.md`.
+- Removed the creator-sidekick row from the `skills/chaingpt/SKILL.md` template-routing table.
+- Reverted README template-count references from `11 project templates` → `10 project templates`.
+- Reverted the Creator Sidekick row from the README templates table.
+
+**Why:** PR #18 was the only external (non-`ceoguy`) contribution merged into this repo. A security audit found no malicious content in the PR — no executable code shipped, no URLs, no Unicode tricks, no build-system tampering — and the contributor's profile (Scottcjn / "AutoJanitor" / founder of BoTTube AI video) is consistent with someone genuinely targeting the video-creator vertical. The decision to revert is **policy, not threat-driven**: this repo will not accept external contributions until a code-owner-review gate is in place, so removing the prior exception keeps the supply chain to a single signer.
+
 ## [1.10.0] - 2026-05-19
 ### Added — Tier 6.5 Solana signing foundation + native/SPL transfer (2 new tools)
 Custody-free Solana transaction building lands. The plugin now constructs unsigned `VersionedTransaction`s that the user signs in Phantom / Backpack / Solflare / hardware wallet and submits via their preferred RPC.
@@ -112,11 +121,6 @@ Closes the three top "Next up" items from the roadmap.
 - `mock-server/src/index.ts` no longer calls `app.listen()` at module load when `process.env.VITEST` is set. Eliminates `EADDRINUSE :3001` noise when running `npm test` while another process holds port 3001.
 - `mcp-server/package.json` and `mock-server/package.json` `"build"` scripts now invoke `node ./node_modules/typescript/bin/tsc` directly, sidestepping the rogue transitive `tsc@2.0.4` shim package (pulled in by `@chaingpt/smartcontractgenerator`) that printed "This is not the tsc command you are looking for" and aborted the build.
 - New `"smoke"` npm script in `mcp-server`: `npm run smoke` builds + runs the live smoke in one shot.
-
-### Added — Creator Sidekick template (11th project template)
-- `templates/creator-sidekick.md` — full-stack template for creator-economy platforms combining 3 ChainGPT products (LLM + NFT + News). Targets the previously-uncovered crypto-native creator vertical (video, podcast, streaming) with tipping coach, script-to-thumbnail pipeline (text + actual PNG), and daily creator brief. Includes documented workarounds for SDK error-handler edge cases and JSON shape drift.
-- README updated to reflect 11 project templates (was 10).
-- `skills/chaingpt/SKILL.md` template-routing table updated with creator-sidekick request triggers.
 
 ### Added — Agent-wallet dashboard polish + custom chains + blue-chip auto-scan + unrestricted mode
 Major UX pass on the agent-wallet localhost admin dashboard. The dashboard is now a real wallet UI (MetaMask / Rabby / Trust patterns) instead of a single-column form dump.

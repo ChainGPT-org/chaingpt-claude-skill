@@ -212,7 +212,6 @@ When a developer asks to scaffold a project, read the appropriate template file 
 | "Build a crypto news dashboard" / "news feed widget" | `templates/news-dashboard.md` |
 | "Launch an AI Twitter agent" / "create a crypto bot" | `templates/twitter-agent.md` |
 | "Combine multiple products" / "multi-product architecture" | `templates/composition-patterns.md` |
-| "Build a Creator Sidekick" / "creator-economy AI" / "video creator tipping + thumbnails + news" | `templates/creator-sidekick.md` |
 
 ## Detailed Reference Files
 
