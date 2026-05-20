@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0] - 2026-05-19
+### Fixed — dashboard SKILL.md doc + version bump to force clean cache refresh
+- **`skills/dashboard/SKILL.md`** — the description + panel table still said "five read-only panels (Overview, Skills, Activity, Health, About)" after the Wallet tab shipped in 1.11.0. Updated to "six panels" and added the Wallet row documenting what it shows (agent EOA address, policy summary, tracked-token/custom-chain counts, signed-tx count, CTA to the full Wallet Admin UI).
+- **Version bump 1.11.0 → 1.12.0** with no functional code change. Claude Code caches installed plugins by version string under `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`. Two different builds both tagged `1.11.0` (the pre-Wallet-tab build and the post-Wallet-tab build) did not invalidate the cache on `/plugin marketplace update` + `/reload-plugins`, so users kept seeing the stale 5-tab dashboard. Bumping the version guarantees a fresh cache directory on the next install/update.
+
+**If you installed 1.11.0 and see only 5 dashboard tabs:** run `/plugin marketplace update chaingpt-claude-skill` then `/reload-plugins`. The version bump to 1.12.0 forces Claude Code to re-copy the plugin into a new cache dir. If it still shows 5 tabs, `rm -rf ~/.claude/plugins/cache/chaingpt-claude-skill` and `/reload-plugins`.
+
 ## [1.11.0] - 2026-05-19
 ### Added — Marketplace dashboard (1 new tool, 1 new skill, 1 new slash command)
 A localhost web UI that gives a glance-at-it view of the marketplace. Read-only by design — no signing flows are proxied through the browser.

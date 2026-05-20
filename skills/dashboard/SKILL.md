@@ -1,6 +1,6 @@
 ---
 name: chaingpt-dashboard
-description: "Open the ChainGPT marketplace dashboard — a localhost web UI with five read-only panels (Overview, Skills, Activity, Health, About). Bind 127.0.0.1 only, admin-token auth, same-origin CSRF defense. Triggers: dashboard, open the dashboard, ChainGPT dashboard, marketplace dashboard, show me the dashboard, web UI, control panel, skills overview, env check, plugin health."
+description: "Open the ChainGPT marketplace dashboard — a localhost web UI with six read-only panels (Overview, Wallet, Skills, Activity, Health, About). Bind 127.0.0.1 only, admin-token auth, same-origin CSRF defense. Triggers: dashboard, open the dashboard, ChainGPT dashboard, marketplace dashboard, show me the dashboard, web UI, control panel, skills overview, agent wallet panel, env check, plugin health."
 ---
 
 # ChainGPT Dashboard
@@ -30,6 +30,7 @@ You can also call the tool directly:
 | Panel | What it shows | Source |
 |---|---|---|
 | Overview | Plugin / MCP / marketplace versions; skill count; agent-wallet init state; docs link | `.claude-plugin/*.json`, `mcp-server/package.json`, `~/.chaingpt-mcp/agent-wallet/keystore.json` |
+| Wallet | Agent EOA address (copy button); policy summary (kill switch, unrestricted mode, allowed chains, allowed/blocked address counts, max tx value, max gas, memo requirement, policy digest); tracked-token + custom-chain counts; signed-tx count; CTA to launch the full Wallet Admin UI (port 8787) for editing. Read-only — reads the public address from the keystore, never decrypts. | `~/.chaingpt-mcp/agent-wallet/{keystore,policy,tracked-tokens,custom-chains}.json` |
 | Skills | One card per skill in `skills/` with name + description from its SKILL.md frontmatter | `skills/*/SKILL.md` |
 | Activity | Most recent signed transactions (newest first) | `~/.chaingpt-mcp/agent-wallet/activity.jsonl` (empty if you haven't signed yet) |
 | Health | Presence (not value) of CHAINGPT_API_KEY, agent-wallet passphrase, Etherscan/Moralis/GoPlus keys; Node runtime; key paths | `process.env`, filesystem |
