@@ -8,6 +8,7 @@ import {
   type AddressLookupTableAccount,
 } from '@solana/web3.js';
 import { parseAddress, makeConnection, serializeUnsigned } from '../lib/solana-sign.js';
+import { formatSimResult } from '../lib/solana-sim.js';
 
 /**
  * Tier-6.5b Marginfi v2 signed actions — deposit + withdraw. Custody-free.
@@ -105,44 +106,6 @@ function readonlyWallet(pubkey: PublicKey): any {
   return { publicKey: pubkey, signTransaction: refuse, signAllTransactions: refuse };
 }
 
-function fmtSim(sim: { value: { err: unknown; logs: string[] | null; unitsConsumed?: number } }): string {
-  const { err, logs, unitsConsumed } = sim.value;
-  if (err === null) {
-    return [
-      `Simulation: ✅ OK (the Marginfi program accepted the instruction)`,
-      unitsConsumed ? `  compute units: ${unitsConsumed}` : '',
-    ].filter(Boolean).join('\n');
-  }
-  // A non-null err can be a benign STATE error (insufficient funds, no position
-  // yet) — which still proves the encoding deserialized — or a real ENCODING
-  // error. The reliable signal: Anchor logs `Program log: Instruction: <name>`
-  // only AFTER it has successfully deserialized the instruction data AND
-  // resolved every account. So if we see that line, our encoding is correct and
-  // any further error is the program rejecting on business rules (state). We do
-  // NOT pattern-match the error string for "AccountNotFound" etc. — Marginfi's
-  // program-level `BankAccountNotFound` (no position in that bank) is a benign
-  // state error that would false-positive on a naive substring check.
-  const errStr = typeof err === 'string' ? err : JSON.stringify(err);
-  const logStr = (logs ?? []).join('\n');
-  const reachedHandler = /Program log: Instruction:/.test(logStr);
-  // Errors that fire BEFORE the handler runs => the instruction never
-  // deserialized / accounts didn't resolve => real encoding/account problem.
-  const preHandlerEncodingError = /InstructionDidNotDeserialize|InvalidInstructionData|insufficient account keys|Failed to (de)?serialize|Program failed to complete|An account required by the instruction is missing/i.test(
-    errStr + '\n' + logStr,
-  );
-  const encodingProblem = !reachedHandler && preHandlerEncodingError;
-  return [
-    `Simulation: ⚠ returned an error — ${errStr}`,
-    encodingProblem
-      ? `  ⛔ ENCODING/ACCOUNT problem — the instruction did not deserialize or an account failed to resolve. DO NOT sign this tx.`
-      : reachedHandler
-        ? `  ✅ Encoding verified: the Marginfi program deserialized the instruction and ran its handler. This is a STATE error (e.g. insufficient balance, or no position in this bank yet) — the tx is correctly built; it just won't succeed for THIS account/amount right now.`
-        : `  This is likely a STATE error — the encoding appears fine. Review the logs below before signing.`,
-    `  Program logs (tail):`,
-    ...(logs ?? []).slice(-8).map((l) => `    ${l}`),
-  ].join('\n');
-}
-
 async function buildMarginfiAction(kind: 'deposit' | 'withdraw', args: any): Promise<string> {
   if (args.acknowledgeMainnet !== true) {
     return [
@@ -235,7 +198,7 @@ async function buildMarginfiAction(kind: 'deposit' | 'withdraw', args: any): Pro
   let simText: string;
   try {
     const sim = await conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true });
-    simText = fmtSim(sim as any);
+    simText = formatSimResult(sim as any, 'Marginfi');
   } catch (e: any) {
     simText = `Simulation: could not run (${e?.message ?? e}). Decode + review the tx manually before signing.`;
   }
