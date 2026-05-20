@@ -8,9 +8,9 @@
 
 One install gives Claude Code 112 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
-[![npm version](https://img.shields.io/badge/version-1.13.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.14.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-250%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-323%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-112-blueviolet?style=flat-square)](#-mcp-server--112-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
@@ -155,19 +155,24 @@ The dashboard binds **127.0.0.1 only**, the admin token rotates every time the s
 
 If you want Claude to **sign and broadcast transactions itself** within a policy you set, the Agent Wallet feature ships with the plugin. It's optional — if you just want the AI co‑pilot that returns *unsigned* transactions for you to sign in MetaMask / Rabby / Phantom, **skip this step**.
 
-```bash
-# Set a strong passphrase BEFORE launching Claude Code (≥16 chars).
-# This is used to AES-256-GCM encrypt the keystore. The agent never sees it.
-export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-min-16-chars"
-```
+The keystore is AES‑256‑GCM encrypted with a passphrase. You have two ways to provide it:
 
-Then in Claude Code:
+**Option A — zero‑setup (macOS / Linux with a keychain):** just init. A strong 256‑bit passphrase is auto‑generated and stored in your **OS keychain** (macOS Keychain or Linux libsecret). You never type or remember it.
 
 ```
 > initialize the agent wallet
 ```
 
-Claude calls `chaingpt_agent_wallet_init`. Output: the new EOA address. Send a small amount of native currency to that address for gas, edit the policy file at `~/.chaingpt-mcp/agent-wallet/policy.json` to whitelist what the agent may do, and you're set.
+**Option B — explicit env var (CI / headless / maximum control):** set a passphrase before launching Claude Code.
+
+```bash
+export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-min-16-chars"
+# then relaunch claude, and: > initialize the agent wallet
+```
+
+Either way, Claude calls `chaingpt_agent_wallet_init` and prints the new EOA address (and tells you which passphrase source it used). The default policy is now **Balanced DeFi** (kill switch OFF, 0.1‑native per‑tx cap, major DEX/lending routers allowlisted) — fund the address, review/tighten the policy in the dashboard, and you're set.
+
+> **Back up the passphrase.** Keychain option: `security find-generic-password -s chaingpt-mcp-agent-wallet -a keystore-passphrase -w` (macOS). Lose it with no backup → the keystore is unrecoverable.
 
 For full wallet management (multi-chain balances, kill switch, 9 policy templates including 🚨 Unrestricted, custom-chain registration, blue-chip auto-scan), open the dedicated wallet admin UI:
 

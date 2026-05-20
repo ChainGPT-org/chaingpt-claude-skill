@@ -19,20 +19,37 @@ The agent has its own EOA wallet on every EVM chain it supports. The admin (you,
 
 The attacker can convince the LLM to call `sign_and_send(to=attacker, value=ALL)` — but the tool layer refuses because `attacker` isn't in `allowedToAddresses` or `value` exceeds `maxTxValueWei` or `killSwitch=true`. **The trust boundary is the tool code, not the LLM.**
 
-There is no MCP tool that writes the policy file. The admin edits it directly with a text editor. There is no MCP tool that reads or sets the passphrase. The passphrase lives only in the shell env var.
+There is no MCP tool that writes the policy file. The admin edits it directly with a text editor. There is no MCP tool that reads or sets the passphrase. The passphrase lives only in the shell env var **or** the OS keychain — never in the keystore file, never in the LLM's context.
 
 ## Setup (admin steps — done once)
 
+The keystore passphrase resolves in this priority order:
+
+1. **`CHAINGPT_AGENT_WALLET_PASSPHRASE` env var** — explicit override. Best for CI / headless / power users who want zero process-list and zero keychain exposure.
+2. **OS keychain** — auto-managed. On macOS (Keychain via `security`) or Linux (libsecret via `secret-tool`), if no env var is set, `chaingpt_agent_wallet_init` **generates a strong 256-bit passphrase and stores it in the keychain**. You never type or remember it; the MCP server reads it back on each load.
+
+### Option A — zero-setup (macOS / Linux with a keychain) — recommended for most
+
 ```bash
-# 1. Set a strong passphrase BEFORE starting the MCP server (>= 16 chars)
-export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-here-min-16-chars"
-
-# 2. Start Claude Code / the MCP server in this shell
+# Just init — a strong passphrase is generated + stored in your OS keychain.
 claude
-
-# 3. Inside Claude, initialize the wallet (one-shot)
-> Use chaingpt_agent_wallet_init to set up the agent's wallet
+> initialize the agent wallet
 ```
+
+The init output tells you it used the keychain and how to export the passphrase for backup.
+
+### Option B — explicit env var (CI / headless / max control)
+
+```bash
+# Set a strong passphrase BEFORE starting the MCP server (>= 16 chars)
+export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-here-min-16-chars"
+claude
+> initialize the agent wallet
+```
+
+> **Back up the passphrase either way.** Keychain entry: `service=chaingpt-mcp-agent-wallet account=keystore-passphrase`. Export on macOS with `security find-generic-password -s chaingpt-mcp-agent-wallet -a keystore-passphrase -w`. Lose it (and any backup) → the keystore is unrecoverable. There is no recovery path.
+
+> **Security tradeoff of the keychain option:** the secret stays out of plaintext-on-disk and out of the LLM context, but the keychain is unlocked while you're logged in — a local attacker on an unlocked session could read it. That's a much higher bar than a plaintext file and appropriate for a low-value bounded hot wallet. For zero local exposure, use Option B.
 
 This creates two files:
 

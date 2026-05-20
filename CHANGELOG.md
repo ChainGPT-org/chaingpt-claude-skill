@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.14.0] - 2026-05-19
+### Added — OS-keychain auto-managed passphrase (zero-setup agent wallet)
+The agent-wallet keystore passphrase no longer *requires* a manually-set env var. New resolution order:
+
+1. **`CHAINGPT_AGENT_WALLET_PASSPHRASE` env var** — explicit override (CI / headless / power users). Highest priority, unchanged behavior.
+2. **OS keychain** — auto-managed. On macOS (Keychain via `security`) or Linux (libsecret via `secret-tool`), `chaingpt_agent_wallet_init` generates a strong 256-bit passphrase and stores it in the keychain. The user never types or remembers it; the MCP server reads it back on each load.
+
+- **`mcp-server/src/lib/agent-secret.ts`** (new) — `resolvePassphrase()`, `provisionKeychainPassphrase()`, `detectKeychainBackend()`, `describeSecretSource()`. Shells out to the OS keychain CLI (no native `keytar` dep → no node-gyp build that breaks on user machines). `CHAINGPT_DISABLE_KEYCHAIN=1` forces env-only resolution (used by tests).
+- **`agent-keystore.ts`** — `initKeystore()` auto-provisions a keychain passphrase when no env var is set and a backend is available; returns the `passphraseSource`. Falls back to a clear error (never silently opens) on a host with neither.
+- **`chaingpt_agent_wallet_init`** output + `chaingpt_agent_wallet_status` now report which source the passphrase came from, with macOS export instructions for backup.
+- **Security:** the secret stays out of plaintext-on-disk AND out of the LLM context. The documented tradeoff: the keychain is unlocked while you're logged in, so a local attacker on an unlocked session could read it — a far higher bar than a plaintext file, appropriate for a low-value bounded hot wallet. Power users wanting zero local exposure use the env var. Why not write a `.passphrase` file: that's taping the key to the lock (anyone who can read the keystore can read the passphrase beside it).
+- 5 new tests (323 total). `CHAINGPT_DISABLE_KEYCHAIN=1` in the test setup guarantees tests never touch the real keychain. Coverage: env wins, disabled-keychain → backend null, no-env + disabled → source `none`, init reports `env` source, init with neither fails closed.
+
 ## [1.13.0] - 2026-05-19
 ### Changed — Balanced DeFi is the new default policy (killSwitch OFF)
 The first-run agent-wallet policy was fail-closed (`killSwitch: true`, refuse everything). It's now a **Balanced DeFi** policy with the kill switch OFF: the agent may interact with major DEX aggregators (OpenOcean + 1inch) + Aave V3 + Lido across Ethereum / Base / Arbitrum / Optimism / Polygon, capped at **0.1 native per tx**, memo required, scam-address blocklist.

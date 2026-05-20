@@ -13,6 +13,8 @@ import {
   loadAccount,
   readKeystoreFile,
   keystorePath,
+  passphraseSource,
+  describeSecretSource,
 } from '../lib/agent-keystore.js';
 import {
   loadPolicy,
@@ -1168,7 +1170,19 @@ export async function handleAgentWalletTool(
   try {
     // ── init ────────────────────────────────────────────────────────
     if (name === 'chaingpt_agent_wallet_init') {
-      const { address, path } = initKeystore();
+      const { address, path, passphraseSource } = initKeystore();
+      const sourceLine = passphraseSource === 'keychain'
+        ? [
+            `Passphrase: auto-generated + stored in your OS keychain (${describeSecretSource('keychain')}).`,
+            `            You don't need to remember or type it — the MCP server reads it from the keychain.`,
+            `            ⚠ It is the ONLY way to decrypt this key. If you wipe the keychain entry`,
+            `            without a backup, the wallet's funds become unrecoverable. To export it for`,
+            `            backup on macOS:  security find-generic-password -s chaingpt-mcp-agent-wallet -a keystore-passphrase -w`,
+          ]
+        : [
+            `Passphrase: from CHAINGPT_AGENT_WALLET_PASSPHRASE (env var).`,
+            `            This is the ONLY way to decrypt the key. Lose it and the funds are unrecoverable.`,
+          ];
       return {
         content: [{
           type: 'text',
@@ -1177,15 +1191,15 @@ export async function handleAgentWalletTool(
             ``,
             `Address:    ${address}`,
             `Keystore:   ${path}  (encrypted, 0600)`,
+            ...sourceLine,
             ``,
             `IMPORTANT:`,
-            `  1. The passphrase from CHAINGPT_AGENT_WALLET_PASSPHRASE is the ONLY way to decrypt this key.`,
-            `     Lose it and the wallet's funds are unrecoverable.`,
-            `  2. Back up the keystore file. If the disk dies, you need both the file AND the passphrase.`,
-            `  3. The default policy at ${policyPath()} has killSwitch=true.`,
-            `     Edit it before the agent can do anything.`,
+            `  1. Back up the keystore file. If the disk dies, you need both the file AND the passphrase.`,
+            `  2. The default policy at ${policyPath()} is "Balanced DeFi" (killSwitch OFF) — the agent`,
+            `     can swap on OpenOcean/1inch, lend on Aave, stake on Lido up to 0.1 native per tx.`,
+            `     Open the dashboard or edit the policy file to tighten/widen before funding.`,
             ``,
-            `Next: chaingpt_agent_wallet_policy to see the current rules, then edit the policy file.`,
+            `Next: chaingpt_agent_wallet_policy to see the current rules, or open the admin UI to edit them.`,
           ].join('\n'),
         }],
       };
@@ -1226,7 +1240,12 @@ export async function handleAgentWalletTool(
       if (policy.maxTxValueWei) lines.push(`Max value/tx:    ${policy.maxTxValueWei} wei (${fmtEth(BigInt(policy.maxTxValueWei))} native)`);
       if (policy.requireMemo) lines.push(`Memo required:   yes`);
       lines.push(``);
-      lines.push(`Passphrase env:  ${process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE ? 'set' : 'NOT SET — signing will fail until you set CHAINGPT_AGENT_WALLET_PASSPHRASE'}`);
+      {
+        const src = passphraseSource();
+        // Keep the legacy "Passphrase env:" line so existing tooling/tests that grep it still work.
+        lines.push(`Passphrase env:  ${process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE ? 'set' : 'not set'}`);
+        lines.push(`Passphrase src:  ${src === 'none' ? 'NONE — signing will fail. Set CHAINGPT_AGENT_WALLET_PASSPHRASE or re-init on a host with an OS keychain.' : describeSecretSource(src)}`);
+      }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 

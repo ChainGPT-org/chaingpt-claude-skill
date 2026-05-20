@@ -1,6 +1,6 @@
 {
   "name": "chaingpt",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "The Web3 toolkit for Claude Code. AI-powered (ChainGPT chat / NFT / Solidity generator + auditor / crypto news / Solidity LLM) PLUS broad Web3: multi-chain wallet portfolios, token research, risk scanning, on-chain analytics, AI-enriched intel, MAINNET contract deployment with mandatory audit gate, MAINNET DEX trading (OpenOcean + 1inch v6 + CoW Protocol + Jupiter), MAINNET DeFi (Aave V3 + Lido + EigenLayer + Pendle + Morpho), MAINNET perps (Hyperliquid + Drift Solana), MAINNET Polymarket prediction-market data, MAINNET cross-chain bridging via Across Protocol v3, and multi-protocol portfolio snapshot. 45+ audited Solidity patterns + zero-credit mock server + daily live-API smoke CI. Custody-free.",
   "author": {
     "name": "ChainGPT",
