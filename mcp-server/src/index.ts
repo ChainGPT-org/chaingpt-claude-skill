@@ -35,18 +35,22 @@ import { planTools, handlePlanTool } from './tools/plans.js';
 import { agentWalletTools, handleAgentWalletTool } from './tools/agent_wallet.js';
 import { aaTools, handleAaTool } from './tools/aa.js';
 import { solanaTools, handleSolanaTool } from './tools/solana.js';
+import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
+  // Soft-warn instead of hard-exiting. Tools that genuinely need the key
+  // (chat/NFT/audit/generator/news) will fail per-call with a clear message;
+  // key-free tools (dashboard, decode-only utilities) still work. This lets
+  // a user open /chaingpt:dashboard before they've signed up for credits.
   console.error(
-    'CHAINGPT_API_KEY environment variable is required. ' +
-    'Get your key at https://app.chaingpt.org'
+    'WARN: CHAINGPT_API_KEY is not set. ChainGPT-product tools (chat/NFT/audit/generator/news) ' +
+    'will fail. Other tools (dashboard, decode/build utilities) work. Get a key at https://app.chaingpt.org.'
   );
-  process.exit(1);
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.10.0' },
+  { name: 'chaingpt', version: '1.11.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -80,6 +84,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...agentWalletTools,
     ...aaTools,
     ...solanaTools,
+    ...dashboardTools,
   ],
 }));
 
@@ -125,6 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
     if (name.startsWith('chaingpt_agent_wallet')) return await handleAgentWalletTool(name, args);
+    if (name.startsWith('chaingpt_dashboard')) return await handleDashboardTool(name, args);
     if (name === 'chaingpt_strategy_save_plan' || name === 'chaingpt_strategy_load_plan' || name === 'chaingpt_strategy_list_plans' || name === 'chaingpt_strategy_delete_plan') return await handlePlanTool(name, args);
     if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);

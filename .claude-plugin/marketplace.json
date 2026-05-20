@@ -10,7 +10,7 @@
       "name": "chaingpt",
       "source": "./",
       "description": "Turn Claude Code into a Web3 engineering co-pilot. Custody-free signing, mainnet safety gates, agent wallet with admin policy.",
-      "version": "1.9.0",
+      "version": "1.11.0",
       "homepage": "https://github.com/ChainGPT-org/chaingpt-claude-skill",
       "keywords": ["web3", "blockchain", "ai", "defi", "nft", "solidity", "mcp", "agent-wallet"]
     }
