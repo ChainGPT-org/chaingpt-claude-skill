@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.15.0] - 2026-05-20
+### Added — Agent-economy layer: x402 payments, Base ecosystem, ERC-8004 trustless agents
+13 new custody-free MCP tools (116 → 129) across four areas (PR #45):
+
+- **x402 agentic payments** (Coinbase HTTP 402) — `chaingpt_x402_decode`, `_build_payment` (UNSIGNED EIP-3009 `transferWithAuthorization` typed data + `X-PAYMENT` header assembly), `_facilitator` (supported/verify/settle), `_create_requirements` (monetize an endpoint). Settles in USDC on Base; the facilitator can only broadcast the signed authorization, never alter amount/recipient.
+- **Base — Basenames** (`name.base.eth`) — `chaingpt_base_resolve_name` (forward + reverse, **verified live on Base mainnet**), `_name_availability`, `_register_name_tx` (unsigned, mainnet-gated).
+- **Base App / Farcaster Mini Apps** — `chaingpt_miniapp_manifest`, `_embed` (`fc:miniapp` + legacy `fc:frame`), `_validate`. Offline scaffolding.
+- **ERC-8004 Trustless Agents** — `chaingpt_erc8004_resolve_agent` (Identity Registry ERC-721 → owner + AgentCard, **verified live on Base**), `_registries` (the `0x8004…` singletons, verified on 5 chains), `_agentcard` (`registration-v1` generator incl. `x402Support`). Write path deferred while the draft EIP's write ABIs stabilize.
+- New `lib/x402.ts` (EIP-712 builder) + `lib/basenames.ts`. EVM reads use a viem `fallback()` transport + `BASE_RPC_URL` override. 3 new skills (`x402`, `base`, `trustless-agents`).
+
+### Added — Solana lending signed actions (Marginfi + Kamino)
+- **Marginfi v2** deposit/withdraw (PR #41) and **Kamino** deposit/withdraw (PR #44) — custody-free unsigned `VersionedTransaction`s built by each protocol's own SDK (lazy-loaded), **mainnet-verified via `simulateTransaction`**. Every build self-simulates and surfaces whether a non-null result is an encoding problem (don't sign) or a benign state error.
+- Shared `lib/solana-sim.ts` simulation classifier (keyed on whether the program logged `Instruction: <name>`), used by both (PR #46). Requires a real `SOLANA_RPC_URL` (the SDK fetches are heavy).
+
+### Fixed — Dashboard responsiveness (PR #42)
+- The agent-wallet dashboard rendered balances by awaiting each chain/token sequentially against an 8s-per-endpoint RPC fallback, blocking every page load / POST re-render. Now **parallel + a 3.5s per-call timeout + a short balance cache** (success 30s / error 15s). Fixed a flaky test (20s timeout → ~3.6s).
+- Corrected stale counts across README + `marketplace.json`; added a prominent `SOLANA_RPC_URL` note.
+
+### Tests
+- Suite grew to **347 vitest** + 26 mock + validate (173 checks). All green.
+
 ## [1.14.0] - 2026-05-19
 ### Added — OS-keychain auto-managed passphrase (zero-setup agent wallet)
 The agent-wallet keystore passphrase no longer *requires* a manually-set env var. New resolution order:
