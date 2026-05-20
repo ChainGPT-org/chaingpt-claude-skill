@@ -37,6 +37,10 @@ import { aaTools, handleAaTool } from './tools/aa.js';
 import { solanaTools, handleSolanaTool } from './tools/solana.js';
 import { marginfiSignedTools, handleMarginfiSignedTool } from './tools/marginfi_signed.js';
 import { kaminoSignedTools, handleKaminoSignedTool } from './tools/kamino_signed.js';
+import { x402Tools, handleX402Tool } from './tools/x402.js';
+import { baseTools, handleBaseTool } from './tools/base.js';
+import { miniappTools, handleMiniappTool } from './tools/miniapp.js';
+import { erc8004Tools, handleErc8004Tool } from './tools/erc8004.js';
 import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
@@ -52,7 +56,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.14.0' },
+  { name: 'chaingpt', version: '1.15.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -84,6 +88,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...solanaLendingTools,
     ...marginfiSignedTools,
     ...kaminoSignedTools,
+    ...x402Tools,
+    ...baseTools,
+    ...miniappTools,
+    ...erc8004Tools,
     ...planTools,
     ...agentWalletTools,
     ...aaTools,
@@ -131,6 +139,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_defi_pendle') || name.startsWith('chaingpt_defi_morpho')) return await handleYieldTool(name, args);
     if (name === 'chaingpt_defi_marginfi_deposit_tx' || name === 'chaingpt_defi_marginfi_withdraw_tx') return await handleMarginfiSignedTool(name, args);
     if (name === 'chaingpt_defi_kamino_deposit_tx' || name === 'chaingpt_defi_kamino_withdraw_tx') return await handleKaminoSignedTool(name, args);
+    if (name.startsWith('chaingpt_x402')) return await handleX402Tool(name, args);
+    if (name.startsWith('chaingpt_base_')) return await handleBaseTool(name, args);
+    if (name.startsWith('chaingpt_miniapp')) return await handleMiniappTool(name, args);
+    if (name.startsWith('chaingpt_erc8004')) return await handleErc8004Tool(name, args);
     if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) return await handleSolanaLendingTool(name, args);
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
