@@ -114,12 +114,30 @@ describe('Policy gate', () => {
     data: '0x',
   };
 
-  it('default policy (killSwitch=true) refuses every tx', () => {
+  it('first-run default is balanced (killSwitch off) but still refuses an un-allowlisted destination', () => {
     const policy = loadPolicy();
-    expect(policy.killSwitch).toBe(true);
-    const decision = checkPolicy(intent, policy);
+    // New balanced default: killSwitch OFF so a funded agent can act on day one,
+    // but the destination allowlist (DEX routers + Aave + Lido) still gates sends.
+    expect(policy.killSwitch).toBe(false);
+    const decision = checkPolicy(intent, policy); // intent.to = 0x1111… (not a router)
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toMatch(/kill switch/i);
+    expect(decision.reason).toMatch(/allowlist|allowed/i);
+  });
+
+  it('balanced default ALLOWS a send to an allowlisted router within the cap', () => {
+    const policy = loadPolicy();
+    const ok = checkPolicy(
+      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test' },
+      policy,
+    );
+    expect(ok.allowed).toBe(true);
+  });
+
+  it('a policy file missing killSwitch falls back to FAIL-CLOSED, not the balanced default', () => {
+    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, allowedChains: [8453] }));
+    const policy = loadPolicy();
+    expect(policy.killSwitch).toBe(true); // corrupt → fail closed
+    expect(checkPolicy(intent, policy).allowed).toBe(false);
   });
 
   it('allows when killSwitch off and intent matches', () => {
@@ -300,11 +318,25 @@ describe('sign_and_send end-to-end gate', () => {
     expect(r.content[0].text).toContain('not initialized');
   });
 
-  it('refuses with policy reason when killSwitch is on (default)', async () => {
+  it('balanced default refuses a send to a non-allowlisted address', async () => {
     await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    // New default has killSwitch OFF but an allowlist of DEX/lending routers.
+    // 0x1111… is not in it, so the send is still refused — by the allowlist gate.
     const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
       chain: 'base',
       to: '0x1111111111111111111111111111111111111111',
+      valueWei: '100',
+    });
+    expect(r.content[0].text).toContain('Policy refused');
+    expect(r.content[0].text).toMatch(/allowlist|allowed/i);
+  });
+
+  it('engaging the kill switch refuses everything regardless of allowlist', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: true }));
+    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
+      chain: 'base',
+      to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', // an allowlisted router
       valueWei: '100',
     });
     expect(r.content[0].text).toContain('Policy refused');
@@ -337,7 +369,7 @@ describe('sign_and_send end-to-end gate', () => {
     const t = r.content[0].text;
     expect(t).toContain('Agent wallet status');
     expect(t).toContain('Policy digest');
-    expect(t).toContain('Kill switch:     ON');
+    expect(t).toMatch(/Kill switch:\s+off/i); // balanced default has killSwitch off
     expect(t).toContain('Passphrase env:  set');
   });
 });

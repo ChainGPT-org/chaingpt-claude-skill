@@ -603,6 +603,96 @@ if (formPolicyForm) {
     document.body.appendChild(f); f.submit();
   });
 }
+
+// ── Apply a policy template via fetch — NO page reload, stay on Policy tab ──
+document.addEventListener('click', async function(e) {
+  var btn = (e.target && e.target.closest) ? e.target.closest('.template-apply') : null;
+  if (!btn) return;
+  e.preventDefault();
+  var id = btn.getAttribute('data-template');
+  var prevOpacity = btn.style.opacity;
+  btn.style.opacity = '0.5';
+  try {
+    var r = await fetch('/api/policy/template', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-requested-with': 'fetch' },
+      body: 'template=' + encodeURIComponent(id),
+      credentials: 'same-origin'
+    });
+    var data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    applyPolicyToForm(data.policy);
+    toast('Applied ' + data.emoji + ' ' + data.name + ' — saved + live · digest ' + data.digest, 'ok');
+  } catch (err) {
+    toast('Template apply failed: ' + err.message, 'err');
+  } finally {
+    btn.style.opacity = prevOpacity;
+  }
+});
+
+function setRepeatable(repeatableEl, name, values) {
+  if (!repeatableEl) return;
+  var vals = (values && values.length) ? values : [''];
+  var sample = repeatableEl.querySelector('.row');
+  repeatableEl.innerHTML = '';
+  for (var i = 0; i < vals.length; i++) {
+    var row;
+    if (sample) { row = sample.cloneNode(true); }
+    else {
+      row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = '<input type="text"/><button type="button" class="remove secondary remove-row">x</button>';
+    }
+    var inp = row.querySelector('input');
+    inp.value = vals[i];
+    inp.setAttribute('name', name);
+    repeatableEl.appendChild(row);
+  }
+}
+
+function applyPolicyToForm(p) {
+  var form = document.getElementById('form-policy-form');
+  if (!form || !p) return;
+  var ks = form.querySelector('input[name="killSwitch"]'); if (ks) ks.checked = !!p.killSwitch;
+  var un = form.querySelector('input[name="unrestricted"]'); if (un) un.checked = !!p.unrestricted;
+  var chains = p.allowedChains || [];
+  form.querySelectorAll('input[name="allowedChains"]').forEach(function(cb) {
+    cb.checked = chains.indexOf(Number(cb.value)) !== -1;
+  });
+  form.querySelectorAll('.repeatable').forEach(function(g) {
+    var probe = g.querySelector('input');
+    if (!probe) return;
+    var nm = probe.getAttribute('name');
+    if (nm === 'allowed') setRepeatable(g, 'allowed', p.allowedToAddresses || []);
+    else if (nm === 'blocked') setRepeatable(g, 'blocked', p.blockedToAddresses || []);
+    else if (nm === 'selector') setRepeatable(g, 'selector', p.blockedSelectors || []);
+  });
+  var va = form.querySelector('input[name="valueAmount"]'); if (va) va.value = p.maxTxValueWei || '0';
+  var vu = form.querySelector('select[name="valueUnit"]'); if (vu) vu.value = 'wei';
+  var mg = form.querySelector('input[name="maxTxGas"]'); if (mg) mg.value = p.maxTxGas || '1000000';
+  var rm = form.querySelector('input[name="requireMemo"]'); if (rm) rm.checked = !!p.requireMemo;
+  var nt = form.querySelector('textarea[name="notes"]'); if (nt) nt.value = p.notes || '';
+  updateKillBanner(p);
+  var raw = document.querySelector('textarea[name="policy"]');
+  if (raw) { try { raw.value = JSON.stringify(p, null, 2); } catch (e2) {} }
+}
+
+function updateKillBanner(p) {
+  var banner = document.querySelector('.kill-banner');
+  if (!banner) return;
+  banner.classList.remove('off', 'unrestricted');
+  if (p.killSwitch) {
+    banner.innerHTML = '<span><strong>🛑 Kill switch ENGAGED</strong> — every signing operation is refused.</span>'
+      + '<form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="off"/><button class="warn small" type="submit">Disable</button></form>';
+  } else if (p.unrestricted) {
+    banner.classList.add('unrestricted');
+    banner.innerHTML = '<span><strong>🚨 UNRESTRICTED MODE</strong> — agent can sign any transaction with no policy checks. Kill switch still works (one-click halt below).</span>'
+      + '<form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage kill switch</button></form>';
+  } else {
+    banner.classList.add('off');
+    banner.innerHTML = '<span>✓ Kill switch off — signing allowed (subject to per-tx rules)</span>'
+      + '<form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage</button></form>';
+  }
+}
 `;
 
 interface RenderContext {
@@ -750,16 +840,15 @@ function renderTabbedDashboard(o: TabbedOpts): string {
         ? `<div class="kill-banner unrestricted"><span><strong>🚨 UNRESTRICTED MODE</strong> — agent can sign any transaction with no policy checks. Kill switch still works (one-click halt below).</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage kill switch</button></form></div>`
         : `<div class="kill-banner off"><span>✓ Kill switch off — signing allowed (subject to per-tx rules)</span><form method="POST" action="/api/killswitch" style="margin:0"><input type="hidden" name="set" value="on"/><button class="danger small" type="submit">🛑 Engage</button></form></div>`);
 
-  // Templates grid
+  // Templates grid. Buttons (not forms) — applied via fetch so the page does
+  // NOT reload and the admin stays on the Policy tab. Progressive enhancement:
+  // if JS is disabled the noscript form below still works.
   const templateCards = POLICY_TEMPLATES.map((t) => `
-    <form method="POST" action="/api/policy/template" class="template">
-      <input type="hidden" name="template" value="${escapeHtml(t.id)}"/>
-      <button type="submit">
-        <span class="emoji">${t.emoji}</span>
-        <strong>${escapeHtml(t.name)}</strong>
-        <small>${escapeHtml(t.description)}</small>
-      </button>
-    </form>
+    <button type="button" class="template template-apply" data-template="${escapeHtml(t.id)}">
+      <span class="emoji">${t.emoji}</span>
+      <strong>${escapeHtml(t.name)}</strong>
+      <small>${escapeHtml(t.description)}</small>
+    </button>
   `).join('');
 
   // Form-based policy editor — merged built-in + custom chains
@@ -1451,24 +1540,36 @@ export async function handleAgentWalletTool(
           }
 
           // ── POST /api/policy/template (apply a preset) ──────────────
+          // When called via fetch (x-requested-with: fetch), returns JSON so the
+          // dashboard can update the policy form IN PLACE without a page reload.
+          // Falls back to a full re-render for the no-JS / form-submit path.
           if (method === 'POST' && url === '/api/policy/template') {
             if (!checkOrigin(req, port)) { res.writeHead(403); res.end('Origin check failed'); return; }
+            const wantsJson = (req.headers['x-requested-with'] === 'fetch');
             const body = await readBody(req);
             const fields = parseFormBody(body);
             const tmpl = findTemplate(fields.template ?? '');
             if (!tmpl) {
+              if (wantsJson) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: `Unknown template: ${fields.template}` })); return; }
               renderDashboard(res, file.address, chains, { kind: 'err', msg: `Unknown template: ${fields.template}` });
               return;
             }
             const validation = validatePolicyInput({ ...tmpl.policy, updatedAt: new Date().toISOString() });
             if (!validation.ok || !validation.policy) {
+              if (wantsJson) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: `Template invalid: ${validation.error}` })); return; }
               renderDashboard(res, file.address, chains, { kind: 'err', msg: `Template invalid: ${validation.error}` });
               return;
             }
             try {
               const { digest } = savePolicy(validation.policy);
+              if (wantsJson) {
+                res.writeHead(200, { 'content-type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, name: tmpl.name, emoji: tmpl.emoji, digest, policy: validation.policy }));
+                return;
+              }
               renderDashboard(res, file.address, chains, { kind: 'ok', msg: `Applied template "${tmpl.name}" ${tmpl.emoji}. New digest ${digest}.` });
             } catch (e: any) {
+              if (wantsJson) { res.writeHead(500, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: `Save failed: ${e?.message ?? e}` })); return; }
               renderDashboard(res, file.address, chains, { kind: 'err', msg: `Save failed: ${e?.message ?? e}` });
             }
             return;

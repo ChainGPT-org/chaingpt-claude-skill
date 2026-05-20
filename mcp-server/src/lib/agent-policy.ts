@@ -76,63 +76,65 @@ export interface AgentPolicy {
  * each takes. The localhost dashboard also exposes named templates
  * (`agent-policy-templates.ts`) for one-click application.
  */
-const DEFAULT_POLICY: AgentPolicy = {
+// FAIL-CLOSED policy — used ONLY when a policy file is missing a required
+// field or is unparseable. A corrupt or tampered file must NEVER open the
+// gates, so this stays killSwitch=true regardless of what the first-run
+// default looks like.
+const FAIL_CLOSED_POLICY: AgentPolicy = {
   version: 1,
   killSwitch: true,
-  allowedChains: [
-    // Chain IDs the agent may transact on.
-    // Semantics:
-    //   field omitted (undefined) → any chain allowed
-    //   empty array []            → NO chain allowed (explicit-empty = fail-closed)
-    //   non-empty                 → only listed chains allowed
-    // 1     = Ethereum mainnet
-    // 8453  = Base
-    // 42161 = Arbitrum One
-    // 10    = OP Mainnet
-    // 137   = Polygon PoS
-    // 56    = BNB Smart Chain
-    // 43114 = Avalanche C-Chain
-    // 81457 = Blast    59144 = Linea    534352 = Scroll
-  ],
-  allowedToAddresses: [
-    // 0x-prefixed 20-byte hex. Lowercase recommended.
-    // Semantics:
-    //   field omitted (undefined) → any destination allowed
-    //   empty array []            → NO destination allowed (explicit-empty = fail-closed)
-    //   non-empty                 → only listed addresses allowed
-    // Example router addresses you might allow (uncomment to use):
-    //   "0x6352a56caadc4f1e25cd6c75970fa768a3304e64",  // OpenOcean v4 (multi-chain)
-    //   "0x111111125421ca6dc452d289314280a0f8842a65",  // 1inch v6 (multi-chain)
-    //   "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",  // Aave V3 Pool (Ethereum)
-  ],
+  allowedChains: [],
+  allowedToAddresses: [],
   blockedToAddresses: [
-    // Wins over allowedToAddresses. Curate from chainabuse.com / Forta alerts.
     '0x0000000000000000000000000000000000000000',
     '0x000000000000000000000000000000000000dead',
   ],
-  // Max native-coin value per tx, in wei (string to preserve precision).
-  // Examples:  "0"  → no native value allowed
-  //            "10000000000000000"     = 0.01 ETH
-  //            "100000000000000000"    = 0.10 ETH
-  //            "1000000000000000000"   = 1.00 ETH
   maxTxValueWei: '0',
-  // Max gas units per tx (helps cap fee spend on a single op).
   maxTxGas: '1000000',
-  // Function selectors to refuse. 4-byte hex with 0x prefix.
-  //   "0xa9059cbb" = ERC-20 transfer
-  //   "0x095ea7b3" = ERC-20 approve
-  //   "0x23b872dd" = ERC-20 transferFrom
-  // Leave empty to allow any selector.
   blockedSelectors: [],
-  // Require the agent to include a `memo` arg on every sign_and_send.
-  // Forces a per-tx audit trail (e.g. "dca-iter-43", "rebalance-2026-05-18").
+  requireMemo: true,
+  notes: 'Fail-closed fallback (policy file missing a field or unparseable). Every signing op is refused. Fix or replace policy.json to restore your intended policy.',
+  updatedAt: new Date(0).toISOString(),
+};
+
+// Canonical mainnet router/protocol addresses for the balanced first-run default.
+const _OPENOCEAN_V4 = '0x6352a56caadc4f1e25cd6c75970fa768a3304e64';
+const _ONEINCH_V6 = '0x111111125421ca6dc452d289314280a0f8842a65';
+const _AAVE_V3_POOL_ETH = '0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2';
+const _AAVE_V3_POOL_BASE = '0xa238dd80c259a72e81d7e4664a9801593f98d1c5';
+const _LIDO_STETH = '0xae7ab96520de3a18e5e111b5eaab095312d7fe84';
+
+// First-run DEFAULT — a BALANCED DeFi policy, killSwitch OFF.
+// Rationale: a freshly-created agent wallet holds zero funds, so a balanced
+// default that can interact with major DEX/lending routers (up to a small
+// 0.1-ETH cap, memo-required, scam-blocklisted) is safe and far better UX
+// than a locked-down wall that refuses everything. By the time the user funds
+// it, the small per-tx cap keeps blast radius low even if they never tighten.
+// Corrupt/missing files still fall back to FAIL_CLOSED_POLICY above.
+const DEFAULT_POLICY: AgentPolicy = {
+  version: 1,
+  killSwitch: false,
+  allowedChains: [1, 8453, 42161, 10, 137],
+  allowedToAddresses: [
+    _OPENOCEAN_V4,
+    _ONEINCH_V6,
+    _AAVE_V3_POOL_ETH,
+    _AAVE_V3_POOL_BASE,
+    _LIDO_STETH,
+  ],
+  blockedToAddresses: [
+    '0x0000000000000000000000000000000000000000',
+    '0x000000000000000000000000000000000000dead',
+  ],
+  maxTxValueWei: '100000000000000000', // 0.1 ETH — conservative starter cap
+  maxTxGas: '1500000',
+  blockedSelectors: [],
   requireMemo: true,
   notes:
-    'Default policy is fail-closed (killSwitch=true, no allowed addresses). ' +
-    'Open the localhost admin dashboard to apply a template ' +
-    '(Locked down / Read-only / DCA bot / Yield farmer / Cross-chain / Power user / ERC-20 only / Show all knobs) ' +
-    'or edit this file directly with your text editor. The dashboard does atomic write + .bak backup; ' +
-    'manual edits do not. See skills/agent-wallet/SKILL.md for the threat model.',
+    'Balanced DeFi default (killSwitch OFF). The agent may interact with major DEX aggregators ' +
+    '(OpenOcean, 1inch) + Aave V3 + Lido on Ethereum / Base / Arbitrum / Optimism / Polygon, capped at ' +
+    '0.1 native per tx, memo required. Tighten or widen via the dashboard templates or by editing this file. ' +
+    'Engage the kill switch any time to halt all signing. Corrupt/missing files fail closed (refuse all).',
   updatedAt: new Date(0).toISOString(),
 };
 
@@ -149,13 +151,14 @@ export function loadPolicy(): AgentPolicy {
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw) as AgentPolicy;
-    // Defensive: ensure version + killSwitch exist
+    // Defensive: ensure version + killSwitch exist. A file missing killSwitch
+    // is treated as corrupt → fail closed (NOT the balanced default).
     if (typeof parsed.killSwitch !== 'boolean') {
-      return { ...DEFAULT_POLICY, notes: 'Policy file missing killSwitch — falling back to default (refuse all).' };
+      return { ...FAIL_CLOSED_POLICY, notes: 'Policy file missing killSwitch — falling back to fail-closed (refuse all).' };
     }
     return parsed;
   } catch (e: any) {
-    return { ...DEFAULT_POLICY, notes: `Policy file unparseable: ${e?.message ?? e}. Falling back to default (refuse all).` };
+    return { ...FAIL_CLOSED_POLICY, notes: `Policy file unparseable: ${e?.message ?? e}. Falling back to fail-closed (refuse all).` };
   }
 }
 
