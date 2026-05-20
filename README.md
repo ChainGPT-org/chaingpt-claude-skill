@@ -6,17 +6,17 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-One install gives Claude Code 111 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
+One install gives Claude Code 112 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
-[![npm version](https://img.shields.io/badge/version-1.10.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.11.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-250%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-111-blueviolet?style=flat-square)](#-mcp-server--111-tools)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-112-blueviolet?style=flat-square)](#-mcp-server--112-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--111-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--112-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -24,30 +24,187 @@ One install gives Claude Code 111 MCP tools across **ChainGPT AI products** (cha
 
 <br/>
 
-## ⚡ Quickstart
+## ⚡ Quickstart — full step‑by‑step
 
-**Two commands inside Claude Code:**
+This walkthrough takes you from zero to a running dashboard. Estimated time: **5 minutes** (most of it Claude Code's first‑run download).
+
+### Step 1 — Install Claude Code
+
+Claude Code is Anthropic's official CLI. If you already use it (you see the `▗ ▗   ▖ ▖` banner when you type `claude` in your terminal), **skip to Step 2.**
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Follow the prompts. The installer drops a `claude` binary in your PATH.
+
+**Windows:** download the installer from <https://code.claude.com/download>.
+
+**Verify:**
+
+```bash
+claude --version
+# → Claude Code v2.1.x
+```
+
+You also need an Anthropic account / Claude subscription — the installer walks you through `claude login` on first run.
+
+### Step 2 — Add the ChainGPT marketplace
+
+Adding a marketplace just tells Claude Code *"this GitHub repo is a place I can install plugins from."* It does **not** install anything yet.
+
+Open Claude Code (`claude` in your terminal). Inside the prompt, paste:
 
 ```
 /plugin marketplace add ChainGPT-org/chaingpt-claude-skill
-/plugin install chaingpt@chaingpt-claude-skill
 ```
 
-The first line registers this repo as a custom plugin marketplace (Claude Code reads `.claude-plugin/marketplace.json` from the repo root). The second installs the `chaingpt` plugin from it — all 16 sub‑skills + the MCP server + reference docs + templates + Solidity patterns.
+You'll see: `✓ Successfully added marketplace: chaingpt-claude-skill`.
 
-Then drop your API key in your shell **before** starting Claude Code:
+Behind the scenes Claude Code:
 
-```bash
-export CHAINGPT_API_KEY="your-key-here"   # https://app.chaingpt.org
-```
-
-Now ask Claude Code anything — *"swap 0.1 ETH for USDC on Base with a risk check first"*, *"generate, audit, and deploy an ERC‑4626 vault on Arbitrum"*, *"what's my Aave health factor"*, *"show me Hyperliquid funding rates sorted by absolute value"*. The skill takes it from there.
+1. Reads `.claude-plugin/marketplace.json` from the repo root.
+2. Clones the repo to `~/.claude/plugins/marketplaces/chaingpt-claude-skill/`.
+3. Caches the plugin listing.
 
 > [!NOTE]
-> `/plugin install <owner/repo>` (single‑step) only works for plugins published to Anthropic's curated marketplace. The two‑step custom‑marketplace flow above works **today**, no approval required.
+> The reason `/plugin install <owner/repo>` (single‑step) **does not work** here is that GitHub's `<owner/repo>` shorthand resolves only against Anthropic's curated public marketplace, and this plugin isn't (yet) listed there. The two‑step custom‑marketplace flow works today with no approval required.
+
+### Step 3 — Install the `chaingpt` plugin
+
+Type in the Claude Code prompt:
+
+```
+/plugin
+```
+
+A picker opens listing available marketplaces and their plugins. Pick **chaingpt-claude-skill** → **chaingpt** → press Enter to install.
+
+You'll see: `✓ Installed chaingpt. Run /reload-plugins to apply.`
+
+> [!TIP]
+> Shortcut if you don't want to use the picker: `/plugin install chaingpt@chaingpt-claude-skill` (one shot, no picker).
+
+### Step 4 — Reload plugins
+
+Same Claude Code session:
+
+```
+/reload-plugins
+```
+
+This re‑scans installed plugins, spawns the ChainGPT MCP server over stdio, and registers all 18 sub‑skills + 112 MCP tools.
+
+**Alternative:** quit Claude Code (`/quit` or Cmd+Q) and relaunch. Plugins are loaded at startup.
+
+### Step 5 — Set your API key (optional but recommended)
+
+Without an API key, the **dashboard works**, all the **on‑chain tools work** (DEX swaps, Aave, Hyperliquid, etc. — they hit public endpoints), but the **ChainGPT product tools fail** (chat, NFT generation, contract audit, news — these need credits).
+
+Drop this in your shell rc (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export CHAINGPT_API_KEY="your-key-here"   # https://app.chaingpt.org → API Dashboard
+```
+
+Reload your shell (`source ~/.zshrc`) and re‑launch Claude Code.
+
+Get a key + credits at <https://app.chaingpt.org>. 1,000 credits = $10. 15 % bonus if you pay in $CGPT.
+
+### Step 6 — Verify it works
+
+In a fresh Claude Code session:
+
+```
+/mcp
+```
+
+You should see `chaingpt` listed with **112 tools**.
+
+### Step 7 — Open the dashboard
+
+```
+/chaingpt:dashboard
+```
+
+Claude calls the `chaingpt_dashboard_serve` MCP tool. It prints:
+
+```
+URL:         http://127.0.0.1:8788
+Admin token: <48-char hex>
+```
+
+Open the URL in your browser. The login page asks for the admin token — paste it, click **Unlock**. You land on the Overview tab.
+
+**6 tabs available:**
+
+| Tab | What it shows |
+|---|---|
+| **Overview** | Plugin / MCP / marketplace versions, skill count, agent‑wallet init status |
+| **Wallet** | Agent EOA address, policy summary (kill switch, allowed chains, max value), tracked assets, link to launch the full Wallet Admin UI for editing |
+| **Skills** | Card per sub‑skill with description from each `SKILL.md` |
+| **Activity** | Last 50 signed transactions the agent has executed |
+| **Health** | Which env vars are set (presence only — never values), Node version, key paths |
+| **About** | Plugin metadata + top of `CHANGELOG.md` |
+
+The dashboard binds **127.0.0.1 only**, the admin token rotates every time the server (re)starts, and the session cookie is HttpOnly + SameSite=Strict + 1 h TTL. **The dashboard is read‑only** — signing flows stay in MCP tool calls.
+
+### Step 8 — Optional: enable the Agent Wallet (only needed for "bounded autonomous" flows)
+
+If you want Claude to **sign and broadcast transactions itself** within a policy you set, the Agent Wallet feature ships with the plugin. It's optional — if you just want the AI co‑pilot that returns *unsigned* transactions for you to sign in MetaMask / Rabby / Phantom, **skip this step**.
+
+```bash
+# Set a strong passphrase BEFORE launching Claude Code (≥16 chars).
+# This is used to AES-256-GCM encrypt the keystore. The agent never sees it.
+export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-min-16-chars"
+```
+
+Then in Claude Code:
+
+```
+> initialize the agent wallet
+```
+
+Claude calls `chaingpt_agent_wallet_init`. Output: the new EOA address. Send a small amount of native currency to that address for gas, edit the policy file at `~/.chaingpt-mcp/agent-wallet/policy.json` to whitelist what the agent may do, and you're set.
+
+For full wallet management (multi-chain balances, kill switch, 9 policy templates including 🚨 Unrestricted, custom-chain registration, blue-chip auto-scan), open the dedicated wallet admin UI:
+
+```
+> open the wallet admin UI
+```
+
+Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.0.1:8787` and its own admin token (separate from the dashboard's 8788 token).
+
+### Slash commands you'll use most
+
+| Command | What it does |
+|---|---|
+| `/plugin` | Plugin picker — install / uninstall / enable plugins |
+| `/plugin marketplace add <owner/repo>` | Register a custom marketplace |
+| `/plugin install <plugin>@<marketplace>` | One-shot install without the picker |
+| `/reload-plugins` | Re-scan installed plugins; needed after install / update / fork edits |
+| `/mcp` | List active MCP servers and their tool counts — sanity check |
+| `/chaingpt:dashboard [port]` | Open the marketplace dashboard. Optional port arg if 8788 is taken |
+| `/plugin marketplace update chaingpt-claude-skill` | Pull the latest version from GitHub |
+| `/quit` | Quit Claude Code (plugins are loaded at startup, so this is the safe restart) |
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Marketplace 'ChainGPT-org/chaingpt-claude-skill' not found` | You skipped Step 2. Run `/plugin marketplace add ChainGPT-org/chaingpt-claude-skill` first. |
+| `/plugin install` ran but no `chaingpt` server in `/mcp` | You skipped Step 4 (`/reload-plugins`) or never restarted Claude Code. Plugins load at startup. |
+| `Unknown command: /chaingpt:dashboard` | The plugin isn't installed or wasn't reloaded. Repeat Steps 3 + 4. |
+| Dashboard URL prints but browser shows "can't connect" | The dashboard server exited (the demo-test process might have ended). Re-run `/chaingpt:dashboard` to boot it again. |
+| Dashboard login says "Invalid token" | Tokens rotate every time the dashboard starts. Use the **most recent** token printed by the most recent `/chaingpt:dashboard` call. |
+| Port 8788 already in use | `/chaingpt:dashboard 9999` (or any free port). |
+| `WARN: CHAINGPT_API_KEY is not set` in MCP server logs | Optional. The plugin still works; only the ChainGPT product tools (chat / NFT / audit / generator / news) will fail with a clear per-call message. Set the env var if you need those tools. |
+| `chaingpt_agent_wallet_init` errors with passphrase complaint | The `CHAINGPT_AGENT_WALLET_PASSPHRASE` env var must be set in the same shell that launched Claude Code, with ≥16 chars. Quit Claude Code, `export …`, relaunch. |
 
 <details>
-<summary><b>Manual install (git clone)</b></summary>
+<summary><b>Alternative install: git clone (for forking, pinning, or contributing)</b></summary>
 
 If you'd rather pin a specific commit or work from a fork:
 
@@ -66,18 +223,14 @@ cd ~/.claude/plugins/chaingpt/mcp-server
 npm install && npm run build
 ```
 
-The plugin's `.claude-plugin/plugin.json` and `.mcp.json` are picked up automatically when Claude Code finds the directory under `~/.claude/plugins/` or `.claude/plugins/`. Set the env var and restart Claude Code:
-
-```bash
-export CHAINGPT_API_KEY="your-key-here"
-```
+The plugin's `.claude-plugin/plugin.json` and `.mcp.json` are picked up automatically. `/reload-plugins` in any Claude Code session, then proceed from Step 5.
 
 </details>
 
 <details>
-<summary><b>MCP server only (skip the skills layer)</b></summary>
+<summary><b>Alternative install: MCP server only (skip the skills layer)</b></summary>
 
-If you want only the MCP tools — no auto‑loaded skills or reference docs — add the server directly to your Claude Code settings:
+If you want only the MCP tools — no auto-loaded skills or reference docs — add the server directly to your Claude Code settings:
 
 ```json
 {
@@ -91,7 +244,7 @@ If you want only the MCP tools — no auto‑loaded skills or reference docs —
 }
 ```
 
-You lose the intent‑routing sub‑skills, reference docs, templates, and patterns this way. Recommended only if you're integrating the MCP server into a non‑Claude‑Code host.
+You lose the intent-routing sub-skills, reference docs, templates, and patterns this way. Recommended only if you're integrating the MCP server into a non-Claude-Code host.
 
 </details>
 
@@ -137,7 +290,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
          │
          ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  MCP Server — 111 tools (the runtime)                                  │
+│  MCP Server — 112 tools (the runtime)                                  │
 │                                                                        │
 │  ChainGPT AI       │  Web3 toolkit    │  Mainnet execution             │
 │  • chat / NFT      │  • wallet scan   │  • EVM swap (OO/1inch/CoW)    │
@@ -169,7 +322,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
 
 3. **Templates + Patterns** (`templates/` + `patterns/`, 10 templates + 45+ Solidity patterns) — production‑ready scaffolds (Next.js chatbot, NFT marketplace, DeFi dashboard, React Native wallet, Nuxt news app, …) and audited Solidity (ERC‑20 variants, ERC‑4626 vaults, UUPS upgradeable, Governor, role‑based access, timelocks, …). Claude composes from these instead of regenerating boilerplate from scratch.
 
-4. **MCP Server** (`mcp-server/`, 111 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
+4. **MCP Server** (`mcp-server/`, 112 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
 
 **Plus a mock server** (`mock-server/`) — a full drop‑in replacement for the ChainGPT API at `http://localhost:3001`. Realistic responses, simulated latency, credit tracking. Build and CI without burning a single credit.
 
@@ -231,9 +384,9 @@ Open **`http://127.0.0.1:8787/`**. The console prints a one‑time admin token �
 
 <br/>
 
-## 🔌 MCP Server — 111 Tools
+## 🔌 MCP Server — 112 Tools
 
-The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 111 tools across 11 categories. Detailed sections follow.
+The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 112 tools across 11 categories. Detailed sections follow.
 
 | Category | Tools | Notes |
 |---|---:|---|
@@ -252,7 +405,7 @@ The MCP server gives Claude **direct API and on‑chain access** — not just co
 | Multi‑protocol portfolio + strategy plans + backtest | 6 + 1 | One‑shot snapshot across 4 protocols |
 | Agent wallet (encrypted EOA + admin policy gate) | 7 | LLM cannot bypass policy |
 | Utility (credit estimate, balance) | 2 | |
-| **Total** | **111** | |
+| **Total** | **112** | |
 
 ### ChainGPT AI products (18 tools)
 
@@ -550,7 +703,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 
 | | **This skill** | Goat SDK (Crossmint) | Coinbase AgentKit | MetaMask Snaps + MCP | Heurist |
 |---|---|---|---|---|---|
-| **Surface** | 111 MCP tools across 11 categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
+| **Surface** | 112 MCP tools across 11 categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
 | **Custody model** | User‑sovereign default + bounded agent EOA with admin policy gate | User‑sovereign | User wallet (CDP) or smart wallet | MetaMask signs everything | N/A (no signing) |
 | **Mainnet safety** | Mandatory `acknowledgeMainnet: true` + audit‑before‑deploy gate | Per‑plugin | Default mainnet | MetaMask UI confirmation | N/A |
 | **AI enrichment** | DexScreener + GoPlus + News + AI signal composed into one call | None native | None native | None native | Image + LLM only |
@@ -561,7 +714,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **Test harness** | 6 layers + daily live smoke | Per‑plugin | Examples only | Snap testing | None |
 | **License** | MIT | MIT | Apache‑2 | MIT | Various |
 
-**Where this wins:** breadth (111 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
+**Where this wins:** breadth (112 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
 
 **Where Goat / AgentKit win:** if you want pluggable per‑protocol extensions over a fixed core surface, Goat's plugin model is cleaner. If you're Coinbase‑native (CDP, Base, Smart Wallet end‑to‑end), AgentKit is the obvious choice.
 
@@ -608,7 +761,7 @@ chaingpt-claude-skill/
 ├── templates/                        # 10 project templates (+ composition guide)
 ├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
-├── mcp-server/                       # MCP server — 111 tools, 250 vitest cases
+├── mcp-server/                       # MCP server — 112 tools, 316 vitest cases
 ├── mock-server/                      # Mock API for zero-credit dev — 26 tests
 ├── scripts/                          # validate.sh + test-all.sh + demo launcher
 └── examples/                         # Working code — JS + Python
@@ -622,7 +775,7 @@ chaingpt-claude-skill/
 
 ### Shipped (1.0 → 1.9)
 - [x] Complete API reference for all 7 ChainGPT products
-- [x] **111 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
+- [x] **112 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
 - [x] **Agent wallet** — encrypted keystore + prompt‑injection‑resistant admin policy gate + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
 - [x] **Custody‑free signing** — every state‑changing tool returns an unsigned tx / EIP‑712 intent; the plugin never sees a private key. `acknowledgeMainnet: true` gate on every mainnet write
 - [x] 10 project templates including multi‑product compositions

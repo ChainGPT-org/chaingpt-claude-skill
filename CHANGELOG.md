@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.11.0] - 2026-05-19
+### Added — Marketplace dashboard (1 new tool, 1 new skill, 1 new slash command)
+A localhost web UI that gives a glance-at-it view of the marketplace. Read-only by design — no signing flows are proxied through the browser.
+
+- **`mcp-server/src/tools/dashboard.ts`** — new MCP tool `chaingpt_dashboard_serve`:
+  - Boots a self-contained HTTP server on `127.0.0.1` (default port 8788; coexists with `chaingpt_agent_wallet_serve_ui` on 8787).
+  - Independent admin token at `~/.chaingpt-mcp/dashboard/.admin-token` (0600, 192-bit, rotated every invocation). Independent session cookie `cg_dash_sid` (HttpOnly, SameSite=Strict, 1 h sliding TTL, in-memory only).
+  - Same-origin CSRF defense: every state-changing request validated against `Origin`/`Referer`.
+  - Six JSON panel endpoints under `/dashboard/api/*` (overview, **wallet**, skills, activity, health, about).
+- **`skills/dashboard/SKILL.md`** — natural-language trigger ("dashboard", "marketplace dashboard", "control panel", "env check", etc.).
+- **`.claude-plugin/commands/dashboard.md`** — `/chaingpt:dashboard` slash command. Optional `[port]` arg. Surfaces URL + token, offers to open the browser, never auto-opens.
+- **Panels (Day 1):**
+  - **Overview** — plugin / MCP / marketplace versions; skill count; agent-wallet init state.
+  - **Wallet** *(new)* — agent EOA address (with copy button), policy summary (kill-switch state, allowed-chain count, allowed/blocked address counts, max-tx-value, max-gas, memo requirement, policy digest), tracked-token + custom-chain counts, signed-tx count, prominent CTA to launch the full Wallet Admin UI for editing.
+  - **Skills** — one card per skill in `skills/`, rendered from each `SKILL.md` frontmatter.
+  - **Activity** — recent agent-wallet signed transactions (reads `~/.chaingpt-mcp/agent-wallet/activity.jsonl`; shows empty state if you haven't signed yet).
+  - **Health** — presence (never value) of `CHAINGPT_API_KEY`, agent-wallet passphrase, Etherscan/Moralis/GoPlus keys; Node runtime; key paths.
+  - **About** — plugin metadata + top of `CHANGELOG.md`.
+
+### Changed — MCP server no longer hard-exits when `CHAINGPT_API_KEY` is missing
+`mcp-server/src/index.ts` previously called `process.exit(1)` on missing key. Now it emits a soft warning to stderr and continues — so users can open `/chaingpt:dashboard`, browse skills, and use the on-chain tools that don't need a ChainGPT key (DEX swaps, wallet/research/risk/on-chain reads, Hyperliquid / Polymarket / Drift reads) **before** signing up at app.chaingpt.org. ChainGPT-product tools (chat / NFT / audit / generator / news) still fail per-call with a clear message when the key isn't set.
+
+### Security posture (unchanged)
+The dashboard cannot move funds. `chaingpt_agent_wallet_sign_and_send` remains MCP-only and continues to enforce the policy gate in code, not in the prompt. The Wallet tab is **read-only inspection** — it reads `keystore.json` (public address only, never decrypts), `policy.json`, and `tracked-tokens.json` directly from disk. All wallet writes (init, policy edit, signing) stay in the dedicated wallet admin UI on port 8787 or in MCP tool calls.
+
+### Docs — Full step-by-step Quickstart in README
+`README.md` Quickstart rewritten end-to-end: install Claude Code → add marketplace → `/plugin` picker install → `/reload-plugins` → API-key setup → `/mcp` verify → `/chaingpt:dashboard` → optional Agent Wallet bootstrap. Each command explained with what it does behind the scenes. Adds a slash-command reference table and an 8-row troubleshooting matrix covering every error message users hit when installing the plugin for the first time. Tool count bumped 111 → 112 throughout.
+
 ## [1.10.0] - 2026-05-19
 ### Added — Tier 6.5 Solana signing foundation + native/SPL transfer (2 new tools)
 Custody-free Solana transaction building lands. The plugin now constructs unsigned `VersionedTransaction`s that the user signs in Phantom / Backpack / Solflare / hardware wallet and submits via their preferred RPC.
