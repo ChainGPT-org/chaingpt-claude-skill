@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.13.0] - 2026-05-19
+### Changed — Balanced DeFi is the new default policy (killSwitch OFF)
+The first-run agent-wallet policy was fail-closed (`killSwitch: true`, refuse everything). It's now a **Balanced DeFi** policy with the kill switch OFF: the agent may interact with major DEX aggregators (OpenOcean + 1inch) + Aave V3 + Lido across Ethereum / Base / Arbitrum / Optimism / Polygon, capped at **0.1 native per tx**, memo required, scam-address blocklist.
+
+- A freshly-created wallet holds zero funds, so a usable balanced default is safe and far better UX than a wall that refuses everything. The conservative 0.1-native per-tx cap keeps blast radius low even if the user funds it and never tightens.
+- **Security preserved:** a *corrupt or tampered* policy file still falls back to a separate `FAIL_CLOSED_POLICY` (killSwitch on) — only the clean first-run default changed. `agent-policy.ts` now has two distinct constants: `DEFAULT_POLICY` (balanced, first-run) and `FAIL_CLOSED_POLICY` (the missing-field / unparseable fallback).
+
+### Added — "Balanced DeFi (recommended)" policy preset
+New ⚖️ template, listed first in the dashboard. Matches the new default exactly so applying it re-establishes the recommended baseline.
+
+### Removed — two niche presets
+- 🧪 **Read-only explore** — confusing (killSwitch off + empty allowlist still refuses everything; functionally identical to Locked down for writes).
+- 🪙 **ERC-20 only** — niche; the value cap already covers "no native transfers" use cases.
+
+Preset lineup is now 8, ordered most-common-first: **Balanced DeFi · Locked down · DCA bot · Yield farmer · Cross-chain rebalancer · Power user · Unrestricted · Show all knobs.**
+
+### Fixed — applying a policy template no longer reloads the page
+The dashboard's template cards were `<form method="POST">` submissions that triggered a full page navigation, dumping the admin back on the first tab. They're now `fetch()`-based: clicking a template applies it server-side and the policy form repopulates **in place** — the admin stays on the Policy tab with no reload. The `/api/policy/template` endpoint returns JSON when called with `x-requested-with: fetch`, and falls back to the full re-render for the no-JS path (progressive enhancement). The kill-switch banner + raw-JSON editor update in place too.
+
+### Version
+Bumped 1.12.0 → 1.13.0 (cache-invalidation + the default-policy change is user-visible).
+
 ## [1.12.0] - 2026-05-19
 ### Fixed — dashboard SKILL.md doc + version bump to force clean cache refresh
 - **`skills/dashboard/SKILL.md`** — the description + panel table still said "five read-only panels (Overview, Skills, Activity, Health, About)" after the Wallet tab shipped in 1.11.0. Updated to "six panels" and added the Wallet row documenting what it shows (agent EOA address, policy summary, tracked-token/custom-chain counts, signed-tx count, CTA to the full Wallet Admin UI).
