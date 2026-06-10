@@ -30,6 +30,7 @@ import { POLICY_TEMPLATES, findTemplate } from '../lib/agent-policy-templates.js
 import { loadTrackedTokens, addTrackedToken, removeTrackedToken, tokensPath, type TrackedToken } from '../lib/agent-tokens.js';
 import { fetchErc20Balance, fetchErc20Meta, formatTokenAmount } from '../lib/agent-erc20.js';
 import { logActivity, readActivity, activityPath, spendStats } from '../lib/agent-activity.js';
+import { readSolanaKeystoreFile } from '../lib/agent-keystore-solana.js';
 
 // Same dir-derived admin token path, available everywhere it's needed.
 // Derived from the policy DIRECTORY, not via filename regex (which would
@@ -186,6 +187,12 @@ function fmtEth(wei: bigint): string {
   const frac = wei % 10n ** 18n;
   const fracStr = frac.toString().padStart(18, '0').slice(0, 6);
   return `${whole}.${fracStr}`;
+}
+
+function fmtSol(lamports: bigint): string {
+  const whole = lamports / 10n ** 9n;
+  const frac = lamports % 10n ** 9n;
+  return `${whole}.${frac.toString().padStart(9, '0').slice(0, 6)}`;
 }
 
 async function getNativeBalance(chainSlug: string, address: string): Promise<bigint> {
@@ -846,15 +853,16 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   const activityRows = activity.length === 0
     ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
     : activity.map((a) => {
-        const chain = resolveChainWithCustom(a.chain);
-        const txLink = chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#';
-        const addrLink = chain?.explorer ? `${chain.explorer}/address/${a.to}` : '#';
-        const valueEth = fmtEth(BigInt(a.valueWei));
+        const isSolana = a.chain === 'solana';
+        const chain = isSolana ? null : resolveChainWithCustom(a.chain);
+        const txLink = isSolana ? `https://solscan.io/tx/${a.hash}` : (chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#');
+        const addrLink = isSolana ? '#' : (chain?.explorer ? `${chain.explorer}/address/${a.to}` : '#');
+        const valueEth = isSolana ? fmtSol(BigInt(a.valueWei)) : fmtEth(BigInt(a.valueWei));
         return `<div class="activity-row">
           <div class="icon">→</div>
           <div class="meta">
             <div class="top">
-              <span><span class="chain-pill ${a.chain}">${escapeHtml((chain?.name ?? a.chain).toUpperCase())}</span> <strong>${escapeHtml(valueEth)} ${escapeHtml(chain?.native ?? '?')}</strong></span>
+              <span><span class="chain-pill ${a.chain}">${escapeHtml((chain?.name ?? a.chain).toUpperCase())}</span> <strong>${escapeHtml(valueEth)} ${escapeHtml(isSolana ? 'SOL' : (chain?.native ?? '?'))}</strong></span>
               <span class="ts">${escapeHtml(a.ts.slice(0, 19).replace('T', ' '))} UTC</span>
             </div>
             <div class="target">to <a href="${escapeHtml(addrLink)}" target="_blank">${escapeHtml(a.to)}</a></div>
@@ -1320,6 +1328,34 @@ export async function handleAgentWalletTool(
             ? `${w.txCount}/${policy.maxDailyTxCount} txs`
             : `${w.txCount} txs (no cap)`;
           lines.push(`24h window:      ${spendPart} · ${txPart}`);
+        }
+      }
+      // Solana surface
+      {
+        const solFile = readSolanaKeystoreFile();
+        const solPolicy = policy.solana;
+        lines.push(``);
+        if (!solFile) {
+          lines.push(`Solana wallet:   not initialized (chaingpt_agent_wallet_solana_init)`);
+        } else {
+          lines.push(`Solana address:  ${solFile.address}`);
+          lines.push(`Solana signing:  ${solPolicy?.enabled ? 'ENABLED' : 'disabled (fail closed — set policy.solana.enabled)'}`);
+          if (solPolicy?.enabled) {
+            if (solPolicy.allowedPrograms) lines.push(`  Programs:      ${solPolicy.allowedPrograms.length} allowed`);
+            if (solPolicy.maxTxLamports) lines.push(`  Max/tx:        ${fmtSol(BigInt(solPolicy.maxTxLamports))} SOL`);
+            if (solPolicy.maxDailySpendLamports !== undefined || solPolicy.maxDailyTxCount !== undefined) {
+              const w = spendStats(24, 'solana');
+              if (!w.ok) {
+                lines.push(`  24h window:    LEDGER UNREADABLE — signing will refuse (fail closed)`);
+              } else {
+                const sp = solPolicy.maxDailySpendLamports !== undefined
+                  ? `${fmtSol(w.totalWei)}/${fmtSol(BigInt(solPolicy.maxDailySpendLamports))} SOL spent`
+                  : `${fmtSol(w.totalWei)} SOL spent (no cap)`;
+                const txp = solPolicy.maxDailyTxCount !== undefined ? `${w.txCount}/${solPolicy.maxDailyTxCount} txs` : `${w.txCount} txs (no cap)`;
+                lines.push(`  24h window:    ${sp} · ${txp}`);
+              }
+            }
+          }
         }
       }
       lines.push(``);
