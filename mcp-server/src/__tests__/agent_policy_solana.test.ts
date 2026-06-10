@@ -105,6 +105,22 @@ describe('checkSolanaPolicy', () => {
   });
 });
 
+describe('policyDigest — nested canonicalization', () => {
+  it('different solana sub-policies produce different digests', async () => {
+    const { policyDigest } = await import('../lib/agent-policy.js');
+    const a = { ...base };
+    const b = { ...base, solana: { ...base.solana!, maxTxLamports: '999' } };
+    expect(policyDigest(a)).not.toBe(policyDigest(b));
+  });
+});
+
+describe('checkSolanaPolicy — type-strict enabled', () => {
+  it('a hand-edited string "true" does NOT arm Solana', () => {
+    const p = { version: 1, killSwitch: false, solana: { enabled: 'true' as unknown as boolean } } as AgentPolicy;
+    expect(checkSolanaPolicy(intent(), p, NO_SPEND).allowed).toBe(false);
+  });
+});
+
 describe('validatePolicyInput — solana sub-object', () => {
   const valid = {
     version: 1,

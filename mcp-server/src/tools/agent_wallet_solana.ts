@@ -232,7 +232,18 @@ export async function handleAgentWalletSolanaTool(
         return refusalBlock(decision.reason, decision.policyDigest);
       }
 
-      // 6. Never autonomously broadcast a tx that simulates to failure
+      // 6a. Never broadcast UNSIMULATED — applies even in unrestricted mode
+      // (the policy gate allows unrestricted before the lamport checks run,
+      // so this handler-level refusal is the backstop).
+      if (!sim.ok) {
+        return {
+          content: [{
+            type: 'text',
+            text: `⛔ Refused: the transaction could not be simulated (RPC unavailable or fee-payer state unreadable). A policy-fenced agent never broadcasts blind — not even in unrestricted mode. Check SOLANA_RPC_URL and retry.`,
+          }],
+        };
+      }
+      // 6b. Never autonomously broadcast a tx that simulates to failure
       if (sim.ok && sim.err) {
         return {
           content: [{
@@ -278,7 +289,7 @@ export async function handleAgentWalletSolanaTool(
       try {
         logActivity({
           ts: new Date().toISOString(),
-          chain: 'solana',
+          chain: network === 'mainnet' ? 'solana' : `solana-${network}`,
           chainId: 0,
           from: agentAddress,
           to: programIds.join(','),

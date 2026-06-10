@@ -61,7 +61,10 @@ export function logActivity(e: ActivityEntry): void {
 export type ChainClass = 'evm' | 'solana' | 'all';
 
 function entryClass(e: ActivityEntry): Exclude<ChainClass, 'all'> {
-  return e.chain === 'solana' ? 'solana' : 'evm';
+  // 'solana', 'solana-devnet', 'solana-testnet' — all clusters share the class.
+  // Devnet/testnet sends therefore CONSUME the lamport caps: conservative on
+  // purpose (a cap that over-counts fails safe; one that under-counts does not).
+  return e.chain.startsWith('solana') ? 'solana' : 'evm';
 }
 
 export function spendStats(windowHours = 24, chainClass: ChainClass = 'all'): { totalWei: bigint; txCount: number; ok: boolean } {

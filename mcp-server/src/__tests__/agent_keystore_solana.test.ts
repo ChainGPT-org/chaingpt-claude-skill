@@ -6,6 +6,8 @@ import { PublicKey } from '@solana/web3.js';
 
 import './_setup.js';
 // Never touch the real OS keychain from tests — force env-var-only resolution.
+const PRIOR_DISABLE = process.env.CHAINGPT_DISABLE_KEYCHAIN;
+const PRIOR_PASS = process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE;
 process.env.CHAINGPT_DISABLE_KEYCHAIN = '1';
 process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = 'super-long-passphrase-for-tests-only-1234';
 
@@ -26,6 +28,8 @@ beforeEach(() => {
 
 afterAll(() => {
   delete process.env.CHAINGPT_SOLANA_KEYSTORE_FILE;
+  if (PRIOR_DISABLE === undefined) delete process.env.CHAINGPT_DISABLE_KEYCHAIN; else process.env.CHAINGPT_DISABLE_KEYCHAIN = PRIOR_DISABLE;
+  if (PRIOR_PASS === undefined) delete process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE; else process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = PRIOR_PASS;
   rmSync(TMP, { recursive: true, force: true });
 });
 

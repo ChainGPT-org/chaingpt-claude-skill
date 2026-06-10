@@ -226,9 +226,20 @@ export function loadPolicy(): AgentPolicy {
 }
 
 export function policyDigest(p: AgentPolicy): string {
-  // Stable hash for surfacing in status output. Sort keys for determinism.
-  const ordered = JSON.stringify(p, Object.keys(p).sort());
-  return createHash('sha256').update(ordered).digest('hex').slice(0, 16);
+  // Stable hash for surfacing in status output. Recursively sort keys for
+  // determinism. (A replacer ARRAY would filter NESTED keys too — the old
+  // implementation serialized the `solana` sub-object as {} and gave
+  // different Solana policies identical digests.)
+  const canonical = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(
+        Object.keys(v as object).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])])
+      );
+    }
+    return v;
+  };
+  return createHash('sha256').update(JSON.stringify(canonical(p))).digest('hex').slice(0, 16);
 }
 
 export interface TxIntent {
@@ -422,7 +433,7 @@ export function checkSolanaPolicy(
   // admin must explicitly opt in. unrestricted does NOT bypass this —
   // YOLO mode was granted for the EVM surface; silently arming a second
   // chain the admin never enabled violates least surprise.
-  if (!sol?.enabled) {
+  if (sol?.enabled !== true) { // type-strict: a hand-edited "true"/1 must not arm a chain
     return {
       allowed: false,
       reason: 'Solana signing is not enabled in the policy. An admin must add `"solana": { "enabled": true, ... }` via the dashboard or a text editor.',

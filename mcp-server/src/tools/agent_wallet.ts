@@ -853,9 +853,10 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   const activityRows = activity.length === 0
     ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
     : activity.map((a) => {
-        const isSolana = a.chain === 'solana';
+        const isSolana = a.chain.startsWith('solana');
+        const solCluster = isSolana && a.chain !== 'solana' ? `?cluster=${a.chain.slice('solana-'.length)}` : '';
         const chain = isSolana ? null : resolveChainWithCustom(a.chain);
-        const txLink = isSolana ? `https://solscan.io/tx/${a.hash}` : (chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#');
+        const txLink = isSolana ? `https://solscan.io/tx/${a.hash}${solCluster}` : (chain?.explorer ? `${chain.explorer}/tx/${a.hash}` : '#');
         const addrLink = isSolana ? '#' : (chain?.explorer ? `${chain.explorer}/address/${a.to}` : '#');
         const valueEth = isSolana ? fmtSol(BigInt(a.valueWei)) : fmtEth(BigInt(a.valueWei));
         return `<div class="activity-row">
