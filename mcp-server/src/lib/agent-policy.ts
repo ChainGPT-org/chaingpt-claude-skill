@@ -13,8 +13,11 @@
  *
  * Policy file path: $CHAINGPT_AGENT_POLICY_FILE or ~/.chaingpt-mcp/agent-wallet/policy.json
  *
- * Default policy (lazily created on first load): killSwitch=true. The admin
- * must explicitly relax it. This is fail-closed by design.
+ * First-run default (lazily created): the BALANCED policy below — killSwitch
+ * OFF, major DeFi routers allow-listed, small per-tx cap, daily spend + tx-count
+ * velocity caps, memo required. A corrupt or partially-missing policy file
+ * always falls back to FAIL_CLOSED_POLICY (killSwitch=true): tampering can
+ * never open the gates.
  */
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync, copyFileSync, renameSync, chmodSync } from 'node:fs';
@@ -54,8 +57,17 @@ export interface AgentPolicy {
   blockedToAddresses?: string[];
   /** Max native-coin value per tx, as a wei string. Missing means no cap. */
   maxTxValueWei?: string;
-  /** Max gas units per tx. Missing means no cap. */
+  /** Max gas units per tx. Missing means no cap. When set, every sign_and_send MUST pass an explicit gasLimit. */
   maxTxGas?: string;
+  /**
+   * Max cumulative native-coin value (wei string) the wallet may sign across a
+   * rolling 24h window. Computed from the activity ledger at sign time. This is
+   * the anti-drain control: per-tx caps alone allow unbounded compliant txs.
+   * Missing means no velocity cap.
+   */
+  maxDailySpendWei?: string;
+  /** Max number of signed txs across a rolling 24h window. Missing means no cap. */
+  maxDailyTxCount?: number;
   /** Blocked function selectors (hex with 0x prefix, e.g. "0xa9059cbb" for transfer). */
   blockedSelectors?: string[];
   /** If true, the agent must include a memo field on every sign_and_send call. */
@@ -91,6 +103,8 @@ const FAIL_CLOSED_POLICY: AgentPolicy = {
   ],
   maxTxValueWei: '0',
   maxTxGas: '1000000',
+  maxDailySpendWei: '0',
+  maxDailyTxCount: 0,
   blockedSelectors: [],
   requireMemo: true,
   notes: 'Fail-closed fallback (policy file missing a field or unparseable). Every signing op is refused. Fix or replace policy.json to restore your intended policy.',
@@ -128,12 +142,15 @@ const DEFAULT_POLICY: AgentPolicy = {
   ],
   maxTxValueWei: '100000000000000000', // 0.1 ETH — conservative starter cap
   maxTxGas: '1500000',
+  maxDailySpendWei: '300000000000000000', // 0.3 ETH per rolling 24h — anti-drain velocity cap
+  maxDailyTxCount: 20,
   blockedSelectors: [],
   requireMemo: true,
   notes:
     'Balanced DeFi default (killSwitch OFF). The agent may interact with major DEX aggregators ' +
     '(OpenOcean, 1inch) + Aave V3 + Lido on Ethereum / Base / Arbitrum / Optimism / Polygon, capped at ' +
-    '0.1 native per tx, memo required. Tighten or widen via the dashboard templates or by editing this file. ' +
+    '0.1 native per tx AND 0.3 native + 20 txs per rolling 24h, memo required. Tighten or widen via the ' +
+    'dashboard templates or by editing this file. ' +
     'Engage the kill switch any time to halt all signing. Corrupt/missing files fail closed (refuse all).',
   updatedAt: new Date(0).toISOString(),
 };
@@ -183,7 +200,22 @@ export interface PolicyCheck {
   policyDigest: string;
 }
 
-export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()): PolicyCheck {
+/**
+ * Rolling-window spend stats, computed by the caller from the activity ledger
+ * (lib/agent-activity.ts spendStats()). `ok=false` means the ledger could not
+ * be read — checkPolicy treats that as fail-closed when a velocity cap is set.
+ */
+export interface SpendWindow {
+  totalWei: bigint;
+  txCount: number;
+  ok: boolean;
+}
+
+export function checkPolicy(
+  intent: TxIntent,
+  policy: AgentPolicy = loadPolicy(),
+  spend?: SpendWindow
+): PolicyCheck {
   const digest = policyDigest(policy);
 
   if (policy.killSwitch) {
@@ -242,12 +274,54 @@ export function checkPolicy(intent: TxIntent, policy: AgentPolicy = loadPolicy()
     }
   }
 
-  if (policy.maxTxGas !== undefined && intent.gas !== undefined) {
+  if (policy.maxTxGas !== undefined) {
     let max: bigint;
     try { max = BigInt(policy.maxTxGas); }
     catch { return { allowed: false, reason: `Policy maxTxGas is not a valid integer string.`, policyDigest: digest }; }
+    // Fail closed when the caller omitted gasLimit: letting the RPC auto-estimate
+    // would silently bypass the cap (the original audit finding).
+    if (intent.gas === undefined) {
+      return {
+        allowed: false,
+        reason: `Policy sets maxTxGas=${max} — an explicit gasLimit (≤ cap) is required so the cap cannot be bypassed via RPC auto-estimation. Pass gasLimit.`,
+        policyDigest: digest,
+      };
+    }
     if (intent.gas > max) {
       return { allowed: false, reason: `Gas ${intent.gas} exceeds maxTxGas ${max}.`, policyDigest: digest };
+    }
+  }
+
+  // ── Velocity caps (rolling 24h window over the activity ledger) ────
+  const hasVelocityCap = policy.maxDailySpendWei !== undefined || policy.maxDailyTxCount !== undefined;
+  if (hasVelocityCap) {
+    if (!spend || !spend.ok) {
+      return {
+        allowed: false,
+        reason: !spend
+          ? 'Policy sets a daily velocity cap but no spend-window stats were provided to checkPolicy — refusing (fail closed).'
+          : 'Policy sets a daily velocity cap but the activity ledger could not be read — refusing (fail closed).',
+        policyDigest: digest,
+      };
+    }
+    if (policy.maxDailySpendWei !== undefined) {
+      let maxSpend: bigint;
+      try { maxSpend = BigInt(policy.maxDailySpendWei); }
+      catch { return { allowed: false, reason: `Policy maxDailySpendWei is not a valid integer string.`, policyDigest: digest }; }
+      if (spend.totalWei + intent.value > maxSpend) {
+        return {
+          allowed: false,
+          reason: `Daily spend cap: ${spend.totalWei} wei already signed in the last 24h + ${intent.value} wei now would exceed maxDailySpendWei ${maxSpend}.`,
+          policyDigest: digest,
+        };
+      }
+    }
+    if (policy.maxDailyTxCount !== undefined && spend.txCount + 1 > policy.maxDailyTxCount) {
+      return {
+        allowed: false,
+        reason: `Daily tx-count cap: ${spend.txCount} txs signed in the last 24h; maxDailyTxCount is ${policy.maxDailyTxCount}.`,
+        policyDigest: digest,
+      };
     }
   }
 
@@ -283,6 +357,8 @@ const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'blockedToAddresses',
   'maxTxValueWei',
   'maxTxGas',
+  'maxDailySpendWei',
+  'maxDailyTxCount',
   'blockedSelectors',
   'requireMemo',
   'notes',
@@ -343,6 +419,15 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     if (typeof o.maxTxGas !== 'string') return { ok: false, error: 'maxTxGas must be a string' };
     try { BigInt(o.maxTxGas); } catch { return { ok: false, error: 'maxTxGas must be a valid integer string' }; }
   }
+  if (o.maxDailySpendWei !== undefined) {
+    if (typeof o.maxDailySpendWei !== 'string') return { ok: false, error: 'maxDailySpendWei must be a string (to preserve precision)' };
+    try { BigInt(o.maxDailySpendWei); } catch { return { ok: false, error: 'maxDailySpendWei must be a valid integer string' }; }
+  }
+  if (o.maxDailyTxCount !== undefined) {
+    if (typeof o.maxDailyTxCount !== 'number' || !Number.isInteger(o.maxDailyTxCount) || o.maxDailyTxCount < 0) {
+      return { ok: false, error: 'maxDailyTxCount must be a non-negative integer' };
+    }
+  }
   if (o.blockedSelectors !== undefined) {
     if (!Array.isArray(o.blockedSelectors)) return { ok: false, error: 'blockedSelectors must be an array' };
     for (const s of o.blockedSelectors) {
@@ -368,6 +453,8 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     blockedToAddresses: o.blockedToAddresses as string[] | undefined,
     maxTxValueWei: o.maxTxValueWei as string | undefined,
     maxTxGas: o.maxTxGas as string | undefined,
+    maxDailySpendWei: o.maxDailySpendWei as string | undefined,
+    maxDailyTxCount: o.maxDailyTxCount as number | undefined,
     blockedSelectors: o.blockedSelectors as string[] | undefined,
     requireMemo: o.requireMemo as boolean | undefined,
     notes: o.notes as string | undefined,

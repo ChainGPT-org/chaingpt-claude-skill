@@ -134,7 +134,8 @@ export const dexTools: Tool[] = [
     name: 'chaingpt_dex_approve_tx',
     description:
       'Build an UNSIGNED ERC-20 approval transaction so the OpenOcean router (or another spender) can pull ' +
-      'tokens for a swap. Returns the approval tx + the current allowance for the wallet. 0 ChainGPT credits.',
+      'tokens for a swap. Returns the approval tx + the current allowance for the wallet. ' +
+      'MAINNET: requires acknowledgeMainnet: true (approvals delegate spend authority). 0 ChainGPT credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -154,8 +155,12 @@ export const dexTools: Tool[] = [
           type: 'number',
           description: 'Token decimals. If omitted, the tool will fetch from the contract.',
         },
+        acknowledgeMainnet: {
+          type: 'boolean',
+          description: 'Must be true — approvals execute on mainnet and delegate spend authority to the spender.',
+        },
       },
-      required: ['network', 'token', 'owner'],
+      required: ['network', 'token', 'owner', 'acknowledgeMainnet'],
     },
   },
   {
@@ -170,6 +175,7 @@ export const dexTools: Tool[] = [
         outputMint: { type: 'string', description: 'Output token mint address.' },
         amountIn: { type: 'string', description: 'Decimal amount of input token (Jupiter takes the raw lamports internally).' },
         decimalsIn: { type: 'number', description: 'Decimals of the input token. Default 9 (SOL).', default: 9 },
+        decimalsOut: { type: 'number', description: 'Decimals of the OUTPUT token (6 for USDC, 9 for SOL). Used only for display; omit to see raw units.' },
         slippageBps: { type: 'number', description: 'Max slippage in basis points. Default 50.', default: 50 },
       },
       required: ['inputMint', 'outputMint', 'amountIn'],
@@ -189,6 +195,7 @@ export const dexTools: Tool[] = [
         outputMint: { type: 'string' },
         amountIn: { type: 'string', description: 'Decimal amount of input token.' },
         decimalsIn: { type: 'number', default: 9 },
+        decimalsOut: { type: 'number', description: 'Decimals of the OUTPUT token. Display only.' },
         slippageBps: { type: 'number', default: 50 },
         acknowledgeMainnet: {
           type: 'boolean',
@@ -301,7 +308,14 @@ export async function handleDexTool(
       const outDec = Number(data.outToken?.decimals ?? 18);
       const inAmt = data.inAmount ? formatUnits(BigInt(data.inAmount), inDec) : amountIn;
       const outAmt = data.outAmount ? formatUnits(BigInt(data.outAmount), outDec) : 'n/a';
-      const minOut = data.minOutAmount ? formatUnits(BigInt(data.minOutAmount), outDec) : 'n/a';
+      // OpenOcean's quote endpoint often omits minOutAmount — derive it from
+      // the expected output and the slippage tolerance instead of showing n/a.
+      const minOutRaw = data.minOutAmount
+        ? BigInt(data.minOutAmount)
+        : data.outAmount
+          ? (BigInt(data.outAmount) * BigInt(Math.round(10_000 - slippagePct * 100))) / 10_000n
+          : undefined;
+      const minOut = minOutRaw !== undefined ? formatUnits(minOutRaw, outDec) : 'n/a';
 
       const lines: string[] = [];
       lines.push(`${name === 'chaingpt_dex_build_swap_tx' ? 'Swap transaction' : 'Swap quote'} — ${CHAINS[network]?.name ?? network}`);
@@ -342,6 +356,20 @@ export async function handleDexTool(
       const ooChain = OPENOCEAN_CHAIN[network];
       if (!ooChain) {
         return { content: [{ type: 'text', text: `Unsupported network for approval: ${network}` }] };
+      }
+      // Same mainnet gate as every other tx-building tool. An approval is the
+      // most dangerous tx in the flow (it delegates spend authority), so it
+      // must not be the one tool without the acknowledgement.
+      if (args.acknowledgeMainnet !== true) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `⚠ Mainnet approval refused. This builds an ERC-20 approve() that delegates spend authority ` +
+              `to a router on ${network} MAINNET. Re-run with acknowledgeMainnet: true after confirming ` +
+              `the token, spender, and amount. Tip: approve a bounded amount instead of "max" when possible.`,
+          }],
+        };
       }
       const token = String(args.token || '').toLowerCase();
       if (!token || token === NATIVE_ADDR || token === '0x0000000000000000000000000000000000000000') {
@@ -433,14 +461,21 @@ export async function handleDexTool(
         return { content: [{ type: 'text', text: `Jupiter quote error: ${quote?.error ?? 'unknown'}` }] };
       }
 
-      const outDec = Number(quote.outputMint && quote.outAmount ? 6 : 9); // Jupiter doesn't return decimals; user should know
+      // Jupiter doesn't return token decimals. NEVER guess them (a wrong guess
+      // displays amounts off by 1000x) — show raw units unless the caller
+      // passed decimalsOut explicitly.
+      const decimalsOut = args.decimalsOut !== undefined ? Number(args.decimalsOut) : undefined;
       const lines: string[] = [];
       lines.push(`${name === 'chaingpt_dex_jupiter_build_swap_tx' ? 'Jupiter swap tx' : 'Jupiter quote'} — Solana mainnet`);
       lines.push('');
       lines.push(`Input mint:      ${inputMint}`);
       lines.push(`Output mint:     ${outputMint}`);
       lines.push(`Amount in:       ${amountIn} (raw: ${quote.inAmount})`);
-      lines.push(`Amount out:      ${quote.outAmount} (raw lamports/units)`);
+      lines.push(
+        decimalsOut !== undefined
+          ? `Amount out:      ${formatUnits(BigInt(quote.outAmount), decimalsOut)} (raw: ${quote.outAmount})`
+          : `Amount out:      ${quote.outAmount} raw units — pass decimalsOut (e.g. 6 for USDC) for a human-readable amount`
+      );
       if (quote.priceImpactPct) lines.push(`Price impact:    ${Number(quote.priceImpactPct).toFixed(4)}%`);
       if (quote.routePlan) lines.push(`Route hops:      ${quote.routePlan.length}`);
 

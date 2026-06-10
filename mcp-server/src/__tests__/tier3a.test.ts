@@ -152,11 +152,25 @@ describe('Tier-3a quote handlers', () => {
       owner: '0x1111111111111111111111111111111111111111',
       amount: 'max',
       decimals: 6,
+      acknowledgeMainnet: true,
     });
     const text = res.content[0].text;
     expect(text).toContain('ERC-20 approval');
     expect(text).toContain('Spender');
     expect(text).toContain('Unsigned transaction');
     expect(text).toContain('"data"');
+  });
+
+  it('chaingpt_dex_approve_tx REFUSES without acknowledgeMainnet (approvals delegate spend authority)', async () => {
+    const res = await handleDexTool('chaingpt_dex_approve_tx', {
+      network: 'base',
+      token: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+      owner: '0x1111111111111111111111111111111111111111',
+      amount: 'max',
+      decimals: 6,
+    });
+    const text = res.content[0].text;
+    expect(text).toContain('Mainnet approval refused');
+    expect(text).not.toContain('Unsigned transaction');
   });
 });

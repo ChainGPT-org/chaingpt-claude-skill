@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.16.0] - 2026-06-10
+### Added — Trustworthy Autonomy: velocity caps, shipped subagents, mainnet-guard hook
+- **Cumulative-spend velocity caps** — the policy gate's missing dimension. Two new policy fields, `maxDailySpendWei` + `maxDailyTxCount` (rolling 24h window over the activity ledger, computed fresh at sign time via `spendStats()`), enforced inside `checkPolicy` as a single chokepoint. Fail-closed: caps set + ledger unreadable (or stats not provided) → refuse. All 8 dashboard templates and the balanced first-run default now ship with proportional velocity caps. Per-tx caps alone allowed an unbounded series of individually-compliant transactions; this closes the drain vector.
+- **Shipped subagents** (`agents/`) — three opinionated agents over the existing 129 tools: `web3-researcher` (read-only analyst, cannot touch tx tools), `contract-auditor` (generate → audit → fix → deploy discipline, never sets `acknowledgeMainnet` itself), `defi-trader` (mandatory pre-flight risk/quote/health checks, per-action human confirmation).
+- **PreToolUse mainnet guard** (`hooks/mainnet-guard.js`) — a deterministic confirmation layer OUTSIDE the model: forces Claude Code's permission prompt when the agent wallet is about to sign-and-send, or when any tool is called with `acknowledgeMainnet: true`. `CHAINGPT_GUARD=off` to disable, `=strict` to also cover EIP-712 order builders.
+
+### Fixed — upstream API drift (Morpho, Pendle) + Drift degradation
+- **Morpho GraphQL** (down for weeks): `Market.uniqueKey` → `marketId`; vault curators moved to `state.curators`. Markets query now filters `listed: true` so oracle-manipulated junk markets can't top the TVL sort.
+- **Pendle markets list**: the list endpoint moved liquidity/APYs under `details` — was rendering every field as `n/a`. New-shape-first parsing with old-shape fallback.
+- **Drift**: dlob.drift.trade is 503 ("no healthy upstream") and data.api.drift.trade is 403 — public data plane gated. All Drift reads now try every known host (+ `DRIFT_DLOB_URL` self-host override) and fail with a clear DEGRADED explanation instead of a bare upstream error.
+
+### Fixed — security & correctness (from the 2026-06-09 audit)
+- `maxTxGas` was silently skipped when the caller omitted `gasLimit` — the cap is now fail-closed (explicit gasLimit required when a cap is set).
+- Polymarket order salt: `Math.random()` → `crypto.randomBytes` (CSPRNG); tiny SELL orders that floor to 0 USDC (`takerAmount=0`) are now rejected.
+- `chaingpt_dex_approve_tx` gained the `acknowledgeMainnet` gate — it was the only tx-building tool without one, and approvals delegate spend authority.
+- Admin-token comparison: double-HMAC constant-time compare (no length early-exit) on both localhost servers; both servers also gained a Host-header allowlist (DNS-rebinding defense, HTTP 421).
+- Jupiter quotes no longer guess output decimals (was hardcoded 6 → ~1000x display errors on 9-dec tokens); pass `decimalsOut` for human-readable amounts.
+- Hyperliquid nonces are monotonic per process (same-millisecond actions no longer collide).
+- Across bridge math used `relayFeeTotal` AND a separately-computed LP fee — but v3's `relayFeeTotal` already includes the LP fee (double-count). Output now prefers the API's authoritative `outputAmount`.
+- Marginfi/Kamino routing: exact-match → prefix+suffix routing so future `*_tx` tools can't silently fall through to the wrong handler.
+
+### Changed — reliability CI + product polish
+- Smoke harness: `expectData` data-quality assertions (catches "call succeeds but every field is n/a" drift) + `degradedOk` WARN tier for known-gated upstreams (Drift) — visible without failing the run.
+- `smoke.yml`: ONE rolling failure issue (comment per failing day, auto-close on first green run) instead of a new issue every day. Issues #49–#68 taught us that an alert nobody can keep up with is the same as no alert.
+- Missing/invalid `CHAINGPT_API_KEY` now returns a 30-second setup recipe per call instead of a raw upstream error.
+- `chaingpt_research_trending` enriches paid boosts with live price/24h/liquidity/volume per token (DexScreener batch endpoint) and labels them as promoted listings.
+- `chaingpt_dex_quote` derives min-out from expected output × slippage when the router omits `minOutAmount`; gas tool renders block utilization as one averaged percentage.
+- README: 22 sub-skills (was claiming 16) + complete project tree.
+
+### Tests
+- Suite grew to **356 vitest** (+ new `agent_activity` ledger suite, velocity-cap + approve-gate + fail-closed coverage). All green.
+
 ## [1.15.0] - 2026-05-20
 ### Added — Agent-economy layer: x402 payments, Base ecosystem, ERC-8004 trustless agents
 13 new custody-free MCP tools (116 → 129) across four areas (PR #45):

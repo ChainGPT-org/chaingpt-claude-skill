@@ -32,6 +32,18 @@ interface SmokeCase {
   fn: () => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
   /** A substring that the output MUST contain for the test to pass. */
   expect: string | RegExp;
+  /**
+   * Data-quality assertion: output must ALSO match this. Catches the
+   * "call succeeds but every field is n/a" class of upstream drift that a
+   * bare success-check can't see (e.g. Pendle 2026-06 list-shape change).
+   */
+  expectData?: RegExp;
+  /**
+   * Known-outage tolerance: if the case fails AND the output/error matches,
+   * count it as WARN (degraded upstream) instead of FAIL. Use only for
+   * upstreams that are publicly gated/offline, never for our own bugs.
+   */
+  degradedOk?: RegExp;
   /** If true, log full output; otherwise just first 200 chars. */
   verbose?: boolean;
 }
@@ -57,6 +69,7 @@ const cases: SmokeCase[] = [
     name: 'research_token (CGPT by symbol)',
     fn: () => handleResearchTool('chaingpt_research_token', { query: 'CGPT' }),
     expect: /CGPT|chaingpt/i,
+    expectData: /Price \(USD\):\s+\$\d/,
   },
   {
     name: 'research_token (WETH by address on ethereum)',
@@ -110,6 +123,7 @@ const cases: SmokeCase[] = [
     name: 'onchain_gas (ethereum)',
     fn: () => handleOnchainTool('chaingpt_onchain_gas', { chain: 'ethereum' }),
     expect: /gwei|Gas/i,
+    expectData: /Standard:\s+[\d.]+ gwei/,
   },
   {
     name: 'onchain_block (base latest)',
@@ -170,6 +184,7 @@ contract Hello { string public greeting = "hi"; }`,
         amountIn: '0.01',
       }),
     expect: /Swap quote|expected|USDC/i,
+    expectData: /Out \(expected\):\s+[\d.]+/,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
@@ -232,6 +247,7 @@ contract Hello { string public greeting = "hi"; }`,
     name: 'hl_markets (perp universe)',
     fn: () => handleHyperliquidTool('chaingpt_hl_markets', { type: 'perp', limit: 5 }),
     expect: /BTC|ETH|markets/i,
+    expectData: /max \d+x/,
   },
   {
     name: 'hl_mids (filter BTC + ETH)',
@@ -255,6 +271,7 @@ contract Hello { string public greeting = "hi"; }`,
     fn: () =>
       handlePolymarketTool('chaingpt_pm_markets', { limit: 3, order: 'volume24hr', active: true }),
     expect: /Polymarket markets|YES|vol24h/i,
+    expectData: /vol24h=\$\d/,
   },
 
   // ─── Tier 6.1: Across bridge ─────────────────────────────────────
@@ -270,6 +287,7 @@ contract Hello { string public greeting = "hi"; }`,
         decimals: 6,
       }),
     expect: /Bridge quote|SpokePool|fill time/i,
+    expectData: /Expected output:\s+[\d.]+/,
   },
   {
     name: 'bridge_build_deposit_tx (mainnet refusal without ack)',
@@ -320,30 +338,40 @@ contract Hello { string public greeting = "hi"; }`,
     fn: () =>
       handleYieldTool('chaingpt_defi_pendle_markets', { network: 'ethereum', limit: 3 }),
     expect: /Pendle active markets/i,
+    expectData: /TVL: \$\d[\s\S]*Fixed APY \(buy PT\):\s+\d/,
   },
   {
     name: 'defi_morpho_markets (ethereum)',
     fn: () =>
       handleYieldTool('chaingpt_defi_morpho_markets', { network: 'ethereum', limit: 3 }),
     expect: /Morpho Blue markets/i,
+    expectData: /Supply APY: \d[\s\S]*Supply TVL: \$\d/,
   },
   {
     name: 'defi_morpho_vaults (ethereum USDC)',
     fn: () =>
       handleYieldTool('chaingpt_defi_morpho_vaults', { network: 'ethereum', asset: 'USDC', limit: 3 }),
     expect: /MetaMorpho vaults/i,
+    expectData: /Net APY: \d[\s\S]*TVL: \$\d/,
   },
 
   // ─── Tier 6.4: Drift ─────────────────────────────────────────────
+  // Drift's public data plane has been gated/offline since ~2026-05
+  // (dlob 503 / data API 403). degradedOk keeps these visible as WARN
+  // without failing the whole run; they flip back to hard asserts the
+  // day the endpoint returns.
   {
     name: 'drift_markets (top by volume)',
     fn: () => handleDriftTool('chaingpt_drift_markets', { sortBy: 'volume', limit: 5 }),
     expect: /Drift perp markets/i,
+    expectData: /\$\d/,
+    degradedOk: /DEGRADED|no healthy upstream|403|503/i,
   },
   {
     name: 'drift_orderbook (idx 0 = SOL-PERP)',
     fn: () => handleDriftTool('chaingpt_drift_orderbook', { marketIndex: 0, depth: 5 }),
     expect: /Drift L2 orderbook/i,
+    degradedOk: /DEGRADED|no healthy upstream|403|503/i,
   },
 
   // ─── Tier 8: portfolio snapshot ──────────────────────────────────
@@ -399,7 +427,9 @@ contract Hello { string public greeting = "hi"; }`,
 
 let pass = 0;
 let fail = 0;
+let warn = 0;
 const failures: Array<{ name: string; reason: string }> = [];
+const warnings: Array<{ name: string; reason: string }> = [];
 
 // Allow CI / local runs to skip Drift cases when dlob.drift.trade is in a
 // known outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
@@ -419,28 +449,53 @@ for (const c of filteredCases) {
     const text = result.content?.[0]?.text ?? '';
     const matches =
       c.expect instanceof RegExp ? c.expect.test(text) : text.includes(c.expect);
-    if (matches && !result.isError) {
+    const dataOk = !c.expectData || c.expectData.test(text);
+    if (matches && dataOk && !result.isError) {
       console.log(`${GREEN}PASS${RESET}`);
       pass++;
       if (c.verbose) console.log(`    ${text.slice(0, 300)}`);
+    } else if (c.degradedOk && c.degradedOk.test(text)) {
+      console.log(`${YELLOW}WARN (degraded upstream)${RESET}`);
+      warnings.push({ name: c.name, reason: text.slice(0, 200) });
+      warn++;
     } else {
       console.log(`${RED}FAIL${RESET}`);
       const reason = !matches
         ? `expected ${c.expect}, got: ${text.slice(0, 200)}`
-        : `result marked isError: ${text.slice(0, 200)}`;
+        : !dataOk
+          ? `DATA-QUALITY: expected ${c.expectData}, got: ${text.slice(0, 200)}`
+          : `result marked isError: ${text.slice(0, 200)}`;
       failures.push({ name: c.name, reason });
       fail++;
     }
   } catch (err: any) {
-    console.log(`${RED}ERROR${RESET}`);
-    failures.push({ name: c.name, reason: err?.message ?? String(err) });
-    fail++;
+    const msg: string = err?.message ?? String(err);
+    if (c.degradedOk && c.degradedOk.test(msg)) {
+      console.log(`${YELLOW}WARN (degraded upstream)${RESET}`);
+      warnings.push({ name: c.name, reason: msg.slice(0, 200) });
+      warn++;
+    } else {
+      console.log(`${RED}ERROR${RESET}`);
+      failures.push({ name: c.name, reason: msg });
+      fail++;
+    }
   }
 }
 
 console.log(`\n${YELLOW}════════════════════════════════════════════════════${RESET}`);
-console.log(` Results: ${GREEN}${pass} passed${RESET}, ${fail > 0 ? RED : GREEN}${fail} failed${RESET}`);
+console.log(
+  ` Results: ${GREEN}${pass} passed${RESET}, ${fail > 0 ? RED : GREEN}${fail} failed${RESET}` +
+    (warn > 0 ? `, ${YELLOW}${warn} degraded (warn)${RESET}` : '')
+);
 console.log(`${YELLOW}════════════════════════════════════════════════════${RESET}\n`);
+
+if (warnings.length > 0) {
+  console.log(`${YELLOW}Degraded upstreams (not failing the run):${RESET}`);
+  for (const w of warnings) {
+    console.log(`  ${YELLOW}⚠${RESET} ${w.name}`);
+    console.log(`    ${w.reason}\n`);
+  }
+}
 
 if (failures.length > 0) {
   console.log(`${RED}Failures:${RESET}`);

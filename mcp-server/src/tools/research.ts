@@ -234,15 +234,55 @@ export async function handleResearchTool(
           }],
         };
       }
+      // Enrich with live market data — a bare mint address with a truncated
+      // marketing blurb is unactionable. DexScreener's batch tokens endpoint
+      // accepts up to 30 comma-separated addresses per chain.
+      const marketByAddr = new Map<string, any>();
+      const byChain = new Map<string, string[]>();
+      for (const b of filtered) {
+        if (!b?.chainId || !b?.tokenAddress) continue;
+        const list = byChain.get(b.chainId) ?? [];
+        list.push(b.tokenAddress);
+        byChain.set(b.chainId, list);
+      }
+      await Promise.all(
+        [...byChain.entries()].map(async ([chainId, addrs]) => {
+          try {
+            const pairs = await httpJson<any[]>(
+              `https://api.dexscreener.com/tokens/v1/${chainId}/${addrs.join(',')}`
+            );
+            for (const p of Array.isArray(pairs) ? pairs : []) {
+              const key = `${chainId}:${String(p?.baseToken?.address ?? '').toLowerCase()}`;
+              // Keep the most liquid pair per token
+              const prev = marketByAddr.get(key);
+              if (!prev || Number(p?.liquidity?.usd ?? 0) > Number(prev?.liquidity?.usd ?? 0)) {
+                marketByAddr.set(key, p);
+              }
+            }
+          } catch { /* enrichment is best-effort — fall back to the bare listing */ }
+        })
+      );
+
       const lines: string[] = [];
       lines.push(`Trending tokens${chain ? ` on ${chain.name}` : ''}:`);
       lines.push('');
       filtered.forEach((b: any, i: number) => {
-        const desc = b.description ? ` — ${String(b.description).slice(0, 80)}` : '';
-        lines.push(`${i + 1}. [${b.chainId}] ${b.tokenAddress}${desc}`);
+        const m = marketByAddr.get(`${b.chainId}:${String(b.tokenAddress).toLowerCase()}`);
+        const sym = m?.baseToken?.symbol ? ` ${m.baseToken.symbol}` : '';
+        lines.push(`${i + 1}. [${b.chainId}]${sym} ${b.tokenAddress}`);
+        if (m) {
+          const price = m.priceUsd ? `$${m.priceUsd}` : 'n/a';
+          const chg = m.priceChange?.h24 !== undefined ? `${m.priceChange.h24}%` : 'n/a';
+          const liq = m.liquidity?.usd ? `$${Math.round(Number(m.liquidity.usd)).toLocaleString('en-US')}` : 'n/a';
+          const vol = m.volume?.h24 ? `$${Math.round(Number(m.volume.h24)).toLocaleString('en-US')}` : 'n/a';
+          lines.push(`   Price ${price}   24h ${chg}   Liq ${liq}   Vol24h ${vol}`);
+        } else {
+          lines.push(`   (no DexScreener pair data yet — likely very new; treat as high risk)`);
+        }
         if (b.url) lines.push(`   ${b.url}`);
       });
       lines.push('');
+      lines.push('These are PAID boosts (promoted listings), not organic volume leaders — run chaingpt_risk_token before touching any of them.');
       lines.push('Tip: feed any tokenAddress into chaingpt_research_token for full market data.');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
