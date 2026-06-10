@@ -8,8 +8,8 @@
  *   - Counts live in ONE local file: ~/.chaingpt-mcp/usage.json.
  *   - Nothing is ever transmitted anywhere. There is no remote endpoint,
  *     no analytics SDK, no phone-home. Grep this file to verify.
- *   - Only tool NAMES and counts are stored — never arguments, addresses,
- *     amounts, or results.
+ *   - Only tool NAMES, counts and last-called timestamps are stored —
+ *     never arguments, addresses, amounts, or results.
  *   - Disable entirely with CHAINGPT_USAGE=off.
  *
  * Write strategy: in-memory increment + debounced flush (500ms, unref'd so
@@ -38,6 +38,9 @@ function enabled(): boolean {
 let cache: UsageFile | null = null;
 let flushTimer: NodeJS.Timeout | null = null;
 
+// Single-process assumption: the cache is read once and flushes overwrite the
+// file. Two server processes sharing one file = last-writer-wins (acceptable
+// for best-effort stats; do not build billing on this).
 function load(): UsageFile {
   if (cache) return cache;
   try {
@@ -66,6 +69,9 @@ function scheduleFlush(): void {
 /** Record one tool invocation. Synchronous, allocation-light, never throws. */
 export function recordToolUse(tool: string): void {
   if (!enabled()) return;
+  // A non-compliant client can send arbitrary tool names; don't let garbage
+  // grow the file or pollute the dashboard table.
+  if (!tool || tool.length > 128 || !tool.startsWith('chaingpt_')) return;
   try {
     const u = load();
     u.counts[tool] = (u.counts[tool] ?? 0) + 1;
