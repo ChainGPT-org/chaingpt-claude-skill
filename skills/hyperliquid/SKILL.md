@@ -1,5 +1,5 @@
 ---
-name: chaingpt-hyperliquid
+name: hyperliquid
 description: "Read live Hyperliquid mainnet data via the ChainGPT plugin. Markets / mids / orderbook / wallet account state / fills / funding-rate history. Use for perp position monitoring, market scanning, account auditing, and funding-rate analysis. Read-only in v1.6 — signed order placement (EIP-712 L1 actions) is a follow-up. Triggers: hyperliquid, hl, perps, perpetual, funding rate, orderbook, my positions on hyperliquid, leverage trading, BTC perp, ETH perp."
 ---
 

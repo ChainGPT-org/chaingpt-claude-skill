@@ -1,5 +1,5 @@
 ---
-name: chaingpt-playground
+name: playground
 description: "Interactively test any ChainGPT API endpoint. Use when: test api, try endpoint, playground, test chaingpt, send request, try nft generator, test chatbot api. Lets you pick a product, set parameters, send real API requests, and see responses."
 ---
 

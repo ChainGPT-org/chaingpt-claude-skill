@@ -1,5 +1,5 @@
 ---
-name: chaingpt-dashboard
+name: dashboard
 description: "Open the ChainGPT marketplace dashboard — a localhost web UI with six read-only panels (Overview, Wallet, Skills, Activity, Health, About). Bind 127.0.0.1 only, admin-token auth, same-origin CSRF defense. Triggers: dashboard, open the dashboard, ChainGPT dashboard, marketplace dashboard, show me the dashboard, web UI, control panel, skills overview, agent wallet panel, env check, plugin health."
 ---
 

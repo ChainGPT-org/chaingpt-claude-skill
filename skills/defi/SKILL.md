@@ -1,5 +1,5 @@
 ---
-name: chaingpt-defi
+name: defi
 description: "Interact with DeFi protocols on MAINNET via the ChainGPT plugin. Aave V3 (supply/borrow/repay/withdraw + health-factor monitoring across 7 chains), Lido stETH staking, EigenLayer restaking. Yield discovery: Pendle yield-trading markets (PT/YT), Morpho Blue lending markets + MetaMorpho vaults. Custody-free — plugin builds unsigned tx, user signs externally. Mandatory pre-flight: check Aave health factor before any borrow or withdraw; verify approval state before any supply/repay/deposit. Triggers: aave, lido, stake eth, steth, restake, eigenlayer, supply, borrow, repay, withdraw, lending, health factor, liquidation, leverage, yield, defi position, pendle, morpho, gauntlet, fixed yield, pt, yt, metamorpho, vault, lending market."
 ---
 

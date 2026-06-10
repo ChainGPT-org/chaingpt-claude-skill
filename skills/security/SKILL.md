@@ -1,5 +1,5 @@
 ---
-name: chaingpt-security
+name: security
 description: "Audit-before-action security workflow for any Web3 interaction the user is about to take. Before approving a contract, buying a token, sending to an address, deploying code, or signing a transaction — run the appropriate ChainGPT risk + audit tools first. Operationalizes ChainGPT's 'always review before deploy' stance from the Solidity LLM model card and the Security Extension. Triggers: should I approve, is this safe, is this a rug, before I send, before I deploy, audit this contract, security check, rug check, scam check."
 ---
 

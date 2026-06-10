@@ -1,5 +1,5 @@
 ---
-name: chaingpt-trade
+name: trade
 description: "Execute live DEX trades on MAINNET via the ChainGPT plugin. EVM swaps via OpenOcean (default, no key, 10 mainnets), 1inch v6 (key-gated, better blue-chip routing), or CoW Protocol (MEV-protected intent-based for large trades). Solana swaps via Jupiter. Custody-free — the plugin builds unsigned tx / EIP-712 intent, the user signs externally. Mandatory pre-flight: chaingpt_risk_token on the buy token + a quote tool before any build/create tool. Triggers: swap, trade, buy, sell, exchange, dex, jupiter, openocean, 1inch, cow, cowswap, mev protection, 0x, paraswap, slippage, swap on ethereum, swap on base, swap on solana."
 ---
 

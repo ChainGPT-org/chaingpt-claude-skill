@@ -1,5 +1,5 @@
 ---
-name: chaingpt-research
+name: research
 description: "Research any token, wallet, or contract with the ChainGPT Web3 toolkit. Composes live market data (DexScreener), security flags (GoPlus + Honeypot.is), on-chain history (Etherscan v2), portfolio holdings (Moralis), AND ChainGPT-native context (crypto news + AI signals + Solidity LLM audits) into a single workflow. Use when a user asks 'what is this token', 'is this rug', 'is this address safe', 'should I buy X', 'is this wallet a whale', or wants to research anything on-chain. Triggers: token research, rug check, honeypot check, wallet research, whale tracking, address risk, contract verification, ChainGPT intel."
 ---
 

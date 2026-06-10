@@ -1,5 +1,5 @@
 ---
-name: chaingpt-debug
+name: debug
 description: "Troubleshoot ChainGPT API errors and issues. Use when: chaingpt error, api not working, 401, 402, 403, 404, 429, insufficient credits, rate limit, streaming broken, nft stuck, chat history not working. Diagnoses the problem and provides the fix."
 ---
 

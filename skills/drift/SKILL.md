@@ -1,5 +1,5 @@
 ---
-name: chaingpt-drift
+name: drift
 description: "Read live Drift Protocol mainnet data — Solana's largest non-custodial perps DEX. Use for market scanning, funding analysis, orderbook depth, and user position auditing. The Solana-native alternative to Hyperliquid: same custody-free model (on-chain collateral, user-held keys), different blockchain. Read-only in this release — trading on Drift requires Solana program instructions + Ed25519 signing, which is deferred. Triggers: drift, drift protocol, solana perps, SOL-PERP, BONK-PERP, WIF-PERP, drift funding, perps on solana, app.drift.trade."
 ---
 

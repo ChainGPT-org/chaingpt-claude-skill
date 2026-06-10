@@ -1,5 +1,5 @@
 ---
-name: chaingpt-base
+name: base
 description: Base chain ecosystem — Basenames (name.base.eth ENS-style naming) resolution + registration, and Base App / Farcaster Mini App scaffolding (manifest, embed meta tags, validation). Custody-free. Triggers: base name, basename, .base.eth, resolve base name, register basename, base app, mini app, miniapp, farcaster frame, fc:miniapp, MiniKit, OnchainKit, base super app, farcaster.json manifest.
 ---
 

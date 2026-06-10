@@ -1,5 +1,5 @@
 ---
-name: chaingpt-polymarket
+name: polymarket
 description: "Read live Polymarket prediction-market data via the ChainGPT plugin. Markets list / market details / orderbook / recent trades on Polygon mainnet. Ties into ChainGPT's Foresight AI / PredictFi surface. Read-only in v1.6 — signed order placement (Polymarket CLOB / EIP-712) is a follow-up. Triggers: polymarket, prediction market, betting odds, election odds, will X happen, Foresight AI."
 ---
 

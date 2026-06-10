@@ -1,5 +1,5 @@
 ---
-name: chaingpt-agent-wallet
+name: agent-wallet
 description: "Give the AI agent its own EVM wallet with admin-controlled policies the agent CANNOT bypass even under prompt injection. Encrypted keystore (AES-256-GCM, scrypt KDF), policy file the agent has no tool to write, deterministic policy gate on every signing operation, optional local HTTP dashboard. Triggers: agent wallet, give the agent a wallet, agent address, fund the agent, agent autonomy, policy gate, kill switch, agent permissions, bounded autonomy, ERC-4337 alternative, session-key alternative."
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: chaingpt-strategy
+name: strategy
 description: "Build trading strategy plans via the ChainGPT plugin: DCA (dollar-cost-averaging), grid trading, Hyperliquid funding-rate arbitrage, copy-trading from a target wallet, and DCA backtesting against historical price data. The strategy tools COMPUTE THE PLAN; Claude executes the steps one by one via Tier 1-3 tools (research, risk, dex, defi, hl, pm) — every action still gated by the mainnet acknowledgement refusal. Triggers: DCA, dollar cost average, grid trade, funding arb, copy trade, copy trading, strategy, backtest, replay strategy, recurring buy, periodic buy, ladder."
 ---
 
