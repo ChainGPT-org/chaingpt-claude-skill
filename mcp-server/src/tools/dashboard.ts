@@ -5,6 +5,7 @@ import { writeFileSync, mkdirSync, readFileSync, readdirSync, existsSync, statSy
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { readUsage } from '../lib/usage.js';
 
 /**
  * chaingpt_dashboard_serve — Marketplace-wide localhost dashboard.
@@ -402,7 +403,7 @@ interface HealthRow {
   required: boolean;
 }
 
-function getHealth(): { env: HealthRow[]; dirs: Array<{ path: string; exists: boolean }>; node: string } {
+function getHealth(): { env: HealthRow[]; dirs: Array<{ path: string; exists: boolean }>; node: string; usage: ReturnType<typeof readUsage> } {
   const env: HealthRow[] = [
     { key: 'CHAINGPT_API_KEY',                   label: 'ChainGPT API (chat/NFT/audit/generator/news)', set: !!process.env.CHAINGPT_API_KEY,                   required: true  },
     { key: 'CHAINGPT_AGENT_WALLET_PASSPHRASE',   label: 'Agent-wallet keystore passphrase',             set: !!process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE,   required: false },
@@ -416,7 +417,7 @@ function getHealth(): { env: HealthRow[]; dirs: Array<{ path: string; exists: bo
     { path: MCP_SERVER_PKG_JSON,   exists: existsSync(MCP_SERVER_PKG_JSON) },
     { path: DASHBOARD_DIR,         exists: existsSync(DASHBOARD_DIR) },
   ];
-  return { env, dirs, node: process.version };
+  return { env, dirs, node: process.version, usage: readUsage() };
 }
 
 function readChangelogTop(maxBytes = 4096): string {
@@ -635,8 +636,13 @@ function renderHealth(d) {
     return \`<div class="row"><div style="flex:1"><code>\${esc(e.key)}</code><br/><span class="subtle">\${esc(e.label)}</span></div>\${tag}</div>\`;
   }).join('');
   const dirRows = d.dirs.map(x => \`<div class="row"><div style="flex:1"><code>\${esc(x.path)}</code></div>\${x.exists ? '<span class="tag ok">present</span>' : '<span class="tag miss">missing</span>'}</div>\`).join('');
+  const usage = d.usage && d.usage.top && d.usage.top.length
+    ? d.usage.top.slice(0, 15).map(u => \`<div class="row"><div style="flex:1"><code>\${esc(u.tool)}</code></div><span class="subtle" style="margin-right:10px">\${esc((u.lastUsed||'').slice(0,16).replace('T',' '))}</span><span class="tag ok">\${esc(String(u.count))}</span></div>\`).join('')
+    : '<div class="subtle">No tool calls recorded yet (or CHAINGPT_USAGE=off).</div>';
+  const usageNote = d.usage ? \`<p class="subtle" style="margin-top:8px">\${esc(String(d.usage.total))} calls since \${esc((d.usage.since||'').slice(0,10))}. Local-only — stored in ~/.chaingpt-mcp/usage.json, never transmitted. Tool names, counts + last-called timestamps only.</p>\` : '';
   return \`
     <div class="card"><h3>Node runtime</h3><p>\${esc(d.node)}</p></div>
+    <div class="card" style="margin-top:12px"><h3>Tool usage (top 15, local-only)</h3>\${usage}\${usageNote}</div>
     <div class="card" style="margin-top:12px"><h3>Environment variables</h3>\${envRows}</div>
     <div class="card" style="margin-top:12px"><h3>Paths</h3>\${dirRows}</div>
   \`;
