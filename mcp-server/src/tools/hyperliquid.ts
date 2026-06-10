@@ -156,7 +156,7 @@ export const hyperliquidTools: Tool[] = [
         },
         nonce: {
           type: 'number',
-          description: 'Optional nonce (defaults to Date.now() ms).',
+          description: 'Optional nonce (defaults to a monotonic ms timestamp — unique even for same-millisecond calls).',
         },
         acknowledgeMainnet: {
           type: 'boolean',
