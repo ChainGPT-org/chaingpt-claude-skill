@@ -123,6 +123,17 @@ export function phantomAgentTypedData(hash: Hex, isMainnet = true): PhantomAgent
   };
 }
 
+// Hyperliquid nonces must be strictly increasing per wallet. Bare Date.now()
+// collides when two actions are built in the same millisecond (the exchange
+// rejects the second with "nonce already used"). Keep a monotonic floor so
+// consecutive calls in one process always increment.
+let lastHlNonce = 0;
+function nextHlNonce(): number {
+  const now = Date.now();
+  lastHlNonce = now > lastHlNonce ? now : lastHlNonce + 1;
+  return lastHlNonce;
+}
+
 /**
  * Build a full signing payload for a Hyperliquid L1 action.
  * Caller passes the action object; returns everything the user needs to sign + submit.
@@ -131,7 +142,7 @@ export function buildActionPayload(
   action: Record<string, unknown>,
   opts: { nonce?: number; vaultAddress?: string | null; isMainnet?: boolean } = {}
 ): ActionPayload {
-  const nonce = opts.nonce ?? Date.now();
+  const nonce = opts.nonce ?? nextHlNonce();
   const vault = opts.vaultAddress ?? null;
   const isMainnet = opts.isMainnet ?? true;
   const hash = actionHash(action, nonce, vault);

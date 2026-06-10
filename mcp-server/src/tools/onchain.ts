@@ -273,7 +273,13 @@ export async function handleOnchainTool(
             `Standard:    ${r.ProposeGasPrice} gwei`,
             `Fast:        ${r.FastGasPrice} gwei`,
             r.suggestBaseFee ? `Base fee:    ${Number(r.suggestBaseFee).toFixed(3)} gwei` : '',
-            r.gasUsedRatio ? `Gas used %:  ${r.gasUsedRatio}` : '',
+            // gasUsedRatio is a CSV of the last ~5 blocks' utilization (0..1) — average it
+            r.gasUsedRatio
+              ? `Utilization: ${(
+                  (String(r.gasUsedRatio).split(',').map(Number).filter(Number.isFinite).reduce((a, b) => a + b, 0) /
+                    Math.max(1, String(r.gasUsedRatio).split(',').map(Number).filter(Number.isFinite).length)) * 100
+                ).toFixed(0)}% (avg of last ${String(r.gasUsedRatio).split(',').length} blocks)`
+              : '',
           ].filter(Boolean);
           return { content: [{ type: 'text', text: lines.join('\n') }] };
         }

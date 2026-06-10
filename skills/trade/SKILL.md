@@ -19,7 +19,7 @@ chaingpt_risk_token            — GoPlus + Honeypot check on the OUT token (MAN
 chaingpt_dex_quote             — expected output, price impact, route
        │  (surface to user with USD-denominated cost and slippage)
        ▼
-chaingpt_dex_approve_tx        — if inToken is ERC-20 and current allowance is insufficient
+chaingpt_dex_approve_tx        — if inToken is ERC-20 and current allowance is insufficient (requires acknowledgeMainnet: true — approvals delegate spend authority)
        │  (user signs + broadcasts the approval)
        ▼
 chaingpt_dex_build_swap_tx     — REFUSES mainnet unless acknowledgeMainnet=true
@@ -81,7 +81,7 @@ OpenOcean is the default because it's keyless and covers all 10 EVM chains. Two 
 - **When to use:** Better routing on Ethereum + L2s for large blue-chip pairs (USDC↔WETH, etc.) and when OpenOcean returns a worse quote.
 - **Setup:** Requires `ONEINCH_API_KEY` (free tier at https://1inch.dev → Developer Portal). Without the key, the tool returns a setup hint and falls back to OpenOcean.
 - **Networks:** ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
-- **Approval target:** 1inch v6 router (returned in the quote response — use it as the `spender` for `chaingpt_dex_approve_tx`).
+- **Approval target:** 1inch v6 router (returned in the quote response — use it as the `spender` for `chaingpt_dex_approve_tx`, with `acknowledgeMainnet: true`).
 
 ### CoW Protocol (`chaingpt_dex_cow_create_order` / `chaingpt_dex_cow_submit_signed_order`)
 

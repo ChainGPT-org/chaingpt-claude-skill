@@ -178,8 +178,9 @@ export async function handleYieldTool(
       const limit = Number(args.limit ?? 20);
       const res = await httpJson<any>(`${PENDLE_API}/v1/${chain.chainId}/markets/active`);
       const markets = Array.isArray(res?.markets) ? res.markets : [];
-      // Sort by liquidity USD descending
-      markets.sort((a: any, b: any) => Number(b?.liquidity?.usd ?? 0) - Number(a?.liquidity?.usd ?? 0));
+      // The list endpoint moved liquidity/APYs under `details` (mid-2026); keep old paths as fallback.
+      const liqOf = (m: any) => Number(m?.details?.liquidity ?? m?.liquidity?.usd ?? 0);
+      markets.sort((a: any, b: any) => liqOf(b) - liqOf(a));
       const top = markets.slice(0, limit);
 
       const lines: string[] = [];
@@ -189,15 +190,13 @@ export async function handleYieldTool(
 
       for (const m of top) {
         const name = m?.name ?? m?.pt?.symbol ?? m?.address?.slice(0, 10);
-        const tvl = formatUsdShort(m?.liquidity?.usd);
+        const tvl = formatUsdShort(m?.details?.liquidity ?? m?.liquidity?.usd);
         const expiryDays = daysUntil(m?.expiry ?? 0);
-        const ptAPY = pctFromDecimal(m?.aggregatedApy);
-        const ytAPY = pctFromDecimal(m?.ytFloatingApy);
-        const impliedAPY = pctFromDecimal(m?.impliedApy);
+        const ptAPY = pctFromDecimal(m?.details?.aggregatedApy ?? m?.aggregatedApy);
+        const impliedAPY = pctFromDecimal(m?.details?.impliedApy ?? m?.impliedApy);
         lines.push(`• ${name}`);
         lines.push(`    Maturity:    ${expiryDays}    TVL: ${tvl}`);
-        lines.push(`    Fixed APY (buy PT):  ${ptAPY}`);
-        lines.push(`    Implied APY:         ${impliedAPY}    YT floating APY: ${ytAPY}`);
+        lines.push(`    Fixed APY (buy PT):  ${ptAPY}    Implied APY: ${impliedAPY}`);
         lines.push(`    Market: ${m?.address ?? 'n/a'}`);
         lines.push('');
       }
@@ -247,7 +246,7 @@ export async function handleYieldTool(
       const query = `query Markets($first: Int!, $where: MarketFilters) {
         markets(first: $first, where: $where, orderBy: SupplyAssetsUsd, orderDirection: Desc) {
           items {
-            uniqueKey
+            marketId
             lltv
             loanAsset { symbol address decimals }
             collateralAsset { symbol address decimals }
@@ -255,7 +254,8 @@ export async function handleYieldTool(
           }
         }
       }`;
-      const data = await morphoGql<any>(query, { first: limit, where: { chainId_in: [chainId] } });
+      // listed:true filters out unvetted markets with oracle-manipulated TVL/APY
+      const data = await morphoGql<any>(query, { first: limit, where: { chainId_in: [chainId], listed: true } });
       const items = data?.markets?.items ?? [];
 
       const lines: string[] = [];
@@ -274,7 +274,7 @@ export async function handleYieldTool(
         lines.push(`• ${loan} / ${coll}    LLTV ${lltv}`);
         lines.push(`    Supply APY: ${supplyApy}    Borrow APY: ${borrowApy}    Util: ${util}`);
         lines.push(`    Supply TVL: ${supplyTvl}    Borrow TVL: ${borrowTvl}`);
-        lines.push(`    Market id: ${m.uniqueKey}`);
+        lines.push(`    Market id: ${m.marketId}`);
         lines.push('');
       }
       lines.push('Next: chaingpt_defi_morpho_vaults for curated baskets, or chaingpt_defi_morpho_position for a wallet view.');
@@ -297,8 +297,7 @@ export async function handleYieldTool(
             name
             symbol
             asset { symbol address decimals }
-            state { netApy totalAssetsUsd }
-            metadata { curators { name } }
+            state { netApy totalAssetsUsd curators { name } }
           }
         }
       }`;
@@ -312,7 +311,7 @@ export async function handleYieldTool(
       lines.push('');
       if (items.length === 0) lines.push('(no vaults match)');
       for (const v of items) {
-        const curators = v.metadata?.curators?.map((c: any) => c.name).join(', ') || 'unknown';
+        const curators = v.state?.curators?.map((c: any) => c.name).join(', ') || 'unknown';
         lines.push(`• ${v.name} (${v.symbol ?? '?'})`);
         lines.push(`    Curator: ${curators}`);
         lines.push(`    Asset: ${v.asset?.symbol ?? '?'}    Net APY: ${pctFromDecimal(v.state?.netApy)}    TVL: ${formatUsdShort(v.state?.totalAssetsUsd)}`);
@@ -336,7 +335,7 @@ export async function handleYieldTool(
           address
           marketPositions {
             market {
-              uniqueKey
+              marketId
               loanAsset { symbol decimals }
               collateralAsset { symbol decimals }
               lltv

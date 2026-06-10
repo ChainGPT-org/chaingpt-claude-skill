@@ -8,7 +8,7 @@
 
 One install gives Claude Code 129 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
-[![npm version](https://img.shields.io/badge/version-1.15.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.16.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-347%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-129-blueviolet?style=flat-square)](#-mcp-server--129-tools)
@@ -329,7 +329,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
 
 **The four layers:**
 
-1. **Sub‑skills** (`skills/*/SKILL.md`, 16 of them) — markdown files with YAML frontmatter that Claude Code auto‑routes based on intent. Examples: `chaingpt-deploy` triggers on "deploy a contract"; `chaingpt-trade` on "swap"; `chaingpt-agent-wallet` on "give the agent a wallet." Each sub‑skill bundles the relevant tools, mandatory pre‑flight checks, and links to deeper reference docs.
+1. **Sub‑skills** (`skills/*/SKILL.md`, 22 of them) — markdown files with YAML frontmatter that Claude Code auto‑routes based on intent. Examples: `chaingpt-deploy` triggers on "deploy a contract"; `chaingpt-trade` on "swap"; `chaingpt-agent-wallet` on "give the agent a wallet." Each sub‑skill bundles the relevant tools, mandatory pre‑flight checks, and links to deeper reference docs.
 
 2. **Reference docs** (`reference/*.md`, 19 files) — every endpoint, parameter, response shape, credit cost, and error code for the seven ChainGPT products. The skill loads these into Claude's context on demand so it never has to guess a parameter name.
 
@@ -792,8 +792,14 @@ chaingpt-claude-skill/
 │   ├── polymarket/SKILL.md           #   Polymarket prediction markets
 │   ├── research/SKILL.md             #   Token research + DexScreener
 │   ├── security/SKILL.md             #   Honeypot + risk + audit
+│   ├── aa/SKILL.md                   #   ERC-4337 v0.7 account abstraction
+│   ├── base/SKILL.md                 #   Basenames + Base Mini Apps
+│   ├── dashboard/SKILL.md            #   Localhost marketplace dashboard
+│   ├── solana/SKILL.md               #   Solana signing foundation + transfers
 │   ├── strategy/SKILL.md             #   Plan persistence + backtest
 │   ├── trade/SKILL.md                #   OpenOcean / 1inch / CoW / Jupiter
+│   ├── trustless-agents/SKILL.md     #   ERC-8004 agent identity/reputation
+│   ├── x402/SKILL.md                 #   x402 agentic payments (HTTP 402)
 │   └── update/SKILL.md               #   Check for skill updates
 │
 ├── reference/                        # API & SDK documentation (19 files)

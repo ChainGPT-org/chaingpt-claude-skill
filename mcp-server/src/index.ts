@@ -56,7 +56,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.15.0' },
+  { name: 'chaingpt', version: '1.16.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -100,11 +100,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
+// ChainGPT-product tools are credit-billed and need a real API key. Catching
+// this BEFORE the upstream call turns a cryptic "Invalid API Key" into a
+// 30-second setup fix.
+const KEY_REQUIRED_PREFIXES = [
+  'chaingpt_chat',
+  'chaingpt_nft',
+  'chaingpt_audit',
+  'chaingpt_generate',
+  'chaingpt_news',
+  'chaingpt_intel',
+];
+
+const API_KEY_SETUP_HELP = [
+  'This tool calls the ChainGPT API and needs CHAINGPT_API_KEY.',
+  '',
+  'Setup (one time):',
+  '  1. Get a key: https://app.chaingpt.org → API Dashboard → Create key',
+  '  2. Buy credits (1,000 credits = $10; most calls cost 1 credit)',
+  '  3. Export it where Claude Code can see it, e.g. in ~/.zshrc:',
+  '       export CHAINGPT_API_KEY=sk-...',
+  '  4. Restart Claude Code (the MCP server reads the env at boot)',
+  '',
+  'Key-free tools (research, risk, DEX quotes, bridge, perps reads, …) work without it.',
+].join('\n');
+
 // Route tool calls to appropriate handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    if (!API_KEY && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
+      return { content: [{ type: 'text', text: API_KEY_SETUP_HELP }] };
+    }
     // Tool routing by name prefix. ORDER MATTERS — more specific prefixes must come
     // before less specific ones. The catch-all "chaingpt_" must be last.
     //
@@ -137,13 +165,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_dex_1inch') || name.startsWith('chaingpt_dex_cow')) return await handleAggregatorTool(name, args);
     if (name.startsWith('chaingpt_dex')) return await handleDexTool(name, args);
     if (name.startsWith('chaingpt_defi_pendle') || name.startsWith('chaingpt_defi_morpho')) return await handleYieldTool(name, args);
-    if (name === 'chaingpt_defi_marginfi_deposit_tx' || name === 'chaingpt_defi_marginfi_withdraw_tx') return await handleMarginfiSignedTool(name, args);
-    if (name === 'chaingpt_defi_kamino_deposit_tx' || name === 'chaingpt_defi_kamino_withdraw_tx') return await handleKaminoSignedTool(name, args);
+    // Marginfi/Kamino: *_tx tools are signed actions; everything else is a read.
+    // Prefix + suffix routing (not exact-match) so a future *_tx tool can never
+    // silently fall through to the generic DeFi handler.
+    if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) {
+      if (name.endsWith('_tx')) {
+        return name.startsWith('chaingpt_defi_marginfi')
+          ? await handleMarginfiSignedTool(name, args)
+          : await handleKaminoSignedTool(name, args);
+      }
+      return await handleSolanaLendingTool(name, args);
+    }
     if (name.startsWith('chaingpt_x402')) return await handleX402Tool(name, args);
     if (name.startsWith('chaingpt_base_')) return await handleBaseTool(name, args);
     if (name.startsWith('chaingpt_miniapp')) return await handleMiniappTool(name, args);
     if (name.startsWith('chaingpt_erc8004')) return await handleErc8004Tool(name, args);
-    if (name.startsWith('chaingpt_defi_marginfi') || name.startsWith('chaingpt_defi_kamino')) return await handleSolanaLendingTool(name, args);
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
@@ -164,6 +200,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    // Upstream rejected the key (expired, typo'd, out of credits) — attach the
+    // setup recipe instead of echoing a bare API error.
+    if (/invalid api key|unauthorized|401/i.test(message) && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
+      return {
+        content: [{ type: 'text', text: `Error executing ${name}: ${message}\n\nYour CHAINGPT_API_KEY looks invalid or expired.\n\n${API_KEY_SETUP_HELP}` }],
+        isError: true,
+      };
+    }
     return {
       content: [{ type: 'text', text: `Error executing ${name}: ${message}` }],
       isError: true,

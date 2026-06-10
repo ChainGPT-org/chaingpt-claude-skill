@@ -165,13 +165,60 @@ describe('Policy gate', () => {
     expect(decision.reason).toMatch(/allowlist|allowed/i);
   });
 
+  const NO_SPEND = { totalWei: 0n, txCount: 0, ok: true };
+
   it('balanced default ALLOWS a send to an allowlisted router within the cap', () => {
     const policy = loadPolicy();
     const ok = checkPolicy(
-      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test' },
+      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
       policy,
+      NO_SPEND,
     );
     expect(ok.allowed).toBe(true);
+  });
+
+  it('refuses when maxTxGas is set but no gasLimit was provided (auto-estimation would bypass the cap)', () => {
+    const policy = loadPolicy(); // balanced default sets maxTxGas
+    const d = checkPolicy(
+      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test' },
+      policy,
+      NO_SPEND,
+    );
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toMatch(/gasLimit/i);
+  });
+
+  it('velocity cap: refuses when 24h spend + this tx would exceed maxDailySpendWei', () => {
+    const policy = loadPolicy(); // balanced default: maxDailySpendWei = 0.3 ETH
+    const d = checkPolicy(
+      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
+      policy,
+      { totalWei: 295n * 10n ** 15n, txCount: 3, ok: true }, // 0.295 already spent
+    );
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toMatch(/Daily spend cap/i);
+  });
+
+  it('velocity cap: refuses when the 24h tx count is exhausted', () => {
+    const policy = loadPolicy(); // balanced default: maxDailyTxCount = 20
+    const d = checkPolicy(
+      { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
+      policy,
+      { totalWei: 0n, txCount: 20, ok: true },
+    );
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toMatch(/tx-count cap/i);
+  });
+
+  it('velocity cap: fails CLOSED when spend stats are missing or the ledger is unreadable', () => {
+    const policy = loadPolicy();
+    const intent2 = { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n };
+    const noStats = checkPolicy(intent2, policy);
+    expect(noStats.allowed).toBe(false);
+    expect(noStats.reason).toMatch(/fail closed/i);
+    const badLedger = checkPolicy(intent2, policy, { totalWei: 0n, txCount: 0, ok: false });
+    expect(badLedger.allowed).toBe(false);
+    expect(badLedger.reason).toMatch(/ledger/i);
   });
 
   it('a policy file missing killSwitch falls back to FAIL-CLOSED, not the balanced default', () => {

@@ -21,7 +21,7 @@ You move funds between EVM mainnets via Across Protocol v3. Intent-based — onc
 chaingpt_bridge_quote
        │  (surface fees + fill time to user)
        ▼
-chaingpt_dex_approve_tx token=<inputToken> spender=<spokePoolAddress from quote>
+chaingpt_dex_approve_tx token=<inputToken> spender=<spokePoolAddress from quote> acknowledgeMainnet=true
        │  (skip if inputToken is native — ETH/MATIC/etc.)
 [user signs the approval]
        │

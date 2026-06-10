@@ -418,7 +418,7 @@ export async function handleDefiTool(
             `Pool:            ${pool}`,
             '',
             'Pre-flight: did you approve the Aave Pool to spend this asset?',
-            'If not: chaingpt_dex_approve_tx token=<asset> spender=' + pool,
+            'If not: chaingpt_dex_approve_tx token=<asset> spender=' + pool + ' acknowledgeMainnet=true',
             '',
             '--- Unsigned transaction ---',
             JSON.stringify(tx, null, 2),

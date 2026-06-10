@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
 import { writeFileSync, mkdirSync, readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,10 +64,13 @@ function generateToken(): string {
 }
 
 function timingSafeStrEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
+  // Double-HMAC pattern: hash both inputs to a fixed length first so the
+  // comparison leaks neither content nor LENGTH (a bare length pre-check is
+  // a small timing oracle on how long the expected token is).
+  const key = randomBytes(32);
+  const ha = createHmac('sha256', key).update(a).digest();
+  const hb = createHmac('sha256', key).update(b).digest();
+  return timingSafeEqual(ha, hb);
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -100,6 +103,14 @@ function createSession(): string {
   const sid = generateToken();
   sessions.set(sid, Date.now() + SESSION_TTL_MS);
   return sid;
+}
+
+function checkHost(req: IncomingMessage, port: number): boolean {
+  // DNS-rebinding defense: a hostile page can rebind its domain to 127.0.0.1
+  // and the victim browser will then reach this server with Host: attacker.tld.
+  // Origin checks cover state-changing POSTs; this covers everything else.
+  const host = req.headers.host ?? '';
+  return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 }
 
 function checkOrigin(req: IncomingMessage, port: number): boolean {
@@ -680,6 +691,11 @@ load('overview');
 // ── HTTP handler ───────────────────────────────────────────────────
 function createHandler(port: number) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (!checkHost(req, port)) {
+      res.writeHead(421, { 'content-type': 'text/plain' });
+      res.end('Host check failed (DNS-rebinding defense). Use http://127.0.0.1:' + port);
+      return;
+    }
     const url = req.url || '/';
     const method = (req.method || 'GET').toUpperCase();
 

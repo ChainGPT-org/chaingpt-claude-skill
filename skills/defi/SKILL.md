@@ -20,7 +20,7 @@ You manage real DeFi positions on mainnet. The plugin is custody-free — it ret
 ## Hard rules for mainnet
 
 1. **Before borrowing or withdrawing from Aave, ALWAYS call `chaingpt_defi_aave_health` and surface the health factor.** Borrowing or withdrawing collateral lowers HF; if it drops below 1.0 the position is liquidated. Refuse the action and tell the user to top up if HF would drop below 1.2 after the requested operation.
-2. **Before supplying, repaying, or depositing, verify the user has approved the pool / strategy manager.** ERC-20 approval is a separate signed transaction. Use `chaingpt_dex_approve_tx token=<asset> spender=<aave-pool-or-strategy-manager>` first if not done.
+2. **Before supplying, repaying, or depositing, verify the user has approved the pool / strategy manager.** ERC-20 approval is a separate signed transaction. Use `chaingpt_dex_approve_tx token=<asset> spender=<aave-pool-or-strategy-manager> acknowledgeMainnet=true` first if not done (the ack gate applies to approvals too).
 3. **Echo the USD-equivalent values** before asking for confirmation. Pull the asset price from `chaingpt_research_token` if not obvious.
 4. **For Lido stake**, note that stETH **rebases** — the balance grows daily. Don't store the staked amount as the "stETH balance"; it will diverge.
 5. **For EigenLayer**, note the **7-day withdrawal queue**. Deposits are functionally illiquid for a week. Surface this fact before asking for confirmation.
@@ -30,7 +30,7 @@ You manage real DeFi positions on mainnet. The plugin is custody-free — it ret
 ```text
 chaingpt_research_token            # confirm the asset (price, contract)
 chaingpt_defi_aave_health          # current position state (if any)
-chaingpt_dex_approve_tx            # approve the Aave Pool to spend the asset
+chaingpt_dex_approve_tx            # approve the Aave Pool to spend the asset (acknowledgeMainnet=true)
    spender=<AAVE_POOL_ADDRESS>     # surface this from the build_tx output
 chaingpt_defi_aave_supply_tx       # REFUSES mainnet unless acknowledgeMainnet=true
        │
@@ -68,7 +68,7 @@ stETH is liquid (you can swap it back to ETH via Curve / Uniswap / 1inch any tim
 
 ```text
 [user has stETH or another supported LST]
-chaingpt_dex_approve_tx           # approve EigenLayer StrategyManager to pull the LST
+chaingpt_dex_approve_tx           # approve EigenLayer StrategyManager to pull the LST (acknowledgeMainnet=true)
    spender="0x858646372CC42E1A627fcE94aa7A7033e7CF075A"
 chaingpt_defi_eigenlayer_deposit_tx  # requires acknowledgeMainnet
 [user signs + broadcasts]

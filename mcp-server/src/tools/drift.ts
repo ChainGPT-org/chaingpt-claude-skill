@@ -143,6 +143,35 @@ function annualizedFunding(hourly: number): number {
   return hourly * 24 * 365;
 }
 
+// dlob.drift.trade has been returning 503 "no healthy upstream" and data.api.drift.trade 403
+// since ~2026-05; Drift appears to have gated/moved its public data plane. Try every known
+// host before failing, and fail with a message that explains the degraded state instead of
+// surfacing a bare upstream error.
+const DRIFT_DEGRADED_HINT =
+  'Drift public endpoints are currently unreachable (dlob.drift.trade 503 / data.api.drift.trade 403). ' +
+  'Drift read tools are DEGRADED until Drift restores public access. ' +
+  'Options: check https://docs.drift.trade/developers/data-api for the current endpoint, ' +
+  'or self-host the orderbook server (https://github.com/drift-labs/dlob-server) and set DRIFT_DLOB_URL.';
+
+function driftHosts(primary: string): string[] {
+  const override = process.env.DRIFT_DLOB_URL;
+  const ordered = primary === DRIFT_DATA ? [DRIFT_DATA, DRIFT_DLOB] : [DRIFT_DLOB, DRIFT_DATA];
+  return override ? [override.replace(/\/$/, ''), ...ordered] : ordered;
+}
+
+async function driftGet<T = any>(path: string, primary: string = DRIFT_DLOB): Promise<T> {
+  let lastErr: unknown;
+  for (const host of driftHosts(primary)) {
+    try {
+      return await httpJson<T>(`${host}${path}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  throw new Error(`${msg}\n\n${DRIFT_DEGRADED_HINT}`);
+}
+
 export async function handleDriftTool(
   name: string,
   args: Record<string, unknown> | undefined
@@ -153,7 +182,7 @@ export async function handleDriftTool(
     if (name === 'chaingpt_drift_markets') {
       const sortBy = String(args.sortBy ?? 'volume');
       const limit = Number(args.limit ?? 30);
-      const res = await httpJson<any>(`${DRIFT_DLOB}/contracts`);
+      const res = await driftGet<any>('/contracts');
       // Drift returns either { contracts: [...] } or a raw array. Be defensive.
       const contracts: any[] = Array.isArray(res) ? res : (res?.contracts ?? []);
       // Only perp contracts (not spot)
@@ -203,7 +232,7 @@ export async function handleDriftTool(
     if (name === 'chaingpt_drift_market') {
       const marketIndex = Number(args.marketIndex);
       // Pull from the contracts list and filter — dlob.drift.trade returns all in one go
-      const res = await httpJson<any>(`${DRIFT_DLOB}/contracts`);
+      const res = await driftGet<any>('/contracts');
       const contracts: any[] = Array.isArray(res) ? res : (res?.contracts ?? []);
       const c = contracts.find((x) => Number(x?.market_index ?? x?.marketIndex) === marketIndex);
       if (!c) {
@@ -229,7 +258,7 @@ export async function handleDriftTool(
     if (name === 'chaingpt_drift_orderbook') {
       const marketIndex = Number(args.marketIndex);
       const depth = Number(args.depth ?? 10);
-      const res = await httpJson<any>(`${DRIFT_DLOB}/l2?marketIndex=${marketIndex}&marketType=perp&depth=${depth}`);
+      const res = await driftGet<any>(`/l2?marketIndex=${marketIndex}&marketType=perp&depth=${depth}`);
       const bids: any[] = res?.bids ?? [];
       const asks: any[] = res?.asks ?? [];
       const lines: string[] = [];
@@ -256,8 +285,7 @@ export async function handleDriftTool(
       const window = String(args.window ?? '24h');
       const now = Math.floor(Date.now() / 1000);
       const from = window === '7d' ? now - 86_400 * 7 : now - 86_400;
-      const url = `${DRIFT_DATA}/fundingRates?marketIndex=${marketIndex}&marketType=perp&from=${from}&to=${now}`;
-      const res = await httpJson<any>(url);
+      const res = await driftGet<any>(`/fundingRates?marketIndex=${marketIndex}&marketType=perp&from=${from}&to=${now}`, DRIFT_DATA);
       const rates: any[] = res?.fundingRates ?? res?.records ?? (Array.isArray(res) ? res : []);
       const lines: string[] = [];
       lines.push(`Drift funding history — market index ${marketIndex}, last ${window}`);
@@ -295,10 +323,9 @@ export async function handleDriftTool(
       const authority = String(args.authority);
       const subAccountId = Number(args.subAccountId ?? 0);
       // Drift data API exposes user state
-      const url = `${DRIFT_DATA}/user?authority=${authority}&subAccountId=${subAccountId}`;
       let res: any;
       try {
-        res = await httpJson<any>(url);
+        res = await driftGet<any>(`/user?authority=${authority}&subAccountId=${subAccountId}`, DRIFT_DATA);
       } catch (e: any) {
         return {
           content: [{

@@ -377,7 +377,7 @@ export async function handleAggregatorTool(
         `Slippage:             ${slippageBps / 100}%`,
         '',
         'Pre-flight (BEFORE signing):',
-        `  chaingpt_dex_approve_tx network=${network} token=${sellToken} spender=${COW_VAULT_RELAYER}`,
+        `  chaingpt_dex_approve_tx network=${network} token=${sellToken} spender=${COW_VAULT_RELAYER} acknowledgeMainnet=true`,
         '  (CoW uses a Vault Relayer for ERC-20 spending; one-time approval per token)',
         '',
         '--- EIP-712 typed data (sign via eth_signTypedData_v4) ---',

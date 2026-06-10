@@ -134,10 +134,18 @@ export function buildOrder(opts: {
   const sizeUnits = BigInt(Math.round(size * 1_000_000)); // outcome tokens have 6 decimals
   const priceUnits = BigInt(Math.round(price * 1_000_000)); // USDC per token, 6 decimals
   const usdcAmount = (sizeUnits * priceUnits) / 1_000_000n;
+  // Integer division can floor tiny orders to 0 USDC (e.g. 0.001 shares @ 0.01)
+  // — a zero-cost real-money order must never leave this helper.
+  if (usdcAmount === 0n) {
+    throw new Error(
+      `Polymarket order rounds to 0 USDC (size ${opts.size} × price ${opts.price}). Increase size or price.`
+    );
+  }
 
   const isBuy = opts.side === 'BUY';
   return {
-    salt: opts.salt ?? Math.floor(Math.random() * 1e18).toString(),
+    // Money-touching salt: must come from a CSPRNG, not Math.random().
+    salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(16).toString('hex')).toString(),
     maker: opts.maker,
     signer: opts.maker,
     taker: '0x0000000000000000000000000000000000000000',

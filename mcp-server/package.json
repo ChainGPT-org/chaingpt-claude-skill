@@ -1,6 +1,6 @@
 {
   "name": "@chaingpt/mcp-server",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "MCP server exposing ChainGPT Web3 AI APIs + generic Web3 tools + mainnet deploy + mainnet DEX (OpenOcean + 1inch + CoW + Jupiter) + mainnet DeFi (Aave + Lido + EigenLayer + Pendle + Morpho) + perps (Hyperliquid + Drift) + Polymarket + Across cross-chain bridge + multi-protocol portfolio snapshot as tools for Claude",
   "main": "dist/index.js",
   "bin": {

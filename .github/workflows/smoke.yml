@@ -7,6 +7,12 @@ name: Live-API smoke
 #
 # This intentionally runs separately from the standard CI workflow so a
 # transient upstream outage doesn't block PRs.
+#
+# Alerting model: ONE rolling issue (label: smoke-failure). A failing run
+# creates it if absent, otherwise appends a comment. A green run closes it
+# with a recovery comment. This keeps the signal at exactly one open issue
+# instead of one new issue per day (issues #49–#68 taught us that an alert
+# nobody can keep up with is the same as no alert).
 
 on:
   schedule:
@@ -46,6 +52,7 @@ jobs:
         run: cd mcp-server && node node_modules/typescript/bin/tsc
 
       - name: Run live-API smoke
+        id: smoke
         env:
           # CHAINGPT_API_KEY is required for the server to boot, but the
           # read-only smoke cases never hit the ChainGPT plugin API itself.
@@ -53,43 +60,84 @@ jobs:
           MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
           ONEINCH_API_KEY: ${{ secrets.ONEINCH_API_KEY }}
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-        run: cd mcp-server && node dist/smoke-test.js
+        run: |
+          cd mcp-server
+          set +e
+          node dist/smoke-test.js 2>&1 | tee smoke-output.txt
+          code=${PIPESTATUS[0]}
+          # Strip ANSI colors and keep the failure tail for the issue body
+          tail -c 4000 smoke-output.txt | sed 's/\x1b\[[0-9;]*m//g' > smoke-tail.txt
+          exit $code
 
-      - name: Open issue on failure
-        if: ${{ failure() && github.event_name == 'schedule' }}
+      - name: Update rolling issue (failure → create/comment, success → close)
+        if: ${{ always() && github.event_name == 'schedule' }}
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `[smoke] Daily live-API smoke failed — ${new Date().toISOString().slice(0,10)}`;
-            const body = [
-              'The scheduled live-API smoke run failed.',
-              '',
-              `Workflow: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              '',
-              'Likely causes:',
-              '- An upstream API changed its response shape',
-              '- A rate limit was hit',
-              '- A protocol moved to a new endpoint',
-              '',
-              'Open the workflow log to see which case(s) failed and which endpoint to inspect.',
-            ].join('\n');
-            // Only open one issue per day, even if the workflow runs multiple times
+            const fs = require('fs');
+            const failed = '${{ steps.smoke.outcome }}' === 'failure';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const today = new Date().toISOString().slice(0, 10);
-            const { data: existing } = await github.rest.issues.listForRepo({
+            let tail = '';
+            try { tail = fs.readFileSync('mcp-server/smoke-tail.txt', 'utf8'); } catch {}
+            const { data: open } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
               labels: 'smoke-failure',
               per_page: 50,
             });
-            if (existing.some((i) => i.title.includes(today))) {
-              core.info('Smoke-failure issue for today already exists; skipping.');
-              return;
+            const rolling = open.find((i) => i.title.startsWith('[smoke] Live-API smoke failing'));
+
+            if (failed) {
+              const update = [
+                `**${today} — still failing.** [Run log](${runUrl})`,
+                '',
+                '```',
+                tail.slice(-3000),
+                '```',
+              ].join('\n');
+              if (rolling) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: rolling.number, body: update,
+                });
+                core.info(`Commented on rolling issue #${rolling.number}.`);
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  title: '[smoke] Live-API smoke failing',
+                  body: [
+                    'The scheduled live-API smoke is failing. This issue stays open (with one',
+                    'comment per failing day) until the first green run auto-closes it.',
+                    '',
+                    'Likely causes: an upstream API changed shape, a rate limit, or a moved endpoint.',
+                    '',
+                    update,
+                  ].join('\n'),
+                  labels: ['smoke-failure', 'live-api'],
+                });
+                core.info('Opened new rolling smoke-failure issue.');
+              }
+            } else if ('${{ steps.smoke.outcome }}' === 'success' && rolling) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: rolling.number,
+                body: `**${today} — recovered.** Smoke is green again: [run log](${runUrl}). Auto-closing.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: rolling.number, state: 'closed',
+              });
+              core.info(`Closed rolling issue #${rolling.number} after green run.`);
+            } else if (rolling) {
+              // cancelled / skipped — inconclusive. Keep the issue open but
+              // don't let the timeline silently skip a day.
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: rolling.number,
+                body: `**${today} — inconclusive** (run outcome: ${{ toJSON(steps.smoke.outcome) }}). [Run log](${runUrl}). Issue stays open.`,
+              });
+            } else {
+              core.info('No open rolling issue — nothing to do.');
             }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              body,
-              labels: ['smoke-failure', 'live-api'],
-            });

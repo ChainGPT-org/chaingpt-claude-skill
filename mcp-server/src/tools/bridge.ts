@@ -187,10 +187,15 @@ export async function handleBridgeTool(
       }
 
       const inputAmount = amountRaw;
-      const relayFeeTotal = BigInt(quote.relayFeeTotal ?? '0');
-      const lpFeePct = BigInt(quote.lpFeePct ?? '0');
-      const lpFeeTotal = (inputAmount * lpFeePct) / 10n ** 18n;
-      const outputAmount = inputAmount - relayFeeTotal - lpFeeTotal;
+      const relayFeeTotal = BigInt(quote.relayFeeTotal ?? quote.totalRelayFee?.total ?? '0');
+      const lpFeeTotal = BigInt(quote.lpFee?.total ?? '0');
+      // Prefer the API's authoritative outputAmount. Fallback math note:
+      // Across v3's relayFeeTotal/totalRelayFee already INCLUDES the LP fee —
+      // subtracting a separately-computed LP fee again double-counts it
+      // (prior bug; LP fee stays as a display-only component below).
+      const outputAmount = quote.outputAmount !== undefined
+        ? BigInt(quote.outputAmount)
+        : inputAmount - relayFeeTotal;
       if (outputAmount <= 0n) {
         return {
           content: [{
@@ -208,8 +213,8 @@ export async function handleBridgeTool(
       lines.push('');
       lines.push(`Input:                ${formatAmount(inputAmount.toString(), decimals)} ${inputToken}`);
       lines.push(`Expected output:      ${formatAmount(outputAmount.toString(), decimals)} ${outputToken}`);
-      lines.push(`Relay fee (gas+cap):  ${formatAmount(relayFeeTotal.toString(), decimals)}  (${formatFeeBps(quote.relayFeePct ?? '0')})`);
-      lines.push(`LP fee:               ${formatAmount(lpFeeTotal.toString(), decimals)}  (${formatFeeBps(quote.lpFeePct ?? '0')})`);
+      lines.push(`Relay fee (incl. LP): ${formatAmount(relayFeeTotal.toString(), decimals)}  (${formatFeeBps(quote.relayFeePct ?? '0')})`);
+      lines.push(`  of which LP fee:    ${formatAmount(lpFeeTotal.toString(), decimals)}  (${formatFeeBps(quote.lpFeePct ?? '0')})`);
       lines.push(`Fill time (est):      ~${quote.estimatedFillTimeSec ?? '?'}s`);
       lines.push(`SpokePool (origin):   ${quote.spokePoolAddress}`);
       lines.push(`Quote block:          ${quote.quoteBlock}`);
@@ -217,7 +222,7 @@ export async function handleBridgeTool(
       if (name === 'chaingpt_bridge_quote') {
         lines.push('');
         lines.push('Next:');
-        lines.push(`  1. chaingpt_dex_approve_tx token=${inputToken} spender=${quote.spokePoolAddress} (if ERC-20)`);
+        lines.push(`  1. chaingpt_dex_approve_tx token=${inputToken} spender=${quote.spokePoolAddress} acknowledgeMainnet=true (if ERC-20)`);
         lines.push('  2. chaingpt_bridge_build_deposit_tx (same params + acknowledgeMainnet: true)');
         return { content: [{ type: 'text', text: lines.join('\n') }] };
       }

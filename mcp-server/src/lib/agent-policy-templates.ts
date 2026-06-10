@@ -59,6 +59,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '100000000000000000', // 0.1 ETH
       maxTxGas: '1500000',
+      maxDailySpendWei: '300000000000000000', // 0.3 ETH per rolling 24h
+      maxDailyTxCount: 20,
       blockedSelectors: [],
       requireMemo: true,
       notes: 'Balanced DeFi starter. The agent can swap on OpenOcean/1inch, lend on Aave V3, and stake on Lido up to 0.1 native per tx. Widen the value cap or add routers as you build trust. Engage the kill switch any time to halt.',
@@ -78,6 +80,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '0',
       maxTxGas: '500000',
+      maxDailySpendWei: '0',
+      maxDailyTxCount: 0,
       blockedSelectors: [],
       requireMemo: true,
       notes: 'Locked-down. No signing happens until you swap to another template or relax this manually. Apply instantly if something looks wrong.',
@@ -97,6 +101,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '50000000000000000', // 0.05 ETH
       maxTxGas: '500000',
+      maxDailySpendWei: '150000000000000000', // 0.15 ETH/day — a few DCA buys
+      maxDailyTxCount: 6,
       blockedSelectors: [],
       requireMemo: true,
       notes: 'DCA on Base only. Add a memo like "dca-buy-43" so every tx is traceable to a strategy iteration.',
@@ -122,6 +128,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '1000000000000000000', // 1 ETH
       maxTxGas: '1500000',
+      maxDailySpendWei: '2000000000000000000', // 2 ETH/day
+      maxDailyTxCount: 15,
       blockedSelectors: [],
       requireMemo: true,
       notes: 'Yield rebalancing. Refresh allowed routers when adding new protocols. Aave supply uses ~600k gas; multicall variants up to 1.2M.',
@@ -147,6 +155,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '500000000000000000', // 0.5 ETH per leg
       maxTxGas: '800000',
+      maxDailySpendWei: '1500000000000000000', // 1.5 ETH/day across legs
+      maxDailyTxCount: 10,
       blockedSelectors: [],
       requireMemo: true,
       notes: 'Cross-chain rebalancing via Across v3. Each leg capped at 0.5 ETH — split larger transfers into multiple deposits.',
@@ -175,6 +185,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       blockedToAddresses: [BLOCKED_KNOWN_DRAINER],
       maxTxValueWei: '5000000000000000000', // 5 ETH
       maxTxGas: '2000000',
+      maxDailySpendWei: '15000000000000000000', // 15 ETH/day
+      maxDailyTxCount: 50,
       blockedSelectors: [],
       requireMemo: false,
       notes: 'Power-user setup. Curate blockedToAddresses with known drainer/phisher addresses from chainabuse.com / Forta alerts.',
@@ -230,6 +242,8 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       ],
       maxTxValueWei: '100000000000000000', // 0.1 ETH
       maxTxGas: '1000000',
+      maxDailySpendWei: '500000000000000000', // 0.5 ETH per rolling 24h
+      maxDailyTxCount: 25,
       blockedSelectors: [SEL_TRANSFER_FROM], // example: block raw transferFrom
       requireMemo: true,
       notes: 'Reference template showing every policy field. killSwitch is ON for safety. Toggle it off + tune the rules to match your strategy. See the policy editor below for inline help on each field.',

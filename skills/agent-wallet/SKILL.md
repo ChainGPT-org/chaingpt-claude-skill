@@ -74,7 +74,7 @@ Both default to `~/.chaingpt-mcp/agent-wallet/` but can be overridden via `CHAIN
 
 ## Policy file format
 
-Default `policy.json` (lazily created on first read) has `killSwitch: true` — the agent refuses everything until the admin opts in.
+Default `policy.json` (lazily created on first read) is the **Balanced DeFi** policy: `killSwitch: false`, major DEX/lending routers allow-listed, 0.1 native per-tx cap, 0.3 native + 20 txs per rolling 24h (`maxDailySpendWei` / `maxDailyTxCount`), memo required. A corrupt or partially-missing policy file always falls back to fail-closed (`killSwitch: true`) — tampering can never open the gates. Apply the "Locked down" template (or set `killSwitch: true`) for a refuse-everything posture.
 
 Example **production policy** (allow DEX rebalancing on Base, capped at 0.1 ETH/tx, audit memo required):
 
@@ -108,11 +108,13 @@ Example **production policy** (allow DEX rebalancing on Base, capped at 0.1 ETH/
 | `allowedToAddresses` | string[] | any address allowed | refuses if `to` not in list (case-insensitive) |
 | `blockedToAddresses` | string[] | nothing blocked | refuses if `to` matches (case-insensitive) |
 | `maxTxValueWei` | string | no cap | refuses if native `value > max` |
-| `maxTxGas` | string | no cap | refuses if `gasLimit > max` |
+| `maxTxGas` | string | no cap | refuses if `gasLimit > max`; an explicit `gasLimit` becomes REQUIRED (auto-estimation would bypass the cap) |
+| `maxDailySpendWei` | string | no velocity cap | refuses if 24h ledger spend + this tx `value` would exceed the cap (fail-closed if the ledger is unreadable) |
+| `maxDailyTxCount` | int | no velocity cap | refuses once the rolling-24h signed-tx count reaches the cap |
 | `blockedSelectors` | string[] | nothing blocked | refuses if first 4 bytes of `data` match (e.g. `0xa9059cbb` blocks ERC-20 `transfer`) |
 | `requireMemo` | bool | no memo required | refuses if the `memo` arg is missing |
 
-**Precedence:** kill switch > blockedToAddresses > allowedToAddresses > value caps > gas cap > blockedSelectors > memo. Any single failure refuses the tx.
+**Precedence:** kill switch > blockedToAddresses > allowedToAddresses > value caps > gas cap > daily velocity caps > blockedSelectors > memo. Any single failure refuses the tx.
 
 ## Pre-flight checklist
 
