@@ -116,6 +116,36 @@ Example **production policy** (allow DEX rebalancing on Base, capped at 0.1 ETH/
 
 **Precedence:** kill switch > blockedToAddresses > allowedToAddresses > value caps > gas cap > daily velocity caps > blockedSelectors > memo. Any single failure refuses the tx.
 
+## Solana wallet (v1.19+)
+
+The same bounded-autonomy model on Solana. Separate Ed25519 keystore (`solana-keystore.json`, same cipher + same admin passphrase), gated by the `solana` policy sub-object that — like everything else here — no MCP tool can write.
+
+```text
+chaingpt_agent_wallet_solana_init           # one-time keystore
+chaingpt_agent_wallet_solana_address        # fund this (the balance is the outermost cap)
+<any builder: jupiter swap / marginfi / kamino / transfer>  → unsigned VersionedTransaction (base64)
+chaingpt_agent_wallet_solana_sign_and_send txBase64=<…> memo=<…>
+```
+
+Policy block (admin-only, dashboard or text editor):
+
+```json
+"solana": {
+  "enabled": true,
+  "allowedPrograms": ["11111111111111111111111111111111", "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
+  "maxTxLamports": "100000000",
+  "maxDailySpendLamports": "300000000",
+  "maxDailyTxCount": 20,
+  "requireMemo": true
+}
+```
+
+Hard facts to relay accurately:
+- **Fail-closed migration:** a policy file without `solana.enabled: true` refuses every Solana signing op. `unrestricted` does not bypass it.
+- **Spend is simulation-priced:** the tool simulates first and meters the fee-payer lamport delta against `maxTxLamports` + the 24h window. Simulation unavailable or failing ⇒ refusal, never a blind broadcast.
+- **The program allowlist fences which protocols the agent may ENTER (top-level instructions).** Inner CPIs are invisible to it — the lamport caps + tx count are the actual spend fence. SPL-token outflows don't move fee-payer lamports, so they are fenced by the allowlist and tx count, not the lamport cap.
+- The agent must be the **sole signer and fee payer** — co-signing or fee-sponsoring someone else's tx is refused structurally.
+
 ## Pre-flight checklist
 
 ```text
