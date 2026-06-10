@@ -57,14 +57,42 @@ interface PlanStep {
   [k: string]: unknown;
 }
 
+// Per-plan in-process mutex: mark_step is a read-modify-write on the plan
+// file, and MCP clients can pipeline tool calls. Without this, two
+// simultaneous ticks could both pass the idempotency check and both execute
+// — the exact failure the journal exists to prevent. (Cross-PROCESS races
+// are out of scope: run one scheduler per plan, as the skill instructs.)
+const planLocks = new Map<string, Promise<void>>();
+async function withPlanLock<T>(planName: string, fn: () => Promise<T>): Promise<T> {
+  const prev = planLocks.get(planName) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((r) => { release = r; });
+  planLocks.set(planName, next);
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release();
+    if (planLocks.get(planName) === next) planLocks.delete(planName);
+  }
+}
+
 function planSteps(plan: PersistedPlan): PlanStep[] | null {
   const p = plan.payload as Record<string, unknown> | null;
   const steps = p && Array.isArray((p as any).steps) ? ((p as any).steps as unknown[]) : null;
   if (!steps) return null;
   const out: PlanStep[] = [];
+  const seen = new Set<string>();
   for (const s of steps) {
     const st = s as Record<string, unknown>;
     if (st && st.id !== undefined && Number.isFinite(Number(st.atUnix))) {
+      const key = String(st.id);
+      if (seen.has(key)) {
+        // Duplicate ids would journal as ONE step while executing as two.
+        // Fail loudly at read time instead of refusing mysteriously mid-run.
+        throw new Error(`payload.steps contains duplicate id "${key}" — fix the plan before scheduling it.`);
+      }
+      seen.add(key);
       out.push({ ...(st as object), id: st.id as number | string, atUnix: Number(st.atUnix) });
     }
   }
@@ -347,7 +375,8 @@ export async function handlePlanTool(
         for (const s of due.slice(0, limit)) {
           const ageMin = Math.round((nowSec - s.atUnix) / 60);
           const { id: _id, atUnix: _at, ...detail } = s;
-          lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${ageMin >= 0 ? `${ageMin} min overdue` : 'due soon'})`);
+          const when = ageMin >= 0 ? `${ageMin} min overdue` : `due in ${Math.abs(ageMin)} min (within lookahead)`;
+          lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${when})`);
           lines.push(`    ${JSON.stringify(detail)}`);
         }
         if (due.length > limit) lines.push(`(+${due.length - limit} more due — raise limit)`);
@@ -361,6 +390,7 @@ export async function handlePlanTool(
 
     if (name === 'chaingpt_strategy_mark_step') {
       const planName = String(args.name);
+      return await withPlanLock(planName, async () => {
       const stepId = String(args.stepId);
       const status = (args.status === 'skipped' ? 'skipped' : 'done') as 'done' | 'skipped';
       const txHash = args.txHash ? String(args.txHash) : undefined;
@@ -400,6 +430,7 @@ export async function handlePlanTool(
           text: `✓ Step ${stepId} marked ${status}${txHash ? ` (tx ${txHash})` : ''}. ${remaining} step(s) remaining in "${planName}".${remaining === 0 ? ' Plan COMPLETE.' : ''}`,
         }],
       };
+      });
     }
 
     if (name === 'chaingpt_strategy_delete_plan') {

@@ -198,6 +198,27 @@ describe('Plan persistence round-trip', () => {
       expect(r.content[0].text).toContain('COMPLETE');
     });
 
+    it('id 0 is a valid (falsy) step id', async () => {
+      await handlePlanTool('chaingpt_strategy_save_plan', {
+        name: 'zero-id',
+        payload: { steps: [{ id: 0, atUnix: nowSec - 60, action: 'buy', usd: 10 }] },
+      });
+      const due = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'zero-id' });
+      expect(due.content[0].text).toContain('Step 0');
+      const m = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'zero-id', stepId: 0, txHash: '0x0' });
+      expect(m.content[0].text).toContain('Step 0 marked done');
+      const again = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'zero-id' });
+      expect(again.content[0].text).toContain('Due now: 0');
+    });
+
+    it('duplicate step ids fail loudly at read time', async () => {
+      await handlePlanTool('chaingpt_strategy_save_plan', {
+        name: 'dup-ids',
+        payload: { steps: [{ id: 1, atUnix: nowSec }, { id: 1, atUnix: nowSec + 60 }] },
+      });
+      await expect(handlePlanTool('chaingpt_strategy_due_steps', { name: 'dup-ids' })).rejects.toThrow(/duplicate id/);
+    });
+
     it('due_steps explains the required shape for non-schedulable plans', async () => {
       await handlePlanTool('chaingpt_strategy_save_plan', { name: 'freeform', payload: { anything: true } });
       const r = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'freeform' });
