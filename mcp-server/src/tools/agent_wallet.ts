@@ -1306,6 +1306,22 @@ export async function handleAgentWalletTool(
       if (policy.blockedToAddresses?.length) lines.push(`Blocked to:      ${policy.blockedToAddresses.length} addresses`);
       if (policy.maxTxValueWei) lines.push(`Max value/tx:    ${policy.maxTxValueWei} wei (${fmtEth(BigInt(policy.maxTxValueWei))} native)`);
       if (policy.requireMemo) lines.push(`Memo required:   yes`);
+      // Velocity window: show consumption against the daily caps so "how much
+      // room is left today" never requires reading the ledger by hand.
+      if (policy.maxDailySpendWei !== undefined || policy.maxDailyTxCount !== undefined) {
+        const w = spendStats(24);
+        if (!w.ok) {
+          lines.push(`24h window:      LEDGER UNREADABLE — signing will refuse (fail closed)`);
+        } else {
+          const spendPart = policy.maxDailySpendWei !== undefined
+            ? `${fmtEth(w.totalWei)}/${fmtEth(BigInt(policy.maxDailySpendWei))} native spent`
+            : `${fmtEth(w.totalWei)} native spent (no cap)`;
+          const txPart = policy.maxDailyTxCount !== undefined
+            ? `${w.txCount}/${policy.maxDailyTxCount} txs`
+            : `${w.txCount} txs (no cap)`;
+          lines.push(`24h window:      ${spendPart} · ${txPart}`);
+        }
+      }
       lines.push(``);
       {
         const src = passphraseSource();

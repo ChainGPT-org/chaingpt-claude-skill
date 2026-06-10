@@ -42,6 +42,7 @@ import { baseTools, handleBaseTool } from './tools/base.js';
 import { miniappTools, handleMiniappTool } from './tools/miniapp.js';
 import { erc8004Tools, handleErc8004Tool } from './tools/erc8004.js';
 import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
+import { recordToolUse } from './lib/usage.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -56,7 +57,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.17.0' },
+  { name: 'chaingpt', version: '1.18.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -128,6 +129,7 @@ const API_KEY_SETUP_HELP = [
 // Route tool calls to appropriate handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  recordToolUse(name); // local-only counter (see lib/usage.ts privacy model)
 
   try {
     if (!API_KEY && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
