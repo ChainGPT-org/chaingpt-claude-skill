@@ -16,7 +16,7 @@ import {
   type SolanaTxIntent,
 } from '../lib/agent-policy.js';
 import { logActivity, spendStats } from '../lib/agent-activity.js';
-import { withRpcFallback, type SolanaNetwork } from '../lib/solana-sign.js';
+import { withRpcFallback, makeConnection, type SolanaNetwork } from '../lib/solana-sign.js';
 
 /**
  * Agent wallet — Solana surface. The Ed25519 counterpart of the EVM
@@ -170,9 +170,23 @@ export async function handleAgentWalletSolanaTool(
           }],
         };
       }
-      const programIds = [...new Set(
-        msg.compiledInstructions.map((ix) => msg.staticAccountKeys[ix.programIdIndex]?.toBase58() ?? 'unknown')
-      )];
+      let programIds: string[];
+      try {
+        programIds = [...new Set(
+          msg.compiledInstructions.map((ix) => {
+            const p = msg.staticAccountKeys[ix.programIdIndex];
+            if (!p) throw new Error(`programIdIndex ${ix.programIdIndex} is out of bounds`);
+            return p.toBase58();
+          })
+        )];
+      } catch (e: any) {
+        return {
+          content: [{
+            type: 'text',
+            text: `⛔ Refused: malformed transaction (${e?.message ?? e}). The structural checks are deterministic — a tx whose instruction program cannot be resolved is never signed.`,
+          }],
+        };
+      }
 
       // 3. Cheap policy short-circuit BEFORE any RPC (kill switch / not enabled)
       const policy = loadPolicy();
@@ -193,13 +207,21 @@ export async function handleAgentWalletSolanaTool(
           });
           return { pre, s };
         });
-        const post = result.s.value.accounts?.[0]?.lamports;
-        const delta = post !== undefined ? BigInt(result.pre) - BigInt(post) : undefined;
-        sim = {
-          ok: true,
-          lamportDelta: delta !== undefined && delta > 0n ? delta : 0n,
-          err: result.s.value.err ? JSON.stringify(result.s.value.err) : null,
-        };
+        const acct = result.s.value.accounts?.[0];
+        if (acct === null) {
+          // The fee payer vanished from the simulated post-state (e.g. drained
+          // to zero). Distinct from "accounts missing": treat as simulation
+          // unavailable so every lamport cap fails CLOSED instead of metering 0.
+          sim = { ok: false };
+        } else {
+          const post = acct?.lamports;
+          const delta = post !== undefined ? BigInt(result.pre) - BigInt(post) : undefined;
+          sim = {
+            ok: true,
+            lamportDelta: delta !== undefined && delta > 0n ? delta : 0n,
+            err: result.s.value.err ? JSON.stringify(result.s.value.err) : null,
+          };
+        }
       } catch {
         sim = { ok: false };
       }
@@ -220,18 +242,37 @@ export async function handleAgentWalletSolanaTool(
         };
       }
 
-      // 7. Sign + send (sole signer → safe to refresh the blockhash)
+      // 7. Sign ONCE, then send. The tx is signed exactly one time and the
+      // serialized bytes are frozen BEFORE any retry loop: re-signing inside a
+      // fallback would mint a second, different transaction (new blockhash ⇒
+      // new signature) and a confirmation timeout could double-spend. Retrying
+      // sendRawTransaction with the SAME bytes is safe — validators dedupe by
+      // signature. confirmTransaction is never retried by re-sending.
       const keypair = loadSolanaKeypair();
-      const { signature, lamportDelta } = await withRpcFallback(network, async (conn) => {
-        const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
-        tx.message.recentBlockhash = blockhash;
-        tx.sign([keypair]);
-        const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight });
-        if (waitForConfirmation) {
-          await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+      const { blockhash, lastValidBlockHeight } = await withRpcFallback(network, (conn) =>
+        conn.getLatestBlockhash('finalized')
+      );
+      tx.message.recentBlockhash = blockhash; // sole signer → safe to refresh
+      tx.sign([keypair]);
+      const rawTx = tx.serialize();
+      const signature = await withRpcFallback(network, (conn) =>
+        conn.sendRawTransaction(rawTx, { skipPreflight })
+      );
+      if (waitForConfirmation) {
+        try {
+          await makeConnection(network).confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+        } catch (e: any) {
+          // The tx was broadcast; only the confirmation poll failed. Surface
+          // that honestly instead of retrying anything.
+          return {
+            content: [{
+              type: 'text',
+              text: `Transaction SENT (signature ${signature}) but confirmation polling failed: ${e?.message ?? e}. Check https://solscan.io/tx/${signature} before doing anything else — do NOT re-send.`,
+            }],
+          };
         }
-        return { signature: sig, lamportDelta: sim.lamportDelta ?? 0n };
-      });
+      }
+      const lamportDelta = sim.lamportDelta ?? 0n;
 
       // 8. Journal — feeds the lamport velocity caps
       try {

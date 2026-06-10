@@ -64,7 +64,7 @@ That last refusal is the product: the policy file lives outside the model's reac
 
 ## 🆕 What's new
 
-**[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.19.0)** local-only usage insights + self-healing CI · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a crash-safe execution journal) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+**[v1.19](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.19.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights + self-healing CI · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a crash-safe execution journal) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 
 ## ⚡ Quickstart — full step‑by‑step
 
