@@ -14,11 +14,11 @@ import { policyPath } from './agent-policy.js';
 
 export interface ActivityEntry {
   ts: string;           // ISO timestamp
-  chain: string;        // slug
+  chain: string;        // EVM slug (ethereum/base/…) or 'solana'
   chainId: number;
   from: string;
   to: string;
-  valueWei: string;
+  valueWei: string;     // base units: wei (EVM) or simulated fee-payer lamport delta (Solana)
   hash: string;
   memo?: string;
   policyDigest: string;
@@ -51,7 +51,20 @@ export function logActivity(e: ActivityEntry): void {
  * Threat-model note: this file shares the policy file's protection level —
  * no MCP tool can write or delete it. The agent cannot reset its own window.
  */
-export function spendStats(windowHours = 24): { totalWei: bigint; txCount: number; ok: boolean } {
+/**
+ * Chain class for ledger filtering. 'evm' sums wei across EVM chains;
+ * 'solana' sums lamports. The two MUST never sum together — they are
+ * different units. 'all' (default) preserves the historical unfiltered
+ * behavior for display callers; the security chokepoints always pass an
+ * explicit class.
+ */
+export type ChainClass = 'evm' | 'solana' | 'all';
+
+function entryClass(e: ActivityEntry): Exclude<ChainClass, 'all'> {
+  return e.chain === 'solana' ? 'solana' : 'evm';
+}
+
+export function spendStats(windowHours = 24, chainClass: ChainClass = 'all'): { totalWei: bigint; txCount: number; ok: boolean } {
   const path = activityPath();
   if (!existsSync(path)) return { totalWei: 0n, txCount: 0, ok: true };
   try {
@@ -64,6 +77,7 @@ export function spendStats(windowHours = 24): { totalWei: bigint; txCount: numbe
       try { e = JSON.parse(l) as ActivityEntry; } catch { continue; }
       const t = Date.parse(e?.ts ?? '');
       if (!isFinite(t) || t < cutoff) continue;
+      if (chainClass !== 'all' && entryClass(e) !== chainClass) continue;
       txCount++;
       try { totalWei += BigInt(e?.valueWei ?? '0'); } catch { /* malformed value — count the tx, skip the value */ }
     }

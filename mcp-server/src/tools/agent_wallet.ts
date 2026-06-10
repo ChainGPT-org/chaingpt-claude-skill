@@ -1309,7 +1309,7 @@ export async function handleAgentWalletTool(
       // Velocity window: show consumption against the daily caps so "how much
       // room is left today" never requires reading the ledger by hand.
       if (policy.maxDailySpendWei !== undefined || policy.maxDailyTxCount !== undefined) {
-        const w = spendStats(24);
+        const w = spendStats(24, 'evm');
         if (!w.ok) {
           lines.push(`24h window:      LEDGER UNREADABLE — signing will refuse (fail closed)`);
         } else {
@@ -1402,7 +1402,7 @@ export async function handleAgentWalletTool(
       const policy = loadPolicy();
       // Velocity caps need the rolling 24h window from the activity ledger.
       // checkPolicy fails closed if a cap is set and these stats are absent/unreadable.
-      const decision = checkPolicy(intent, policy, spendStats(24));
+      const decision = checkPolicy(intent, policy, spendStats(24, 'evm'));
       if (!decision.allowed) {
         return {
           content: [{
