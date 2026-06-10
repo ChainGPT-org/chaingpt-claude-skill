@@ -382,7 +382,7 @@ export async function handleHyperliquidTool(
       const reduceOnly = Boolean(args.reduceOnly ?? false);
       const tif = String(args.tif ?? 'Gtc') as 'Gtc' | 'Ioc' | 'Alo';
       const vaultAddress = (args.vaultAddress as string | undefined) ?? null;
-      const nonce = Number(args.nonce ?? Date.now());
+      const nonce = args.nonce !== undefined ? Number(args.nonce) : undefined; // undefined → monotonic nextHlNonce() inside buildActionPayload
 
       // Hyperliquid order action shape
       const action = {
@@ -416,7 +416,7 @@ export async function handleHyperliquidTool(
       const asset = Number(args.asset);
       const orderId = Number(args.orderId);
       const vaultAddress = (args.vaultAddress as string | undefined) ?? null;
-      const nonce = Number(args.nonce ?? Date.now());
+      const nonce = args.nonce !== undefined ? Number(args.nonce) : undefined; // undefined → monotonic nextHlNonce() inside buildActionPayload
       const action = { type: 'cancel', cancels: [{ a: asset, o: orderId }] };
       const payload = buildActionPayload(action, { nonce, vaultAddress, isMainnet: true });
       const lines = [

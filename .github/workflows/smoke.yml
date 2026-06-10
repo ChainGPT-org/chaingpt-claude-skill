@@ -119,7 +119,7 @@ jobs:
                 });
                 core.info('Opened new rolling smoke-failure issue.');
               }
-            } else if (rolling) {
+            } else if ('${{ steps.smoke.outcome }}' === 'success' && rolling) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: rolling.number,
@@ -130,6 +130,14 @@ jobs:
                 issue_number: rolling.number, state: 'closed',
               });
               core.info(`Closed rolling issue #${rolling.number} after green run.`);
+            } else if (rolling) {
+              // cancelled / skipped — inconclusive. Keep the issue open but
+              // don't let the timeline silently skip a day.
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: rolling.number,
+                body: `**${today} — inconclusive** (run outcome: ${{ toJSON(steps.smoke.outcome) }}). [Run log](${runUrl}). Issue stays open.`,
+              });
             } else {
-              core.info('Green run, no open rolling issue — nothing to do.');
+              core.info('No open rolling issue — nothing to do.');
             }

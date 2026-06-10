@@ -70,7 +70,7 @@ function timingSafeStrEqual(a: string, b: string): boolean {
   const key = randomBytes(32);
   const ha = createHmac('sha256', key).update(a).digest();
   const hb = createHmac('sha256', key).update(b).digest();
-  return timingSafeEqual(ha, hb) && a.length === b.length;
+  return timingSafeEqual(ha, hb);
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {

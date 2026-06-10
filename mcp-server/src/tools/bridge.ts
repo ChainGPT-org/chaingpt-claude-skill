@@ -222,7 +222,7 @@ export async function handleBridgeTool(
       if (name === 'chaingpt_bridge_quote') {
         lines.push('');
         lines.push('Next:');
-        lines.push(`  1. chaingpt_dex_approve_tx token=${inputToken} spender=${quote.spokePoolAddress} (if ERC-20)`);
+        lines.push(`  1. chaingpt_dex_approve_tx token=${inputToken} spender=${quote.spokePoolAddress} acknowledgeMainnet=true (if ERC-20)`);
         lines.push('  2. chaingpt_bridge_build_deposit_tx (same params + acknowledgeMainnet: true)');
         return { content: [{ type: 'text', text: lines.join('\n') }] };
       }

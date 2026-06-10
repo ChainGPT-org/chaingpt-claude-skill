@@ -145,7 +145,7 @@ export function buildOrder(opts: {
   const isBuy = opts.side === 'BUY';
   return {
     // Money-touching salt: must come from a CSPRNG, not Math.random().
-    salt: opts.salt ?? (BigInt('0x' + crypto.randomBytes(8).toString('hex')) >> 1n).toString(),
+    salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(16).toString('hex')).toString(),
     maker: opts.maker,
     signer: opts.maker,
     taker: '0x0000000000000000000000000000000000000000',
