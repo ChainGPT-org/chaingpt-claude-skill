@@ -1,5 +1,5 @@
 ---
-name: chaingpt-trustless-agents
+name: trustless-agents
 description: ERC-8004 Trustless Agents — on-chain agent identity + reputation. Resolve an agent by id (Identity Registry ERC-721 → owner + AgentCard), list the canonical registry addresses, and generate a spec-compliant agent registration card (registration-v1, with x402 support + trust models). Custody-free, read + scaffolding. Triggers: ERC-8004, trustless agent, agent identity, agent registry, AgentCard, agent reputation, on-chain agent, A2A, agent discovery, agent card, 8004.
 ---
 

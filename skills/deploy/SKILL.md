@@ -1,5 +1,5 @@
 ---
-name: chaingpt-deploy
+name: deploy
 description: "Deploy Solidity contracts to MAINNET (or testnet) safely via the ChainGPT plugin. End-to-end: generate → audit → compile → estimate → build unsigned tx → user signs → verify on Etherscan. MAINNET is the default; the audit gate is mandatory for mainnet deploys. The plugin never holds private keys — the user signs externally via MetaMask / Rabby / hardware wallet / ERC-4337 smart account. Triggers: deploy contract, ship contract, deploy to mainnet, deploy to ethereum, deploy to base, deploy to bsc, verify contract, mainnet deploy, contract deployment."
 ---
 

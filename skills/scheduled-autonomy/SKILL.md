@@ -1,5 +1,5 @@
 ---
-name: chaingpt-scheduled-autonomy
+name: scheduled-autonomy
 description: Run trading/DeFi strategies on a schedule — DCA every morning, grid rebalances, recurring health checks — using saved plans + the execution journal (due_steps/mark_step) + Claude Code scheduled agents, with the agent wallet executing inside hard policy caps. Triggers - run this daily, schedule a DCA, recurring buy, set and forget, autonomous strategy, cron strategy, execute my plan on a schedule, walk away.
 ---
 

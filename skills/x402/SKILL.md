@@ -1,5 +1,5 @@
 ---
-name: chaingpt-x402
+name: x402
 description: x402 agentic payments (Coinbase's HTTP 402 protocol). Custody-free tools to pay x402-protected endpoints (build the EIP-3009 transferWithAuthorization the payer signs, assemble the X-PAYMENT header), call a facilitator (verify/settle/supported), and monetize your own API by generating PaymentRequirements. USDC on Base. Triggers: x402, HTTP 402, pay per request, agentic payment, machine payment, X-PAYMENT, transferWithAuthorization, EIP-3009, facilitator, monetize API, pay for API, agent pays.
 ---
 

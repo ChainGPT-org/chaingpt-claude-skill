@@ -1,5 +1,5 @@
 ---
-name: chaingpt-hackathon
+name: hackathon
 description: "Scaffold a complete hackathon project using ChainGPT APIs in 60 seconds. Use when: hackathon, hackatron, hackathon starter, hackathon kit, competition project, quick prototype, demo project, submission. Generates a working project with README, .env, boilerplate, and demo script."
 ---
 

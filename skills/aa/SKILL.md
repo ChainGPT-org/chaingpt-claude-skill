@@ -1,5 +1,5 @@
 ---
-name: chaingpt-aa
+name: aa
 description: ERC-4337 v0.7 account-abstraction foundation. Custody-free utilities for computing userOpHashes, packing UserOperations into the EntryPoint wire format, and proxying bundler-RPC calls (Pimlico / Alchemy / Stackup). Triggers: ERC-4337, account abstraction, smart contract wallet, userop, user operation, bundler, paymaster, session key, EntryPoint, AA wallet, smart wallet, gas sponsorship.
 ---
 

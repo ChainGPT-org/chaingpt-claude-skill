@@ -11,6 +11,7 @@ One install gives Claude Code 131 MCP tools across **ChainGPT AI products** (cha
 [![npm version](https://img.shields.io/badge/version-1.18.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-365%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
+[![Live-API smoke](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml/badge.svg)](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-131-blueviolet?style=flat-square)](#-mcp-server--131-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
@@ -52,6 +53,18 @@ Claude: → chaingpt_agent_wallet_sign_and_send
 ```
 
 That last refusal is the product: the policy file lives outside the model's reach, every signature is checked in code, and daily spend + tx-count velocity caps bound even fully-compliant behavior. See [Security model](#-security-model).
+
+## 🧭 Pick your path
+
+| You are | Start here | Your 3 sections |
+|---|---|---|
+| **A trader who wants guardrailed autonomy** | "set up a daily $100 ETH DCA" | [Agent Wallet](#-the-agent-wallet-dashboard) · `skills/scheduled-autonomy` · [Security model](#-security-model) |
+| **An agent builder** | `/agents` → `web3-researcher` / `defi-trader` | [MCP tools](#-mcp-server--131-tools) · `agents/` + `hooks/` · x402 + ERC-8004 skills |
+| **A Solidity dev** | "generate and audit an ERC-20" | [Templates](#-10-project-templates) · [Contract patterns](#-45-smart-contract-patterns) · deploy skill |
+
+## 🆕 What's new
+
+**[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights + self-healing CI · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a crash-safe execution journal) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 
 ## ⚡ Quickstart — full step‑by‑step
 
@@ -453,6 +466,9 @@ The MCP server gives Claude **direct API and on‑chain access** — not just co
 | Utility (credit estimate, balance) | 2 | |
 | **Total** | **131** | |
 
+<details>
+<summary><b>Expand the full per-category tool reference</b></summary>
+
 ### x402 agentic payments · Base · ERC‑8004 (13 tools, new in 1.15)
 
 The agent‑economy layer: pay for things autonomously, get a human‑readable identity on Base, and carry a portable on‑chain reputation. All custody‑free.
@@ -612,6 +628,8 @@ The plugin works without these but unlocks more if present:
 | `ONEINCH_API_KEY` | 1inch v6 aggregator routing | https://portal.1inch.dev |
 
 <br/>
+
+</details>
 
 ## 📦 ChainGPT products covered
 
@@ -779,7 +797,10 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **Solidity codegen + audit** | Native (`chaingpt_generate_contract` + `chaingpt_audit_contract`) | No | No | No | No |
 | **Prediction markets** | Polymarket native | No | No | No | No |
 | **Perps** | Hyperliquid (signed) + Drift (read) | Add‑on | No | No | No |
-| **Test harness** | 6 layers + daily live smoke | Per‑plugin | Examples only | Snap testing | None |
+| **Spending limits under autonomy** | Per‑tx cap + rolling‑24h spend/tx‑count caps enforced in code the LLM can't modify | No | Smart‑wallet policies (CDP) | Per‑tx MetaMask approval | N/A |
+| **Scheduled execution safety** | Crash‑safe execution journal (re‑runs can't double‑buy) | No | No | No | No |
+| **Shipped agents** | 3 (researcher / auditor / trader) with tuned guardrails | No | No | No | No |
+| **Test harness** | 6 layers + daily live smoke + self‑healing CI (drift auto‑PRs) | Per‑plugin | Examples only | Snap testing | None |
 | **License** | MIT | MIT | Apache‑2 | MIT | Various |
 
 **Where this wins:** breadth (131 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.

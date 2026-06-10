@@ -1,5 +1,5 @@
 ---
-name: chaingpt-update
+name: update
 description: "Check for and apply updates to the ChainGPT skill. Use when: update chaingpt, update skill, check for updates, latest version, outdated docs, new api features."
 disable-model-invocation: true
 ---

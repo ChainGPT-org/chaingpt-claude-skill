@@ -32,6 +32,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write # claude-code-action exchanges an OIDC token for its GitHub credentials
 
     steps:
       - name: Check ANTHROPIC_API_KEY is configured
