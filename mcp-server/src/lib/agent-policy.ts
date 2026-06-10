@@ -31,6 +31,28 @@ export function policyPath(): string {
   return process.env.CHAINGPT_AGENT_POLICY_FILE?.trim() || DEFAULT_PATH;
 }
 
+
+export interface SolanaPolicy {
+  /** Master opt-in. Missing/false ⇒ every Solana signing op refused (fail closed). */
+  enabled: boolean;
+  /**
+   * Program-id allowlist (base58) over ALL top-level instruction programs.
+   * undefined ⇒ any program; [] ⇒ EXPLICIT EMPTY: none allowed (same
+   * semantics as allowedToAddresses). NOTE: fences top-level instructions
+   * only — inner CPIs are invisible; the lamport caps are the spend fence.
+   */
+  allowedPrograms?: string[];
+  /** Blocklist — wins over allowedPrograms. */
+  blockedPrograms?: string[];
+  /** Max simulated fee-payer lamport delta per tx. Sim failure ⇒ refuse (fail closed). */
+  maxTxLamports?: string;
+  /** Rolling-24h lamport spend cap (solana-class ledger entries only). */
+  maxDailySpendLamports?: string;
+  /** Rolling-24h signed-tx count cap (solana-class only). */
+  maxDailyTxCount?: number;
+  requireMemo?: boolean;
+}
+
 export interface AgentPolicy {
   version: 1;
   /** Master kill switch. If true, every signing operation refuses. Wins over `unrestricted`. */
@@ -72,6 +94,12 @@ export interface AgentPolicy {
   blockedSelectors?: string[];
   /** If true, the agent must include a memo field on every sign_and_send call. */
   requireMemo?: boolean;
+  /**
+   * Solana sub-policy. ABSENT or enabled:false ⇒ every Solana signing op is
+   * refused (fail closed) — existing policy files never silently gain a
+   * second chain. Enforced by checkSolanaPolicy at the solana sign chokepoint.
+   */
+  solana?: SolanaPolicy;
   /** Informational only — not enforced. Helps the admin remember what this policy is for. */
   notes?: string;
   /** Last time the file was updated. Set by the admin; not enforced. */
@@ -107,6 +135,7 @@ const FAIL_CLOSED_POLICY: AgentPolicy = {
   maxDailyTxCount: 0,
   blockedSelectors: [],
   requireMemo: true,
+  solana: { enabled: false },
   notes: 'Fail-closed fallback (policy file missing a field or unparseable). Every signing op is refused. Fix or replace policy.json to restore your intended policy.',
   updatedAt: new Date(0).toISOString(),
 };
@@ -146,6 +175,23 @@ const DEFAULT_POLICY: AgentPolicy = {
   maxDailyTxCount: 20,
   blockedSelectors: [],
   requireMemo: true,
+  solana: {
+    enabled: true,
+    allowedPrograms: [
+      '11111111111111111111111111111111',              // System
+      'ComputeBudget111111111111111111111111111111',   // ComputeBudget
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',   // SPL Token
+      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',   // Token-2022
+      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',  // Associated Token
+      'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',   // Jupiter v6
+      'MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA',   // Marginfi v2
+      'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD',   // Kamino kLend
+    ],
+    maxTxLamports: '100000000',          // 0.1 SOL — mirrors the 0.1-native EVM cap
+    maxDailySpendLamports: '300000000',  // 0.3 SOL per rolling 24h
+    maxDailyTxCount: 20,
+    requireMemo: true,
+  },
   notes:
     'Balanced DeFi default (killSwitch OFF). The agent may interact with major DEX aggregators ' +
     '(OpenOcean, 1inch) + Aave V3 + Lido on Ethereum / Base / Arbitrum / Optimism / Polygon, capped at ' +
@@ -339,6 +385,136 @@ export function checkPolicy(
   return { allowed: true, reason: 'OK', policyDigest: digest };
 }
 
+// ── Solana policy chokepoint ─────────────────────────────────────────
+
+export interface SolanaTxIntent {
+  /** Base58 program ids of ALL top-level instructions in the message. */
+  programIds: string[];
+  /** Base58 fee payer (must equal the agent's Solana address — checked by the handler). */
+  feePayer: string;
+  memo?: string;
+  /**
+   * Simulation outcome from the handler. ok=false ⇒ RPC/sim unavailable —
+   * fail closed whenever any lamport cap is configured. lamportDelta is the
+   * simulated fee-payer balance decrease (spend incl. fees), clamped ≥ 0.
+   */
+  sim: { ok: boolean; lamportDelta?: bigint; err?: string | null };
+}
+
+/**
+ * The single deterministic decision point for Solana signing — the exact
+ * counterpart of checkPolicy for EVM. Pure: reads nothing but its inputs.
+ * Callers pass spendStats(24, 'solana') so lamports never mix with wei.
+ */
+export function checkSolanaPolicy(
+  intent: SolanaTxIntent,
+  policy: AgentPolicy = loadPolicy(),
+  spend?: SpendWindow
+): PolicyCheck {
+  const digest = policyDigest(policy);
+
+  if (policy.killSwitch) {
+    return { allowed: false, reason: 'Policy kill switch is active. Edit policy.json (set killSwitch: false) to allow operations.', policyDigest: digest };
+  }
+
+  const sol = policy.solana;
+  // Fail closed for every policy file that predates Solana support: the
+  // admin must explicitly opt in. unrestricted does NOT bypass this —
+  // YOLO mode was granted for the EVM surface; silently arming a second
+  // chain the admin never enabled violates least surprise.
+  if (!sol?.enabled) {
+    return {
+      allowed: false,
+      reason: 'Solana signing is not enabled in the policy. An admin must add `"solana": { "enabled": true, ... }` via the dashboard or a text editor.',
+      policyDigest: digest,
+    };
+  }
+
+  if (policy.unrestricted) {
+    return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks; solana.enabled was still required)', policyDigest: digest };
+  }
+
+  if (sol.blockedPrograms?.length) {
+    const blocked = new Set(sol.blockedPrograms);
+    const hit = intent.programIds.find((p) => blocked.has(p));
+    if (hit) {
+      return { allowed: false, reason: `Program ${hit} is in solana.blockedPrograms.`, policyDigest: digest };
+    }
+  }
+
+  if (sol.allowedPrograms !== undefined) {
+    if (sol.allowedPrograms.length === 0) {
+      return { allowed: false, reason: 'solana.allowedPrograms is explicitly empty — no program is permitted.', policyDigest: digest };
+    }
+    const allowed = new Set(sol.allowedPrograms);
+    const off = intent.programIds.find((p) => !allowed.has(p));
+    if (off) {
+      return { allowed: false, reason: `Program ${off} is not in solana.allowedPrograms (${sol.allowedPrograms.length} entries).`, policyDigest: digest };
+    }
+  }
+
+  if (sol.maxTxLamports !== undefined) {
+    let max: bigint;
+    try { max = BigInt(sol.maxTxLamports); }
+    catch { return { allowed: false, reason: 'Policy solana.maxTxLamports is not a valid integer string.', policyDigest: digest }; }
+    if (!intent.sim.ok || intent.sim.lamportDelta === undefined) {
+      return {
+        allowed: false,
+        reason: 'solana.maxTxLamports is set but the transaction could not be simulated — refusing (fail closed). Check SOLANA_RPC_URL.',
+        policyDigest: digest,
+      };
+    }
+    if (intent.sim.lamportDelta > max) {
+      return { allowed: false, reason: `Simulated spend ${intent.sim.lamportDelta} lamports exceeds solana.maxTxLamports ${max}.`, policyDigest: digest };
+    }
+  }
+
+  const hasVelocityCap = sol.maxDailySpendLamports !== undefined || sol.maxDailyTxCount !== undefined;
+  if (hasVelocityCap) {
+    if (!spend || !spend.ok) {
+      return {
+        allowed: false,
+        reason: !spend
+          ? 'Policy sets a Solana daily velocity cap but no spend-window stats were provided — refusing (fail closed).'
+          : 'Policy sets a Solana daily velocity cap but the activity ledger could not be read — refusing (fail closed).',
+        policyDigest: digest,
+      };
+    }
+    if (sol.maxDailySpendLamports !== undefined) {
+      let maxSpend: bigint;
+      try { maxSpend = BigInt(sol.maxDailySpendLamports); }
+      catch { return { allowed: false, reason: 'Policy solana.maxDailySpendLamports is not a valid integer string.', policyDigest: digest }; }
+      if (!intent.sim.ok || intent.sim.lamportDelta === undefined) {
+        return {
+          allowed: false,
+          reason: 'solana.maxDailySpendLamports is set but the transaction could not be simulated — refusing (fail closed).',
+          policyDigest: digest,
+        };
+      }
+      if (spend.totalWei + intent.sim.lamportDelta > maxSpend) {
+        return {
+          allowed: false,
+          reason: `Daily Solana spend cap: ${spend.totalWei} lamports already signed in the last 24h + ${intent.sim.lamportDelta} now would exceed maxDailySpendLamports ${maxSpend}.`,
+          policyDigest: digest,
+        };
+      }
+    }
+    if (sol.maxDailyTxCount !== undefined && spend.txCount + 1 > sol.maxDailyTxCount) {
+      return {
+        allowed: false,
+        reason: `Daily Solana tx-count cap: ${spend.txCount} txs signed in the last 24h; maxDailyTxCount is ${sol.maxDailyTxCount}.`,
+        policyDigest: digest,
+      };
+    }
+  }
+
+  if (sol.requireMemo && !intent.memo) {
+    return { allowed: false, reason: 'Solana policy requires every signing operation to include a memo (audit trail). Provide one via the `memo` arg.', policyDigest: digest };
+  }
+
+  return { allowed: true, reason: 'OK', policyDigest: digest };
+}
+
 // ── Policy editing (USED ONLY BY THE LOCALHOST ADMIN UI) ─────────────
 //
 // IMPORTANT: validatePolicyInput + savePolicy must NEVER be exposed via any
@@ -361,6 +537,7 @@ const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'maxDailyTxCount',
   'blockedSelectors',
   'requireMemo',
+  'solana',
   'notes',
   'updatedAt',
 ]);
@@ -442,6 +619,42 @@ export function validatePolicyInput(input: unknown): ValidationResult {
   if (o.notes !== undefined && typeof o.notes !== 'string') {
     return { ok: false, error: 'notes must be a string' };
   }
+  const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  if (o.solana !== undefined) {
+    if (o.solana === null || typeof o.solana !== 'object' || Array.isArray(o.solana)) {
+      return { ok: false, error: 'solana must be an object' };
+    }
+    const sol = o.solana as Record<string, unknown>;
+    const SOLANA_FIELDS = new Set(['enabled', 'allowedPrograms', 'blockedPrograms', 'maxTxLamports', 'maxDailySpendLamports', 'maxDailyTxCount', 'requireMemo']);
+    for (const k of Object.keys(sol)) {
+      if (!SOLANA_FIELDS.has(k)) return { ok: false, error: `Unknown solana policy field: ${k}` };
+    }
+    if (typeof sol.enabled !== 'boolean') return { ok: false, error: 'solana.enabled must be true or false' };
+    for (const listField of ['allowedPrograms', 'blockedPrograms'] as const) {
+      const v = sol[listField];
+      if (v !== undefined) {
+        if (!Array.isArray(v)) return { ok: false, error: `solana.${listField} must be an array of base58 program ids` };
+        for (const p of v) {
+          if (typeof p !== 'string' || !BASE58_RE.test(p)) {
+            return { ok: false, error: `solana.${listField} entries must be base58 program ids (32-44 chars), got ${p}` };
+          }
+        }
+      }
+    }
+    for (const lamportField of ['maxTxLamports', 'maxDailySpendLamports'] as const) {
+      const v = sol[lamportField];
+      if (v !== undefined) {
+        if (typeof v !== 'string') return { ok: false, error: `solana.${lamportField} must be a string (to preserve precision)` };
+        try { BigInt(v); } catch { return { ok: false, error: `solana.${lamportField} must be a valid integer string` }; }
+      }
+    }
+    if (sol.maxDailyTxCount !== undefined && (typeof sol.maxDailyTxCount !== 'number' || !Number.isInteger(sol.maxDailyTxCount) || sol.maxDailyTxCount < 0)) {
+      return { ok: false, error: 'solana.maxDailyTxCount must be a non-negative integer' };
+    }
+    if (sol.requireMemo !== undefined && typeof sol.requireMemo !== 'boolean') {
+      return { ok: false, error: 'solana.requireMemo must be true or false' };
+    }
+  }
   // updatedAt: we set this ourselves, so anything from input is overwritten
 
   const policy: AgentPolicy = {
@@ -457,6 +670,7 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     maxDailyTxCount: o.maxDailyTxCount as number | undefined,
     blockedSelectors: o.blockedSelectors as string[] | undefined,
     requireMemo: o.requireMemo as boolean | undefined,
+    solana: o.solana as SolanaPolicy | undefined,
     notes: o.notes as string | undefined,
     updatedAt: new Date().toISOString(),
   };
