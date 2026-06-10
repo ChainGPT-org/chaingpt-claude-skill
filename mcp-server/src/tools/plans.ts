@@ -41,6 +41,62 @@ interface PersistedPlan {
   type?: string;
   notes?: string;
   payload: unknown;
+  /**
+   * Execution journal for scheduled plans, keyed by step id. Lives OUTSIDE
+   * payload so the original plan stays pristine. Written only by
+   * chaingpt_strategy_mark_step — this is what makes scheduled runs
+   * idempotent and crash-safe (a re-run sees the journal and skips).
+   */
+  executions?: Record<string, { ts: string; status: 'done' | 'skipped'; txHash?: string; note?: string }>;
+}
+
+/** A schedulable step inside payload.steps — id + atUnix are the contract. */
+interface PlanStep {
+  id: number | string;
+  atUnix: number;
+  [k: string]: unknown;
+}
+
+// Per-plan in-process mutex: mark_step is a read-modify-write on the plan
+// file, and MCP clients can pipeline tool calls. Without this, two
+// simultaneous ticks could both pass the idempotency check and both execute
+// — the exact failure the journal exists to prevent. (Cross-PROCESS races
+// are out of scope: run one scheduler per plan, as the skill instructs.)
+const planLocks = new Map<string, Promise<void>>();
+async function withPlanLock<T>(planName: string, fn: () => Promise<T>): Promise<T> {
+  const prev = planLocks.get(planName) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((r) => { release = r; });
+  planLocks.set(planName, next);
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release();
+    if (planLocks.get(planName) === next) planLocks.delete(planName);
+  }
+}
+
+function planSteps(plan: PersistedPlan): PlanStep[] | null {
+  const p = plan.payload as Record<string, unknown> | null;
+  const steps = p && Array.isArray((p as any).steps) ? ((p as any).steps as unknown[]) : null;
+  if (!steps) return null;
+  const out: PlanStep[] = [];
+  const seen = new Set<string>();
+  for (const s of steps) {
+    const st = s as Record<string, unknown>;
+    if (st && st.id !== undefined && Number.isFinite(Number(st.atUnix))) {
+      const key = String(st.id);
+      if (seen.has(key)) {
+        // Duplicate ids would journal as ONE step while executing as two.
+        // Fail loudly at read time instead of refusing mysteriously mid-run.
+        throw new Error(`payload.steps contains duplicate id "${key}" — fix the plan before scheduling it.`);
+      }
+      seen.add(key);
+      out.push({ ...(st as object), id: st.id as number | string, atUnix: Number(st.atUnix) });
+    }
+  }
+  return out;
 }
 
 export const planTools: Tool[] = [
@@ -82,6 +138,47 @@ export const planTools: Tool[] = [
         type: { type: 'string', description: 'Optional filter — only return plans of this type.' },
       },
       required: [],
+    },
+  },
+  {
+    name: 'chaingpt_strategy_due_steps',
+    description:
+      'List the steps of a saved plan that are DUE now (atUnix has passed, within the lookahead window) and ' +
+      'not yet executed. The heart of scheduled execution: a cron/scheduled agent calls this each tick, ' +
+      'executes what it returns, then records each with chaingpt_strategy_mark_step — so re-runs and crashes ' +
+      'never double-execute. Plans need payload.steps = [{ id, atUnix, ... }] (chaingpt_strategy_dca_plan ' +
+      'emits this shape). Read-only. 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Saved plan name.' },
+        lookaheadMinutes: {
+          type: 'number',
+          description: 'Also include steps due within the next N minutes (handles scheduler jitter). Default 10.',
+          default: 10,
+        },
+        limit: { type: 'number', description: 'Max due steps to return. Default 20.', default: 20 },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'chaingpt_strategy_mark_step',
+    description:
+      'Record that a plan step was executed (or deliberately skipped) in the plan\'s execution journal. ' +
+      'Call IMMEDIATELY after the action lands, with the tx hash. Idempotent: a step already marked is ' +
+      'refused unless overwrite: true. 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Saved plan name.' },
+        stepId: { description: 'The step id from payload.steps / chaingpt_strategy_due_steps.' },
+        status: { type: 'string', enum: ['done', 'skipped'], description: 'Default done.', default: 'done' },
+        txHash: { type: 'string', description: 'Transaction hash / order id that executed this step.' },
+        note: { type: 'string', description: 'Optional note (e.g. fill price, why skipped).' },
+        overwrite: { type: 'boolean', description: 'Replace an existing journal entry. Default false.', default: false },
+      },
+      required: ['name', 'stepId'],
     },
   },
   {
@@ -228,6 +325,112 @@ export async function handlePlanTool(
         lines.push(`    Updated: ${r.updatedAt}    Created: ${r.createdAt}    Size: ${r.bytes}B`);
       }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    if (name === 'chaingpt_strategy_due_steps') {
+      const planName = String(args.name);
+      const lookaheadMin = Math.max(0, Number(args.lookaheadMinutes ?? 10));
+      const limit = Math.max(1, Math.min(Number(args.limit ?? 20), 100));
+      const path = planPath(planName);
+      let plan: PersistedPlan;
+      try {
+        plan = JSON.parse(await readFile(path, 'utf8')) as PersistedPlan;
+      } catch {
+        return { content: [{ type: 'text', text: `Plan "${planName}" not found or unreadable at ${path}.` }] };
+      }
+      const steps = planSteps(plan);
+      if (!steps || steps.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `Plan "${planName}" has no schedulable steps. Scheduled execution needs ` +
+              `payload.steps = [{ id, atUnix, ... }] — chaingpt_strategy_dca_plan emits this shape ` +
+              `(see its "Scheduled execution" section).`,
+          }],
+        };
+      }
+      const journal = plan.executions ?? {};
+      const nowSec = Math.floor(Date.now() / 1000);
+      const horizon = nowSec + lookaheadMin * 60;
+      const executed = steps.filter((s) => journal[String(s.id)]);
+      const due = steps.filter((s) => !journal[String(s.id)] && s.atUnix <= horizon);
+      const upcoming = steps
+        .filter((s) => !journal[String(s.id)] && s.atUnix > horizon)
+        .sort((a, b) => a.atUnix - b.atUnix);
+
+      const lines: string[] = [];
+      lines.push(`Plan "${planName}" — due steps (lookahead ${lookaheadMin}m)`);
+      lines.push('');
+      lines.push(`Total steps: ${steps.length}   Executed: ${executed.length}   Due now: ${due.length}   Upcoming: ${upcoming.length}`);
+      lines.push('');
+      if (due.length === 0) {
+        lines.push('Nothing due. ✓');
+        if (upcoming.length > 0) {
+          lines.push(`Next step ${upcoming[0].id} at ${new Date(upcoming[0].atUnix * 1000).toISOString()} (in ${Math.round((upcoming[0].atUnix - nowSec) / 60)} min).`);
+        } else if (executed.length === steps.length) {
+          lines.push('Plan is COMPLETE — every step has a journal entry. The schedule driving it can be removed.');
+        }
+      } else {
+        for (const s of due.slice(0, limit)) {
+          const ageMin = Math.round((nowSec - s.atUnix) / 60);
+          const { id: _id, atUnix: _at, ...detail } = s;
+          const when = ageMin >= 0 ? `${ageMin} min overdue` : `due in ${Math.abs(ageMin)} min (within lookahead)`;
+          lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${when})`);
+          lines.push(`    ${JSON.stringify(detail)}`);
+        }
+        if (due.length > limit) lines.push(`(+${due.length - limit} more due — raise limit)`);
+        lines.push('');
+        lines.push('Execute each step (pre-flight + policy gates apply as always), then IMMEDIATELY:');
+        lines.push(`  chaingpt_strategy_mark_step name=${planName} stepId=<id> txHash=<hash>`);
+        lines.push('Steps left unmarked will be returned again next tick (no double-execution risk if you mark; duplicate risk if you forget).');
+      }
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    if (name === 'chaingpt_strategy_mark_step') {
+      const planName = String(args.name);
+      return await withPlanLock(planName, async () => {
+      const stepId = String(args.stepId);
+      const status = (args.status === 'skipped' ? 'skipped' : 'done') as 'done' | 'skipped';
+      const txHash = args.txHash ? String(args.txHash) : undefined;
+      const note = args.note ? String(args.note) : undefined;
+      const overwrite = Boolean(args.overwrite);
+      const path = planPath(planName);
+      let plan: PersistedPlan;
+      try {
+        plan = JSON.parse(await readFile(path, 'utf8')) as PersistedPlan;
+      } catch {
+        return { content: [{ type: 'text', text: `Plan "${planName}" not found or unreadable at ${path}.` }] };
+      }
+      const steps = planSteps(plan) ?? [];
+      if (!steps.some((s) => String(s.id) === stepId)) {
+        return { content: [{ type: 'text', text: `Step "${stepId}" does not exist in plan "${planName}". Known ids: ${steps.map((s) => s.id).join(', ') || '(none)'}` }] };
+      }
+      plan.executions = plan.executions ?? {};
+      const existing = plan.executions[stepId];
+      if (existing && !overwrite) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `⚠ Step ${stepId} is ALREADY marked (${existing.status} at ${existing.ts}${existing.txHash ? `, tx ${existing.txHash}` : ''}). ` +
+              `Refusing to double-record — if this step really executed twice, something upstream double-fired. ` +
+              `Pass overwrite: true only to correct a wrong entry.`,
+          }],
+        };
+      }
+      plan.executions[stepId] = { ts: new Date().toISOString(), status, txHash, note };
+      plan.updatedAt = new Date().toISOString();
+      await writeFile(path, JSON.stringify(plan, null, 2), 'utf8');
+      const remaining = steps.filter((s) => !plan.executions![String(s.id)]).length;
+      return {
+        content: [{
+          type: 'text',
+          text: `✓ Step ${stepId} marked ${status}${txHash ? ` (tx ${txHash})` : ''}. ${remaining} step(s) remaining in "${planName}".${remaining === 0 ? ' Plan COMPLETE.' : ''}`,
+        }],
+      };
+      });
     }
 
     if (name === 'chaingpt_strategy_delete_plan') {

@@ -191,6 +191,29 @@ export async function handleStrategyTool(
         lines.push(`  chaingpt_dex_quote network=${network} ... amountIn=<per-buy-usd-converted-to-quote>`);
         lines.push(`  chaingpt_dex_build_swap_tx ... acknowledgeMainnet=true`);
       }
+
+      // Machine-readable plan for scheduled execution: save it with
+      // chaingpt_strategy_save_plan, then a scheduled agent can drive it
+      // idempotently via chaingpt_strategy_due_steps + _mark_step.
+      const executable = {
+        kind: 'dca',
+        network,
+        outToken,
+        perBuyUsd: Number(perBuyUsd.toFixed(2)),
+        steps: Array.from({ length: intervals }, (_, i) => ({
+          id: i + 1,
+          atUnix: startUnix + i * cadenceHours * 3600,
+          action: 'buy',
+          usd: Number(perBuyUsd.toFixed(2)),
+        })),
+      };
+      lines.push('');
+      lines.push('--- Scheduled execution (optional) ---');
+      lines.push('Save this plan, then run it on a schedule (see the scheduled-autonomy skill):');
+      lines.push(`  chaingpt_strategy_save_plan name=<your-name> type=dca payload=<the JSON below>`);
+      lines.push('Each scheduled tick: chaingpt_strategy_due_steps → execute → chaingpt_strategy_mark_step.');
+      lines.push('');
+      lines.push(JSON.stringify(executable, null, 2));
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
