@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.0] - 2026-06-10
+### Added — Usage insights (local-first) + self-healing CI
+- **Tool-usage counters, local-only by construction** (`lib/usage.ts`): every tool call increments a per-tool count in `~/.chaingpt-mcp/usage.json` (debounced flush, never blocks a call). Stored: tool names, counts, last-used timestamps — never arguments, addresses, amounts, or results. No remote endpoint exists in the code. `CHAINGPT_USAGE=off` disables entirely.
+- **Dashboard → Health: "Tool usage (top 15)"** — which tools actually earn their context cost, with the privacy note inline.
+- **`chaingpt_agent_wallet_status` shows the 24h velocity window** — `0.12/0.3 native spent · 4/20 txs` against the daily caps, so "how much room is left today" never requires reading the ledger by hand. Ledger-unreadable surfaces as the fail-closed warning it is.
+- **Self-healing CI** (`.github/workflows/self-heal.yml`, PR #72): a failed daily smoke dispatches Claude to reproduce, probe the live upstream, patch the parser, run the full gate, and open an evidence-backed PR (PR-only authority; skips until `ANTHROPIC_API_KEY` secret is provisioned).
+
+### Tests
+- New usage suite (counting, debounced flush, privacy-shape assertion on the file, off-switch). Suite 361 → 365.
+
 ## [1.17.0] - 2026-06-10
 ### Added — Scheduled Autonomy: strategies that run while the user sleeps
 The missing connective tissue between the strategy planners, the agent wallet, and Claude Code's scheduled agents. Three independent safety layers: the saved plan + execution journal (what/when, idempotent), the policy gate (per-tx + rolling-24h velocity caps), and the schedule itself (which holds zero spending authority).

@@ -8,9 +8,9 @@
 
 One install gives Claude Code 131 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
-[![npm version](https://img.shields.io/badge/version-1.17.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.18.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-361%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-365%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-131-blueviolet?style=flat-square)](#-mcp-server--131-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
@@ -754,7 +754,7 @@ The orchestrator runs **six layers** — see [`TESTING.md`](TESTING.md) for the 
 |---|---|---|
 | `validate` (structural / frontmatter checks) | 159 | none |
 | `typecheck` (`tsc --noEmit` for both servers) | clean | none |
-| `mcp-test` (vitest — handlers, policy gate, signing, schemas) | **361** | none |
+| `mcp-test` (vitest — handlers, policy gate, signing, schemas) | **365** | none |
 | `mock-test` (vitest — mock‑server endpoints via supertest) | 26 | none |
 | `examples` (`node --check` + `python3 -m ast`) | every file | none |
 | `smoke` (live mainnet APIs) | 39 | yes |
@@ -836,7 +836,7 @@ chaingpt-claude-skill/
 ├── templates/                        # 10 project templates (+ composition guide)
 ├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
-├── mcp-server/                       # MCP server — 131 tools, 361 vitest cases
+├── mcp-server/                       # MCP server — 131 tools, 365 vitest cases
 ├── mock-server/                      # Mock API for zero-credit dev — 26 tests
 ├── scripts/                          # validate.sh + test-all.sh + demo launcher
 └── examples/                         # Working code — JS + Python
@@ -856,7 +856,7 @@ chaingpt-claude-skill/
 - [x] 10 project templates including multi‑product compositions
 - [x] 45+ audited Solidity patterns
 - [x] Mock server for zero‑credit development (26 endpoint tests)
-- [x] **Unified test harness** — `./scripts/test-all.sh` runs six layers. 361 vitest + 26 mock + 159 validate + 39 live‑API cases
+- [x] **Unified test harness** — `./scripts/test-all.sh` runs six layers. 365 vitest + 26 mock + 159 validate + 39 live‑API cases
 - [x] **Daily live‑API smoke CI** — catches upstream drift within 24h, opens a labeled GitHub issue on failure
 - [x] Migration guides (OpenAI, Alchemy, custom)
 - [x] Cost optimization & wallet integration docs
