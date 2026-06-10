@@ -637,9 +637,9 @@ function renderHealth(d) {
   }).join('');
   const dirRows = d.dirs.map(x => \`<div class="row"><div style="flex:1"><code>\${esc(x.path)}</code></div>\${x.exists ? '<span class="tag ok">present</span>' : '<span class="tag miss">missing</span>'}</div>\`).join('');
   const usage = d.usage && d.usage.top && d.usage.top.length
-    ? d.usage.top.slice(0, 15).map(u => \`<div class="row"><div style="flex:1"><code>\${esc(u.tool)}</code></div><span class="subtle" style="margin-right:10px">\${esc((u.lastUsed||'').slice(0,16).replace('T',' '))}</span><span class="tag ok">\${u.count}</span></div>\`).join('')
+    ? d.usage.top.slice(0, 15).map(u => \`<div class="row"><div style="flex:1"><code>\${esc(u.tool)}</code></div><span class="subtle" style="margin-right:10px">\${esc((u.lastUsed||'').slice(0,16).replace('T',' '))}</span><span class="tag ok">\${esc(String(u.count))}</span></div>\`).join('')
     : '<div class="subtle">No tool calls recorded yet (or CHAINGPT_USAGE=off).</div>';
-  const usageNote = d.usage ? \`<p class="subtle" style="margin-top:8px">\${d.usage.total} calls since \${esc((d.usage.since||'').slice(0,10))}. Local-only — stored in ~/.chaingpt-mcp/usage.json, never transmitted. Tool names + counts only.</p>\` : '';
+  const usageNote = d.usage ? \`<p class="subtle" style="margin-top:8px">\${esc(String(d.usage.total))} calls since \${esc((d.usage.since||'').slice(0,10))}. Local-only — stored in ~/.chaingpt-mcp/usage.json, never transmitted. Tool names, counts + last-called timestamps only.</p>\` : '';
   return \`
     <div class="card"><h3>Node runtime</h3><p>\${esc(d.node)}</p></div>
     <div class="card" style="margin-top:12px"><h3>Tool usage (top 15, local-only)</h3>\${usage}\${usageNote}</div>
