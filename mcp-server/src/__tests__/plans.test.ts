@@ -17,11 +17,13 @@ process.env.CHAINGPT_PLAN_DIR = TMP_DIR;
 import { planTools, handlePlanTool } from '../tools/plans.js';
 
 describe('Plan tool definitions', () => {
-  it('exposes 4 plan tools', () => {
+  it('exposes 6 plan tools', () => {
     expect(planTools.map((t) => t.name)).toEqual([
       'chaingpt_strategy_save_plan',
       'chaingpt_strategy_load_plan',
       'chaingpt_strategy_list_plans',
+      'chaingpt_strategy_due_steps',
+      'chaingpt_strategy_mark_step',
       'chaingpt_strategy_delete_plan',
     ]);
   });
@@ -140,5 +142,67 @@ describe('Plan persistence round-trip', () => {
   it('load returns friendly message for unknown plan', async () => {
     const r = await handlePlanTool('chaingpt_strategy_load_plan', { name: 'does-not-exist' });
     expect(r.content[0].text).toContain('not found');
+  });
+
+  describe('scheduled execution (due_steps + mark_step)', () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const payload = {
+      kind: 'dca',
+      network: 'ethereum',
+      outToken: '0xweth',
+      steps: [
+        { id: 1, atUnix: nowSec - 3600, action: 'buy', usd: 100 },  // 1h overdue
+        { id: 2, atUnix: nowSec + 300, action: 'buy', usd: 100 },   // due within 10m lookahead
+        { id: 3, atUnix: nowSec + 86_400, action: 'buy', usd: 100 }, // tomorrow
+      ],
+    };
+
+    it('returns overdue + lookahead steps, not future ones', async () => {
+      await handlePlanTool('chaingpt_strategy_save_plan', { name: 'sched', payload, type: 'dca' });
+      const r = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'sched' });
+      const t = r.content[0].text;
+      expect(t).toContain('Due now: 2');
+      expect(t).toContain('Step 1');
+      expect(t).toContain('Step 2');
+      expect(t).not.toContain('• Step 3');
+      expect(t).toContain('Upcoming: 1');
+    });
+
+    it('journal lifecycle: mark → idempotency refusal → overwrite → skip → completion', async () => {
+      await handlePlanTool('chaingpt_strategy_save_plan', { name: 'sched2', payload, type: 'dca' });
+
+      // mark step 1 → no longer due
+      const m = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 1, txHash: '0xabc' });
+      expect(m.content[0].text).toContain('Step 1 marked done');
+      let r = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'sched2' });
+      expect(r.content[0].text).toContain('Due now: 1');
+      expect(r.content[0].text).not.toContain('• Step 1');
+      expect(r.content[0].text).toContain('Executed: 1');
+
+      // idempotency: double-record refused, original preserved; overwrite allowed
+      const again = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 1, txHash: '0xdef' });
+      expect(again.content[0].text).toContain('ALREADY marked');
+      expect(again.content[0].text).toContain('0xabc');
+      const forced = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 1, txHash: '0xdef', overwrite: true });
+      expect(forced.content[0].text).toContain('Step 1 marked done');
+
+      // unknown step id
+      const unknown = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 99 });
+      expect(unknown.content[0].text).toContain('does not exist');
+
+      // skip is a decision; completing every step reports COMPLETE
+      await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 2, status: 'skipped', note: 'impact 2.3%' });
+      const last = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 3, txHash: '0x333' });
+      expect(last.content[0].text).toContain('Plan COMPLETE');
+      r = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'sched2' });
+      expect(r.content[0].text).toContain('COMPLETE');
+    });
+
+    it('due_steps explains the required shape for non-schedulable plans', async () => {
+      await handlePlanTool('chaingpt_strategy_save_plan', { name: 'freeform', payload: { anything: true } });
+      const r = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'freeform' });
+      expect(r.content[0].text).toContain('no schedulable steps');
+      expect(r.content[0].text).toContain('payload.steps');
+    });
   });
 });

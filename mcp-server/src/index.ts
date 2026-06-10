@@ -56,7 +56,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.16.0' },
+  { name: 'chaingpt', version: '1.17.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -185,7 +185,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
     if (name.startsWith('chaingpt_agent_wallet')) return await handleAgentWalletTool(name, args);
     if (name.startsWith('chaingpt_dashboard')) return await handleDashboardTool(name, args);
-    if (name === 'chaingpt_strategy_save_plan' || name === 'chaingpt_strategy_load_plan' || name === 'chaingpt_strategy_list_plans' || name === 'chaingpt_strategy_delete_plan') return await handlePlanTool(name, args);
+    if (name === 'chaingpt_strategy_save_plan' || name === 'chaingpt_strategy_load_plan' || name === 'chaingpt_strategy_list_plans' || name === 'chaingpt_strategy_delete_plan' || name === 'chaingpt_strategy_due_steps' || name === 'chaingpt_strategy_mark_step') return await handlePlanTool(name, args);
     if (name.startsWith('chaingpt_strategy') || name.startsWith('chaingpt_backtest')) return await handleStrategyTool(name, args);
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);

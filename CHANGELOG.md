@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.17.0] - 2026-06-10
+### Added — Scheduled Autonomy: strategies that run while the user sleeps
+The missing connective tissue between the strategy planners, the agent wallet, and Claude Code's scheduled agents. Three independent safety layers: the saved plan + execution journal (what/when, idempotent), the policy gate (per-tx + rolling-24h velocity caps), and the schedule itself (which holds zero spending authority).
+
+- **2 new MCP tools (129 → 131):**
+  - `chaingpt_strategy_due_steps` — which steps of a saved plan are due now (overdue + configurable lookahead) and not yet executed. The heart of crash-safe scheduled execution: re-runs never double-execute.
+  - `chaingpt_strategy_mark_step` — record execution (or a deliberate skip) in the plan's journal with tx hash. Idempotent: double-recording is refused (a refusal means something double-fired); `overwrite: true` only corrects wrong entries.
+- **Plan journal** — `executions` map persisted alongside (not inside) the payload, so the original plan stays pristine. Local files only, nothing uploaded.
+- **`chaingpt_strategy_dca_plan` now emits a machine-readable payload** (`{ kind, network, outToken, steps: [{id, atUnix, action, usd}] }`) ready for `save_plan` → scheduled execution.
+- **New `scheduled-autonomy` skill** (22 → 23) — the full loop: plan → save → `/schedule` cron → each tick: due steps → fresh quote pre-flight → policy-gated sign → mark. Hard rules (mark immediately, never before send, refusals are final), failure table, agent-wallet vs user-signs modes.
+- **New reference walkthrough** (`reference/scheduled-autonomy.md`, 19 → 20) — zero to a running daily DCA in 10 minutes, including the dry-run journal test, the `dca-base` policy pairing, catch-up cadence design, and recipes beyond DCA (Aave health sentinel, funding monitor, grid rebalance, weekly risk re-check).
+
+### Tests
+- Plans suite 6 → 11 (due/lookahead windowing, journal lifecycle, idempotency refusal, unknown-step rejection, skip + completion reporting, non-schedulable-plan guidance). Suite total 356 → 361.
+
 ## [1.16.0] - 2026-06-10
 ### Added — Trustworthy Autonomy: velocity caps, shipped subagents, mainnet-guard hook
 - **Cumulative-spend velocity caps** — the policy gate's missing dimension. Two new policy fields, `maxDailySpendWei` + `maxDailyTxCount` (rolling 24h window over the activity ledger, computed fresh at sign time via `spendStats()`), enforced inside `checkPolicy` as a single chokepoint. Fail-closed: caps set + ledger unreadable (or stats not provided) → refuse. All 8 dashboard templates and the balanced first-run default now ship with proportional velocity caps. Per-tx caps alone allowed an unbounded series of individually-compliant transactions; this closes the drain vector.
