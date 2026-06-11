@@ -19,6 +19,10 @@
  * session key (the existing encrypted keystore EOA), wrapped as
  * `0x00 ++ permissionId ++ sig` (USE mode).
  *
+ * VERIFIED 2026-06-11 via eth_getCode on Base Sepolia: the pinned SmartSession
+ * (…37DE, 47882 hex), OwnableValidator, ERC20SpendingLimit, and TimeFrame
+ * policies all have code. The alt deployment (…4bDA) also exists.
+ *
  * NOTE on addresses: TWO SmartSession deployments exist in the wild. We pin
  * the v1.0.0 release deployment confirmed on Base Sepolia; `eth_getCode`
  * verification against this codehash happens in the status tool at runtime

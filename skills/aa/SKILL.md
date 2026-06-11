@@ -34,7 +34,7 @@ ERC-4337 session keys live inside the smart-contract wallet's **validator module
 
 Picking one provider here would lock the plugin into that vendor's surface. Instead, this skill ships the **shared primitives** (packing, hashing, bundler-rpc) that every v0.7 SCW needs, and per-provider session-key issuance / use is queued as follow-up PRs:
 
-- `chaingpt_aa_safe_*` — Safe enable-module + session-key enable
+- `chaingpt_aa_session_ (SHIPPED v1.21 — vendor-neutral Smart Sessions supersedes the per-vendor safe/kernel plan; Kernel/Safe7579 agent-side signing still queued) chaingpt_aa_safe_*` — Safe enable-module + session-key enable
 - `chaingpt_aa_kernel_*` — Kernel install-validator + session-key install
 - (etc., one PR per provider)
 

@@ -29,10 +29,11 @@ const BASE_USEROP = {
 
 // ─── Tool surface ──────────────────────────────────────────────────
 describe('aa tool surface', () => {
-  it('exports four tools with the chaingpt_aa_ prefix', () => {
+  it('exports five tools with the chaingpt_aa_ prefix', () => {
     expect(aaTools.map((t) => t.name).sort()).toEqual([
       'chaingpt_aa_estimate_userop',
       'chaingpt_aa_pack_userop',
+      'chaingpt_aa_submit_userop',
       'chaingpt_aa_userop_hash',
       'chaingpt_aa_userop_receipt',
     ]);

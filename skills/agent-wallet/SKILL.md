@@ -146,6 +146,26 @@ Hard facts to relay accurately:
 - **The program allowlist fences which protocols the agent may ENTER (top-level instructions).** Inner CPIs are invisible to it — the lamport caps + tx count are the actual spend fence. SPL-token outflows don't move fee-payer lamports, so they are fenced by the allowlist and tx count, not the lamport cap.
 - The agent must be the **sole signer and fee payer** — co-signing or fee-sponsoring someone else's tx is refused structurally.
 
+## On-chain caps — ERC-4337 session keys (v1.21+)
+
+The endgame: the user's ERC-7579 smart account grants the agent's EOA a SCOPED on-chain session (Smart Sessions module). The caps live in audited contracts and are enforced by the EntryPoint — they survive what nothing local can:
+
+| Threat | Local policy gate | On-chain session caps |
+|---|---|---|
+| Prompt injection | ✅ blocks | ✅ blocks |
+| Policy file tampered/rewritten | ❌ falls | ✅ blocks |
+| Full host compromise (keystore stolen) | ❌ falls | ✅ blocks (bounded by remaining allowance + expiry) |
+
+```text
+chaingpt_aa_session_build_grant chain=base account=<user SCW> tokenCaps=[{token: USDC, cap: "100000000"}] validUntil=<unix>
+  → OWNER signs the userOpHash externally → chaingpt_aa_submit_userop
+chaingpt_aa_session_status                    # chain-authoritative: enabled? remaining?
+chaingpt_agent_wallet_4337_sign_and_send …    # the agent acts; local gates AND chain caps both apply
+chaingpt_aa_session_build_revoke …            # incident response: chain-level kill
+```
+
+Hard facts: `erc4337.enabled` policy opt-in is fail-closed and OFF by default everywhere (this surface acts on a third-party account). Unbounded grants are refused at build time. A bundler rejection of an over-cap op is the product working — never retry around it. v1 supports Biconomy Nexus 1.x accounts.
+
 ## Pre-flight checklist
 
 ```text

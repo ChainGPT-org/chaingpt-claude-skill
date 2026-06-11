@@ -36,6 +36,8 @@ process.stdin.on('end', () => {
     const isAgentSend = /chaingpt_agent_wallet_sign_and_send$/.test(tool);
     // NOTE: the EVM regex does NOT match the solana tool name — both tests are required.
     const isAgentSolanaSend = /chaingpt_agent_wallet_solana_sign_and_send$/.test(tool);
+    const isAgent4337Send = /chaingpt_agent_wallet_4337_sign_and_send$/.test(tool);
+    const isSubmitUserOp = /chaingpt_aa_submit_userop$/.test(tool);
     const hasAck = input && input.acknowledgeMainnet === true;
     const isOrderSigner =
       /chaingpt_(hl_place_order_payload|hl_submit_signed_action|pm_place_order_payload|pm_submit_signed_order|dex_cow_create_order|dex_cow_submit_signed_order)$/.test(
@@ -44,7 +46,13 @@ process.stdin.on('end', () => {
 
     let ask = false;
     let why = '';
-    if (isAgentSolanaSend) {
+    if (isAgent4337Send) {
+      ask = true;
+      why = `Agent session key is about to act through smart account ${input.account || '?'} on ${input.chain || '?'}: target=${input.target || '?'}, value=${input.valueWei || '0'} wei, memo=${input.memo || '(none)'}. Local policy + on-chain session caps both apply; this prompt is the human layer on top.`;
+    } else if (isSubmitUserOp) {
+      ask = true;
+      why = `A SIGNED userOperation is about to be submitted to a bundler (${(input.bundlerUrl || '?').slice(0, 60)}). Confirm the signed payload is the grant/op you intended.`;
+    } else if (isAgentSolanaSend) {
       ask = true;
       why = `Agent wallet is about to SIGN AND BROADCAST a Solana transaction autonomously: memo=${input.memo || '(none)'}, tx=${String(input.txBase64 || '').length} base64 chars. The Solana policy gate (program allowlist + lamport caps) has its own checks; this prompt is the human layer on top.`;
     } else if (isAgentSend) {

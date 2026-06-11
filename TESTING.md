@@ -53,6 +53,18 @@ export CHAINGPT_ACTIVITY_FILE=/tmp/sol-test/activity.jsonl
 
 Mainnet refusal proofs (free, no funds): an unfunded mainnet wallet + any Jupiter tx → simulation fails → refusal (fail-closed proof). An off-allowlist program → deterministic refusal.
 
+## Manual live verification — ERC-4337 session keys (Base Sepolia)
+
+The on-chain-refusal claim ships only after this loop passes (tag gate for v1.21.0):
+
+1. Create + fund a Biconomy Nexus 1.x account on Base Sepolia (Biconomy SDK or dashboard; outside the plugin). Deploy/choose a test ERC-20.
+2. `chaingpt_agent_wallet_init` (if needed) → the agent EOA is the session key.
+3. `chaingpt_aa_session_build_grant chain=<custom base-sepolia> account=<SCW> tokenCaps=[{token,<cap=100 tokens>}] validUntil=<now+24h>` → owner signs the userOpHash → `chaingpt_aa_submit_userop` (Pimlico Base Sepolia v0.7 bundler).
+4. `chaingpt_aa_session_status` → ENABLED.
+5. Agent sends 40 tokens twice (both succeed), third 40 → **chain refuses** (cumulative 120 > 100).
+6. **Headline test:** set local policy `unrestricted: true` + `erc4337.enabled: true`, retry the over-cap transfer → the bundler/EntryPoint STILL refuses. Screenshot for the README.
+7. Expiry + revoke refusals. Freeze the live permissionId as the golden vector in smart_sessions.test.ts.
+
 ## Running individual layers directly
 
 You don't have to use `test-all.sh` — every layer has a native command:

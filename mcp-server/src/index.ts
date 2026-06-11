@@ -43,6 +43,8 @@ import { miniappTools, handleMiniappTool } from './tools/miniapp.js';
 import { erc8004Tools, handleErc8004Tool } from './tools/erc8004.js';
 import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
 import { agentWalletSolanaTools, handleAgentWalletSolanaTool } from './tools/agent_wallet_solana.js';
+import { aaSessionTools, handleAaSessionTool } from './tools/aa_sessions.js';
+import { agentWallet4337Tools, handleAgentWallet4337Tool } from './tools/agent_wallet_4337.js';
 import { recordToolUse } from './lib/usage.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
@@ -58,7 +60,7 @@ if (!API_KEY) {
 }
 
 const server = new Server(
-  { name: 'chaingpt', version: '1.20.0' },
+  { name: 'chaingpt', version: '1.21.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -97,6 +99,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...planTools,
     ...agentWalletTools,
     ...agentWalletSolanaTools,
+    ...agentWallet4337Tools,
+    ...aaSessionTools,
     ...aaTools,
     ...solanaTools,
     ...dashboardTools,
@@ -187,7 +191,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
-    // ORDER: the solana sub-prefix must route before the generic agent-wallet prefix.
+    // ORDER: sub-prefixes must route before the generic agent-wallet prefix.
+    if (name.startsWith('chaingpt_agent_wallet_4337')) return await handleAgentWallet4337Tool(name, args);
     if (name.startsWith('chaingpt_agent_wallet_solana')) return await handleAgentWalletSolanaTool(name, args);
     if (name.startsWith('chaingpt_agent_wallet')) return await handleAgentWalletTool(name, args);
     if (name.startsWith('chaingpt_dashboard')) return await handleDashboardTool(name, args);
@@ -196,6 +201,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_bridge')) return await handleBridgeTool(name, args);
     if (name.startsWith('chaingpt_drift')) return await handleDriftTool(name, args);
     if (name.startsWith('chaingpt_portfolio')) return await handlePortfolioTool(name, args);
+    if (name.startsWith('chaingpt_aa_session')) return await handleAaSessionTool(name, args);
     if (name.startsWith('chaingpt_aa_')) return await handleAaTool(name, args);
     if (name.startsWith('chaingpt_solana')) return await handleSolanaTool(name, args);
     if (name.startsWith('chaingpt_')) return await handleUtilTool(name, args);
