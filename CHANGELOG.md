@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.21.0] - 2026-06-11
+### Added — ERC-4337 session keys: caps enforced BY THE CHAIN
+The trust-story endgame. The user's ERC-7579 smart account grants the agent's existing EOA a scoped on-chain session via the audited Smart Sessions module (ChainLight/Ackee/Cantina-reviewed, vendor-neutral across Nexus/Kernel/Safe7579): cumulative per-token spend caps, mandatory expiry, optional usage caps — validated by the EntryPoint on every operation. Even a fully compromised host (policy file rewritten, `unrestricted: true`) cannot exceed what the chain granted. Zero new dependencies: deterministic module addresses + viem encoders only.
+
+- **5 new MCP tools (135 → 140):**
+  - `chaingpt_aa_session_build_grant` / `_build_revoke` — UNSIGNED grant/revoke payloads; the account OWNER signs externally (never the agent key); unbounded grants are refused by construction. Revoke = chain-level kill.
+  - `chaingpt_aa_session_status` — authoritative on-chain state: account kind, module installed, permission enabled, granted caps.
+  - `chaingpt_aa_submit_userop` — eth_sendUserOperation, custody-free (refuses empty signatures); completes the owner-signs loop.
+  - `chaingpt_agent_wallet_4337_sign_and_send` — the agent acts through the smart account: local gates first (`erc4337` who/where sub-policy + the standard per-tx/velocity checks on the inner call), then the agent signs with its keystore EOA in the Smart Sessions USE envelope, and the CHAIN enforces the granted caps at validation. Bundler-side cap rejections render as the chain-side refusal they are — never retried around.
+- **`erc4337` policy sub-policy** — fail-closed, type-strict, OFF even in the balanced default (this surface acts on a third-party account): smart-account allowlist + https-only bundler-host allowlist.
+- v1 account support: Biconomy Nexus 1.x (Kernel v3 / Safe7579 follow — the module layer is already shared). PreToolUse guard asks on both new signing/submitting tools.
+
+### Pending before tagging
+- The live Base Sepolia loop (TESTING.md recipe): grant → agent spends inside cap → chain refuses the over-cap op even with local policy set to unrestricted. The on-chain-refusal proof is the release claim; the tag waits for it.
+
+### Tests
+- Suite 399 → 428 (+19 lib/gate from PR A, +10 tool surface/custody-invariant/offline-refusal incl. zero-network assertions on every pre-RPC gate).
+
 ## [1.20.0] - 2026-06-10
 ### Added — x402 in one tool + the pay-per-call spec
 - **`chaingpt_x402_fetch` (134 → 135)** — the whole agent-pays loop, custody-free: fetch an x402-protected URL; 2xx returns the body; 402 decodes the PaymentRequirements and (given `from`) emits the UNSIGNED EIP-3009 typed data; after external signing, re-call with `xPaymentHeader` to complete the paid request. Prefers exact-scheme challenges on known networks, handles malformed 402 bodies gracefully, https-only.

@@ -146,6 +146,28 @@ export const aaTools: Tool[] = [
       required: ['bundlerUrl', 'userOpHash'],
     },
   },
+  {
+    name: 'chaingpt_aa_submit_userop',
+    description:
+      'Submit a SIGNED userOperation to a bundler (eth_sendUserOperation). Custody-free: refuses when ' +
+      'the signature field is empty — sign the userOpHash externally first (owner wallet for grants; ' +
+      'the agent session key signs only inside chaingpt_agent_wallet_4337_sign_and_send). Returns the ' +
+      'userOpHash; track inclusion via chaingpt_aa_userop_receipt. 0 ChainGPT credits.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bundlerUrl: { type: 'string', description: 'Full bundler RPC URL (https).' },
+        userOp: {
+          type: 'object',
+          description: 'The COMPLETE v0.7 userOperation including a non-empty signature.',
+          properties: USEROP_PROPS,
+          required: ['sender', 'nonce', 'callData', 'callGasLimit', 'verificationGasLimit', 'preVerificationGas', 'maxFeePerGas', 'maxPriorityFeePerGas', 'signature'],
+        },
+        entryPoint: { type: 'string', description: 'Defaults to the canonical v0.7 EntryPoint.' },
+      },
+      required: ['bundlerUrl', 'userOp'],
+    },
+  },
 ];
 
 function chainIdFor(slug: string): number {
@@ -231,6 +253,31 @@ async function handleEstimateUserOp(args: any): Promise<string> {
   ].join('\n');
 }
 
+async function handleSubmitUserOp(args: any): Promise<string> {
+  const userOp = normalizeUserOp(args.userOp as UserOpInput);
+  if (!userOp.signature || userOp.signature === '0x') {
+    throw new Error(
+      'Refused: userOp.signature is empty. This tool is custody-free — compute the hash with ' +
+      'chaingpt_aa_userop_hash, sign it EXTERNALLY (owner wallet / hardware wallet), then resubmit ' +
+      'with the signature filled in.'
+    );
+  }
+  const entryPoint = args.entryPoint ?? ENTRY_POINT_V07;
+  const result = await bundlerRpc<string>({
+    url: String(args.bundlerUrl),
+    method: 'eth_sendUserOperation',
+    params: [userOpToBundlerJson(userOp), entryPoint],
+  });
+  return [
+    `=== userOp submitted ===`,
+    ``,
+    `userOpHash:  ${result}`,
+    `EntryPoint:  ${entryPoint}`,
+    ``,
+    `Track inclusion: chaingpt_aa_userop_receipt bundlerUrl=<same> userOpHash=${result}`,
+  ].join('\n');
+}
+
 async function handleUserOpReceipt(args: any): Promise<string> {
   if (typeof args.bundlerUrl !== 'string' || !args.bundlerUrl.startsWith('http')) {
     throw new Error('bundlerUrl required (https://… your bundler RPC)');
@@ -266,6 +313,7 @@ export async function handleAaTool(name: string, args: any): Promise<{ content: 
     else if (name === 'chaingpt_aa_pack_userop') text = await handleUserOpPack(args);
     else if (name === 'chaingpt_aa_estimate_userop') text = await handleEstimateUserOp(args);
     else if (name === 'chaingpt_aa_userop_receipt') text = await handleUserOpReceipt(args);
+    else if (name === 'chaingpt_aa_submit_userop') text = await handleSubmitUserOp(args);
     else throw new Error(`Unknown AA tool: ${name}`);
   } catch (err: any) {
     text = `Error in ${name}: ${err.message}`;
