@@ -1,8 +1,8 @@
 # Changelog
 
 ## [1.21.0] - 2026-06-11
-### Added — ERC-4337 session keys: caps enforced BY THE CHAIN
-The trust-story endgame. The user's ERC-7579 smart account grants the agent's existing EOA a scoped on-chain session via the audited Smart Sessions module (ChainLight/Ackee/Cantina-reviewed, vendor-neutral across Nexus/Kernel/Safe7579): cumulative per-token spend caps, mandatory expiry, optional usage caps — validated by the EntryPoint on every operation. Even a fully compromised host (policy file rewritten, `unrestricted: true`) cannot exceed what the chain granted. Zero new dependencies: deterministic module addresses + viem encoders only.
+### Added — ERC-4337 session keys: caps designed to be enforced on-chain (beta)
+The trust-story endgame. The user's ERC-7579 smart account grants the agent's existing EOA a scoped on-chain session via the audited Smart Sessions module (ChainLight/Ackee/Cantina-reviewed, vendor-neutral across Nexus/Kernel/Safe7579): cumulative per-token spend caps, mandatory expiry, optional usage caps — validated by the EntryPoint on every operation. The intent: even a fully compromised host (policy file rewritten, `unrestricted: true`) should not be able to exceed what the chain granted. **This on-chain layer is BETA: the module addresses are verified deployed on Base Sepolia, and the full grant → over-cap-refusal loop will be published before we claim it unconditionally. Until then, rely on the local policy gate (tested) as your primary fence.** Zero new dependencies: deterministic module addresses + viem encoders only.
 
 - **5 new MCP tools (135 → 140):**
   - `chaingpt_aa_session_build_grant` / `_build_revoke` — UNSIGNED grant/revoke payloads; the account OWNER signs externally (never the agent key); unbounded grants are refused by construction. Revoke = chain-level kill.
@@ -12,8 +12,9 @@ The trust-story endgame. The user's ERC-7579 smart account grants the agent's ex
 - **`erc4337` policy sub-policy** — fail-closed, type-strict, OFF even in the balanced default (this surface acts on a third-party account): smart-account allowlist + https-only bundler-host allowlist.
 - v1 account support: Biconomy Nexus 1.x (Kernel v3 / Safe7579 follow — the module layer is already shared). PreToolUse guard asks on both new signing/submitting tools.
 
-### Pending before tagging
-- The live Base Sepolia loop (TESTING.md recipe): grant → agent spends inside cap → chain refuses the over-cap op even with local policy set to unrestricted. The on-chain-refusal proof is the release claim; the tag waits for it.
+### Verification status (be precise on what's proven)
+- **Proven + tested:** the local policy gate — per-tx caps, rolling-24h velocity caps, allowlists, kill switch, custody-free unsigned-tx flow — across 428 vitest cases incl. adversarial refusals.
+- **Beta / pending live proof:** the ON-CHAIN session-cap layer. Smart Sessions module addresses verified deployed on Base Sepolia via eth_getCode; the encoders/readers are unit-tested; the end-to-end grant → over-cap-refusal loop (TESTING.md recipe) is not yet published. We will not market "the chain refuses it even on a hacked host" as a settled fact until that loop is recorded.
 
 ### Tests
 - Suite 399 → 428 (+19 lib/gate from PR A, +10 tool surface/custody-invariant/offline-refusal incl. zero-network assertions on every pre-RPC gate).
