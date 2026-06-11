@@ -20,7 +20,7 @@ import {
   classifyAccountId,
 } from '../lib/erc7579.js';
 import { readKeystoreFile } from '../lib/agent-keystore.js';
-import { resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { resolveChainWithCustom, rpcEndpointsWithCustom } from '../lib/agent-custom-chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 
 /**
@@ -38,9 +38,9 @@ import { jsonRpcFallback } from '../lib/http.js';
  */
 
 function chainRpcs(slug: string): { chainId: number; rpcs: string[] } {
-  const c = resolveChain(slug);
+  const c = resolveChainWithCustom(slug);
   if (!c?.chainId) throw new Error(`chain "${slug}" is not a known EVM chain.`);
-  const rpcs = rpcEndpoints(slug);
+  const rpcs = rpcEndpointsWithCustom(slug);
   if (!rpcs.length) throw new Error(`no RPC endpoints configured for ${slug}.`);
   return { chainId: c.chainId, rpcs };
 }
