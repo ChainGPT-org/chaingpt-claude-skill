@@ -12,6 +12,7 @@ import {
   freshNonce,
   type PaymentPayload,
   type PaymentRequirements,
+  X402_NETWORK_CHAINID,
 } from '../lib/x402.js';
 import { isAddress, type Hex } from 'viem';
 
@@ -74,6 +75,27 @@ export const x402Tools: Tool[] = [
         paymentRequirements: { type: 'object', description: 'The PaymentRequirements the payload is being checked against (for verify/settle).' },
       },
       required: ['action', 'facilitatorUrl'],
+    },
+  },
+  {
+    name: 'chaingpt_x402_fetch',
+    description:
+      'Fetch an x402-protected (HTTP 402) resource, custody-free. 2xx → returns the body. 402 → decodes ' +
+      'the PaymentRequirements and (when `from` is given) builds the UNSIGNED EIP-3009 typed data the ' +
+      'user signs in their own wallet; then re-call with xPaymentHeader (from chaingpt_x402_build_payment ' +
+      'with the signature) to complete the paid request. The full agent-pays loop in one tool. ' +
+      '0 ChainGPT credits (the payment itself is whatever the resource charges).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'The x402-protected URL.' },
+        method: { type: 'string', enum: ['GET', 'POST'], description: 'Default GET.', default: 'GET' },
+        body: { type: 'string', description: 'Request body for POST (sent as application/json).' },
+        from: { type: 'string', description: "Payer address (0x…). Enables building the unsigned typed data on a 402." },
+        xPaymentHeader: { type: 'string', description: 'Base64 X-PAYMENT header from chaingpt_x402_build_payment (after signing) — completes the paid request.' },
+        maxBodyChars: { type: 'number', description: 'Truncate the response body in the output. Default 4000.', default: 4000 },
+      },
+      required: ['url'],
     },
   },
   {
@@ -154,6 +176,75 @@ async function handleDecode(args: any): Promise<string> {
     ``,
     `Next: chaingpt_x402_build_payment with the chosen requirements + your payer address.`,
   ].join('\n');
+}
+
+async function handleX402Fetch(args: any): Promise<string> {
+  const url = String(args.url ?? '');
+  if (!/^https:\/\//.test(url)) throw new Error('url must be https://');
+  const method = String(args.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET';
+  const maxBodyChars = Math.max(200, Number(args.maxBodyChars ?? 4000));
+
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (args.body !== undefined) headers['content-type'] = 'application/json';
+  if (args.xPaymentHeader) headers['X-PAYMENT'] = String(args.xPaymentHeader);
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: args.body !== undefined ? String(args.body) : undefined,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const bodyText = await res.text();
+
+  if (res.status !== 402) {
+    const paid = args.xPaymentHeader ? ' (paid via X-PAYMENT)' : '';
+    return [
+      `HTTP ${res.status}${paid} — ${url}`,
+      '',
+      bodyText.slice(0, maxBodyChars) + (bodyText.length > maxBodyChars ? `\n… (${bodyText.length - maxBodyChars} more chars truncated)` : ''),
+    ].join('\n');
+  }
+
+  // 402 — decode the challenge
+  let challenge: { x402Version?: number; accepts?: PaymentRequirements[]; error?: string };
+  try {
+    challenge = JSON.parse(bodyText);
+  } catch {
+    return `HTTP 402 from ${url}, but the body is not valid x402 JSON:\n${bodyText.slice(0, 800)}`;
+  }
+  const accepts = Array.isArray(challenge.accepts) ? challenge.accepts : [];
+  if (accepts.length === 0) {
+    return `HTTP 402 from ${url} with no \`accepts\` entries — the server's x402 challenge is malformed.`;
+  }
+  // Prefer an exact-scheme entry on a network we know how to price.
+  const req = accepts.find((r) => r.scheme === 'exact' && X402_NETWORK_CHAINID[r.network] !== undefined) ?? accepts[0];
+
+  const lines: string[] = [];
+  lines.push(`HTTP 402 Payment Required — ${url}`);
+  lines.push('');
+  lines.push(`Scheme:    ${req.scheme}    Network: ${req.network}`);
+  lines.push(`Price:     ${req.maxAmountRequired} atomic units of ${req.asset}`);
+  lines.push(`Pay to:    ${req.payTo}`);
+  lines.push(`Valid for: ${req.maxTimeoutSeconds ?? 600}s`);
+  lines.push('');
+
+  if (!args.from) {
+    lines.push('Pass `from` (the payer wallet address) to get the UNSIGNED EIP-3009 typed data to sign.');
+    lines.push('Flow: this tool (with from) → sign typed data in your wallet → chaingpt_x402_build_payment');
+    lines.push('(same requirements + signature) → re-call this tool with xPaymentHeader=<the header>.');
+    lines.push('');
+    lines.push('--- Raw PaymentRequirements ---');
+    lines.push(JSON.stringify(req, null, 2));
+    return lines.join('\n');
+  }
+
+  // Build the unsigned payment for this exact challenge (custody-free — user signs).
+  const built = await handleBuildPayment({ from: String(args.from), requirements: req });
+  lines.push(built);
+  lines.push('');
+  lines.push(`After signing: chaingpt_x402_build_payment from=${args.from} requirements=<above> signature=<sig>`);
+  lines.push(`→ then re-call chaingpt_x402_fetch url=${url} xPaymentHeader=<X-PAYMENT value> to complete the paid request.`);
+  return lines.join('\n');
 }
 
 async function handleBuildPayment(args: any): Promise<string> {
@@ -294,7 +385,8 @@ export async function handleX402Tool(name: string, args: any): Promise<{ content
     if (name === 'chaingpt_x402_decode') text = await handleDecode(a);
     else if (name === 'chaingpt_x402_build_payment') text = await handleBuildPayment(a);
     else if (name === 'chaingpt_x402_facilitator') text = await handleFacilitator(a);
-    else if (name === 'chaingpt_x402_create_requirements') text = await handleCreateRequirements(a);
+    else if (name === 'chaingpt_x402_fetch') text = await handleX402Fetch(a);
+  else if (name === 'chaingpt_x402_create_requirements') text = await handleCreateRequirements(a);
     else throw new Error(`Unknown x402 tool: ${name}`);
   } catch (e: any) {
     text = `Error in ${name}: ${e?.message ?? e}`;

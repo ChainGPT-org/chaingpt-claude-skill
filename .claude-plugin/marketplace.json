@@ -4,13 +4,13 @@
     "name": "ChainGPT-org",
     "url": "https://github.com/ChainGPT-org"
   },
-  "description": "ChainGPT Developer Kit for Claude Code — 134 MCP tools (ChainGPT AI + EVM/Solana DEX + DeFi + Solana lending + perps + prediction markets + cross-chain + agent wallet), 23 sub-skills, 10 templates, 45+ Solidity patterns. Custody-free.",
+  "description": "ChainGPT Developer Kit for Claude Code — 135 MCP tools (ChainGPT AI + EVM/Solana DEX + DeFi + Solana lending + perps + prediction markets + cross-chain + agent wallet), 23 sub-skills, 10 templates, 45+ Solidity patterns. Custody-free.",
   "plugins": [
     {
       "name": "chaingpt",
       "source": "./",
       "description": "Turn Claude Code into a Web3 engineering co-pilot. Custody-free signing, mainnet safety gates, agent wallet with admin policy.",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "homepage": "https://github.com/ChainGPT-org/chaingpt-claude-skill",
       "keywords": ["web3", "blockchain", "ai", "defi", "nft", "solidity", "mcp", "agent-wallet"]
     }

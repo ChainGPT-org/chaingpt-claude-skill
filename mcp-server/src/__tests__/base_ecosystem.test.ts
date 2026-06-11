@@ -11,12 +11,13 @@ import { normalizeBasename } from '../lib/basenames.js';
 // resolution) are verified separately against Base mainnet, not here.
 
 describe('x402 — tool surface + EIP-712 builder', () => {
-  it('exposes the four x402 tools', () => {
+  it('exposes the five x402 tools', () => {
     expect(x402Tools.map((t) => t.name).sort()).toEqual([
       'chaingpt_x402_build_payment',
       'chaingpt_x402_create_requirements',
       'chaingpt_x402_decode',
       'chaingpt_x402_facilitator',
+      'chaingpt_x402_fetch',
     ]);
   });
 

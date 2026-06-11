@@ -23,14 +23,18 @@ the header; it never holds a key.
 | `chaingpt_x402_build_payment` | Build the UNSIGNED EIP-3009 typed data; pass a signature back to get the final `X-PAYMENT` header. |
 | `chaingpt_x402_facilitator` | Call a facilitator: `supported` / `verify` / `settle`. |
 | `chaingpt_x402_create_requirements` | Server side: generate the `PaymentRequirements` + 402 body to monetize your endpoint. |
+| `chaingpt_x402_fetch` | The whole client loop in one tool: fetch a URL; on 402 it decodes the challenge and (given `from`) emits the unsigned typed data; re-call with `xPaymentHeader` to complete the paid request. |
 
 ## Pay an endpoint (client flow)
 
-1. Hit the resource → get a `402` with a JSON body. `chaingpt_x402_decode body=<402 json>`.
-2. `chaingpt_x402_build_payment from=<payer> requirements=<chosen option>` → typed data.
-3. Sign it (payer wallet or the agent wallet's EIP-712 path).
-4. `chaingpt_x402_build_payment …same args… signature=0x…` → the `X-PAYMENT` header.
-5. Retry the request with that header.
+Fast path — one tool drives the loop:
+
+1. `chaingpt_x402_fetch url=<resource> from=<payer>` → on 402 you get the decoded price/payee AND the unsigned EIP-3009 typed data.
+2. Sign the typed data in the payer's wallet.
+3. `chaingpt_x402_build_payment from=<payer> requirements=<from step 1> signature=0x…` → the `X-PAYMENT` header.
+4. `chaingpt_x402_fetch url=<resource> xPaymentHeader=<header>` → the paid response.
+
+Manual path (same primitives, finer control): `_decode` → `_build_payment` → sign → `_build_payment +signature` → retry yourself.
 
 ## Monetize your endpoint (server flow)
 
