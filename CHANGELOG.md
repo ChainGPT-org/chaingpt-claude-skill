@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.20.0] - 2026-06-10
+### Added — x402 in one tool + the pay-per-call spec
+- **`chaingpt_x402_fetch` (134 → 135)** — the whole agent-pays loop, custody-free: fetch an x402-protected URL; 2xx returns the body; 402 decodes the PaymentRequirements and (given `from`) emits the UNSIGNED EIP-3009 typed data; after external signing, re-call with `xPaymentHeader` to complete the paid request. Prefers exact-scheme challenges on known networks, handles malformed 402 bodies gracefully, https-only.
+- **Pay-per-call spec for api.chaingpt.org** (`.plans/x402-pay-per-call-spec.md`): 402 challenge shape, credit-mirroring pricing map, verify-then-settle-async with a replay cache, failure semantics, phased rollout. The goal: agents pay $0.01 USDC per call with zero signup — the first major AI API agents can pay autonomously. Agent-wallet AUTO-pay deliberately deferred to a policy extension (USDC caps are a new dimension; same fail-closed discipline required).
+- skills/x402 teaches the one-tool fast path.
+
+### Tests
+- Suite 393 → 399 (fetch orchestrator: 2xx, https-only, challenge decode, typed-data build, paid retry header, malformed 402).
+
 ## [1.19.0] - 2026-06-10
 ### Added — Solana signing parity: the policy fence crosses chains
 The agent wallet's bounded autonomy, extended to Solana. Any unsigned `VersionedTransaction` from the existing builders (Jupiter swaps, Marginfi/Kamino deposits/withdrawals, SOL transfers) can now execute autonomously inside hard caps.
