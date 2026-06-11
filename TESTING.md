@@ -33,6 +33,26 @@ Exit code `0` = every requested layer passed. `1` = at least one layer failed.
 | **boot** | Spawns the built `mcp-server/dist/index.js`, completes the MCP `initialize` handshake, sends a `tools/list` JSON-RPC request over stdio, asserts ≥ 95 unique `chaingpt_*`-prefixed tools with valid `name`/`description`/`inputSchema`. Catches missing-export and double-registration regressions invisible to vitest. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
 | **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~30s | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
+## Manual live verification — Solana agent wallet (devnet, ~5 min, free)
+
+The autonomous Solana send path can't run in CI (it moves coins). Verify it on devnet:
+
+```bash
+export SOLANA_RPC_URL=https://api.devnet.solana.com
+export CHAINGPT_SOLANA_KEYSTORE_FILE=/tmp/sol-test/keystore.json
+export CHAINGPT_AGENT_POLICY_FILE=/tmp/sol-test/policy.json
+export CHAINGPT_ACTIVITY_FILE=/tmp/sol-test/activity.jsonl
+```
+
+1. `chaingpt_agent_wallet_solana_init` → note the address.
+2. Airdrop 1 devnet SOL: `solana airdrop 1 <address> -u devnet` (or a web faucet).
+3. Policy: `{"version":1,"killSwitch":false,"solana":{"enabled":true,"allowedPrograms":["11111111111111111111111111111111"],"maxTxLamports":"10000000","requireMemo":true}}`
+4. `chaingpt_solana_build_transfer_tx` — 0.001 SOL to the agent's own address, network=devnet.
+5. `chaingpt_agent_wallet_solana_sign_and_send txBase64=<…> memo=devnet-e2e network=devnet`
+6. Assert: confirmed signature on solscan (?cluster=devnet), `activity.jsonl` gained a `chain:"solana"` entry, and `chaingpt_agent_wallet_status` shows the Solana 24h window.
+
+Mainnet refusal proofs (free, no funds): an unfunded mainnet wallet + any Jupiter tx → simulation fails → refusal (fail-closed proof). An off-allowlist program → deterministic refusal.
+
 ## Running individual layers directly
 
 You don't have to use `test-all.sh` — every layer has a native command:

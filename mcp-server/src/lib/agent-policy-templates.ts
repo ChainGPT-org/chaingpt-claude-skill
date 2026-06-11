@@ -63,6 +63,23 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       maxDailyTxCount: 20,
       blockedSelectors: [],
       requireMemo: true,
+      solana: {
+        enabled: true,
+        allowedPrograms: [
+          '11111111111111111111111111111111',
+          'ComputeBudget111111111111111111111111111111',
+          'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+          'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+          'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+          'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+          'MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA',
+          'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD',
+        ],
+        maxTxLamports: '100000000',
+        maxDailySpendLamports: '300000000',
+        maxDailyTxCount: 20,
+        requireMemo: true,
+      },
       notes: 'Balanced DeFi starter. The agent can swap on OpenOcean/1inch, lend on Aave V3, and stake on Lido up to 0.1 native per tx. Widen the value cap or add routers as you build trust. Engage the kill switch any time to halt.',
       updatedAt: isoNow(),
     },
@@ -84,6 +101,7 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       maxDailyTxCount: 0,
       blockedSelectors: [],
       requireMemo: true,
+      solana: { enabled: false },
       notes: 'Locked-down. No signing happens until you swap to another template or relax this manually. Apply instantly if something looks wrong.',
       updatedAt: isoNow(),
     },
@@ -209,6 +227,7 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       maxTxGas: '0',
       blockedSelectors: [],
       requireMemo: false,
+      solana: { enabled: true },
       notes:
         '⚠ UNRESTRICTED MODE ACTIVE. The agent can send funds to any address on any allowed chain with no per-tx checks. ' +
         'The kill switch (top banner) still works as a one-click panic button. ' +
@@ -246,6 +265,24 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
       maxDailyTxCount: 25,
       blockedSelectors: [SEL_TRANSFER_FROM], // example: block raw transferFrom
       requireMemo: true,
+      solana: {
+        enabled: false, // reference template stays safe — flip to arm
+        allowedPrograms: [
+          '11111111111111111111111111111111',
+          'ComputeBudget111111111111111111111111111111',
+          'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+          'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+          'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+          'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+          'MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA',
+          'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD',
+        ],
+        maxTxLamports: '100000000',
+        maxDailySpendLamports: '300000000',
+        maxDailyTxCount: 20,
+        requireMemo: true,
+      },
+
       notes: 'Reference template showing every policy field. killSwitch is ON for safety. Toggle it off + tune the rules to match your strategy. See the policy editor below for inline help on each field.',
       updatedAt: isoNow(),
     },

@@ -64,6 +64,34 @@ describe('spendStats', () => {
     expect(s.totalWei).toBe(42n);
   });
 
+  it('chain-class filter: wei and lamports never sum together', () => {
+    writeFileSync(
+      process.env.CHAINGPT_ACTIVITY_FILE!,
+      [
+        entry(-60_000, '1000'),
+        entry(-120_000, '500'),
+        JSON.stringify({ ts: new Date(Date.now() - 60_000).toISOString(), chain: 'solana', chainId: 0, from: 'agentSol', to: 'JUP6', valueWei: '7000', hash: 'sig1', policyDigest: 'd' }),
+        JSON.stringify({ ts: new Date(Date.now() - 90_000).toISOString(), chain: 'solana', chainId: 0, from: 'agentSol', to: '1111', valueWei: '3000', hash: 'sig2', policyDigest: 'd' }),
+      ].join('\n') + '\n'
+    );
+    const evm = spendStats(24, 'evm');
+    expect(evm.totalWei).toBe(1500n);
+    expect(evm.txCount).toBe(2);
+    const sol = spendStats(24, 'solana');
+    expect(sol.totalWei).toBe(10000n);
+    expect(sol.txCount).toBe(2);
+    const all = spendStats(24);
+    expect(all.txCount).toBe(4); // default unchanged: everything
+  });
+
+  it("evm-only ledger: spendStats(24,'evm') is identical to the unfiltered default", () => {
+    writeFileSync(
+      process.env.CHAINGPT_ACTIVITY_FILE!,
+      [entry(-60_000, '1000'), entry(-120_000, '500')].join('\n') + '\n'
+    );
+    expect(spendStats(24, 'evm')).toEqual(spendStats(24));
+  });
+
   it('round-trips through logActivity', () => {
     logActivity({
       ts: new Date().toISOString(),

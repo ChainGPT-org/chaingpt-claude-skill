@@ -57,6 +57,87 @@ function deriveKey(pass: string, salt: Buffer): Buffer {
   return scryptSync(pass, salt, KEY_LEN, { N: SCRYPT_N });
 }
 
+// ── Shared cipher core ───────────────────────────────────────────────
+// Used by BOTH keystores (EVM secp256k1 here, Ed25519 in
+// agent-keystore-solana.ts) so the AES-256-GCM + scrypt implementation
+// exists exactly once and cannot drift between chains.
+
+export interface EncryptedSecret {
+  ciphertext: string; // base64
+  iv: string;         // base64
+  salt: string;       // base64
+  authTag: string;    // base64
+  kdf: 'scrypt';
+  kdfN: number;
+  cipher: 'aes-256-gcm';
+}
+
+export function encryptSecret(plain: Buffer, pass: string): EncryptedSecret {
+  const salt = randomBytes(SALT_LEN);
+  const iv = randomBytes(IV_LEN);
+  const key = deriveKey(pass, salt);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    ciphertext: ciphertext.toString('base64'),
+    iv: iv.toString('base64'),
+    salt: salt.toString('base64'),
+    authTag: authTag.toString('base64'),
+    kdf: 'scrypt',
+    kdfN: SCRYPT_N,
+    cipher: 'aes-256-gcm',
+  };
+}
+
+export function decryptSecret(
+  f: { ciphertext: string; iv: string; salt: string; authTag: string },
+  pass: string
+): Buffer {
+  const salt = Buffer.from(f.salt, 'base64');
+  const iv = Buffer.from(f.iv, 'base64');
+  const authTag = Buffer.from(f.authTag, 'base64');
+  const ciphertext = Buffer.from(f.ciphertext, 'base64');
+  const key = deriveKey(pass, salt);
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  try {
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch {
+    throw new Error('Keystore decrypt failed — wrong passphrase or tampered ciphertext.');
+  }
+}
+
+/**
+ * Resolve the keystore passphrase exactly as init does: env var → existing
+ * keychain entry → auto-provision into the keychain. Throws with setup
+ * guidance when no source is available. Shared by both keystore inits so
+ * one admin secret covers both chains.
+ */
+export function resolveOrProvisionPassphrase(): { pass: string; source: SecretSource } {
+  const resolved = resolvePassphrase();
+  let source: SecretSource = resolved.source;
+  let pass = resolved.value;
+  if (!pass) {
+    const backend = detectKeychainBackend();
+    if (backend) {
+      const provisioned = provisionKeychainPassphrase();
+      pass = provisioned.value;
+      source = 'keychain';
+    } else {
+      throw new Error(
+        'No keystore passphrase available. Either set CHAINGPT_AGENT_WALLET_PASSPHRASE ' +
+        '(min 16 chars) in your shell BEFORE starting the MCP server, or run on a host with ' +
+        'an OS keychain (macOS Keychain / Linux libsecret) so one can be auto-generated.'
+      );
+    }
+  }
+  if (pass.length < MIN_PASS_LEN) {
+    throw new Error(`Passphrase must be at least ${MIN_PASS_LEN} characters.`);
+  }
+  return { pass, source };
+}
+
 export interface KeystoreFile {
   version: 1;
   address: `0x${string}`;
@@ -98,50 +179,18 @@ export function initKeystore(): { address: `0x${string}`; path: string; passphra
   }
   // Resolve the passphrase. Priority: env var → existing keychain entry →
   // auto-generate into the keychain (if a backend is available).
-  let resolved = resolvePassphrase();
-  let source: SecretSource = resolved.source;
-  let pass = resolved.value;
-  if (!pass) {
-    const backend = detectKeychainBackend();
-    if (backend) {
-      // No env var, no existing keychain entry, but a keychain is available:
-      // generate a strong random passphrase and store it. Zero-setup UX.
-      const provisioned = provisionKeychainPassphrase();
-      pass = provisioned.value;
-      source = 'keychain';
-    } else {
-      throw new Error(
-        'No keystore passphrase available. Either set CHAINGPT_AGENT_WALLET_PASSPHRASE ' +
-        '(min 16 chars) in your shell BEFORE starting the MCP server, or run on a host with ' +
-        'an OS keychain (macOS Keychain / Linux libsecret) so one can be auto-generated.'
-      );
-    }
-  }
-  if (pass.length < MIN_PASS_LEN) {
-    throw new Error(`Passphrase must be at least ${MIN_PASS_LEN} characters.`);
-  }
+  const { pass, source } = resolveOrProvisionPassphrase();
 
   const priv = generatePrivateKey();
   const account = privateKeyToAccount(priv);
-  const salt = randomBytes(SALT_LEN);
-  const iv = randomBytes(IV_LEN);
-  const key = deriveKey(pass, salt);
-
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const privHexNoPrefix = priv.slice(2);
-  const ciphertext = Buffer.concat([cipher.update(privHexNoPrefix, 'hex'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
+  const plain = Buffer.from(priv.slice(2), 'hex');
+  const enc = encryptSecret(plain, pass);
+  plain.fill(0);
 
   const file: KeystoreFile = {
     version: 1,
     address: account.address,
-    ciphertext: ciphertext.toString('base64'),
-    iv: iv.toString('base64'),
-    salt: salt.toString('base64'),
-    authTag: authTag.toString('base64'),
-    kdf: 'scrypt',
-    kdfN: SCRYPT_N,
-    cipher: 'aes-256-gcm',
+    ...enc,
     createdAt: new Date().toISOString(),
   };
 
@@ -168,20 +217,7 @@ export function loadAccount(): PrivateKeyAccount {
       `Call chaingpt_agent_wallet_init first.`
     );
   }
-  const salt = Buffer.from(file.salt, 'base64');
-  const iv = Buffer.from(file.iv, 'base64');
-  const authTag = Buffer.from(file.authTag, 'base64');
-  const ciphertext = Buffer.from(file.ciphertext, 'base64');
-  const key = deriveKey(pass, salt);
-
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(authTag);
-  let plain: Buffer;
-  try {
-    plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  } catch {
-    throw new Error('Keystore decrypt failed — wrong passphrase or tampered ciphertext.');
-  }
+  const plain = decryptSecret(file, pass);
   const priv = ('0x' + plain.toString('hex')) as `0x${string}`;
   // Wipe the plaintext buffer ASAP (best-effort — JS strings are immutable)
   plain.fill(0);

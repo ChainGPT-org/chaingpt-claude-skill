@@ -70,4 +70,6 @@ Cadence note: schedule ticks MORE often than the plan cadence if you want catch-
 - **Agent-wallet mode (fully autonomous):** the wallet signs inside policy caps. Pair with the `dca-base` policy template. The PreToolUse mainnet guard will ask for confirmation in interactive sessions; for headless scheduled runs, the policy gate + velocity caps are the (deliberate) safety boundary — set `CHAINGPT_GUARD=off` ONLY in the scheduled environment, never globally.
 - **User-signs mode (semi-autonomous):** the tick prepares unsigned transactions and the summary asks the user to sign. Zero custody risk; the user is the scheduler's hands.
 
+Solana plans (v1.19+): same loop with `chaingpt_dex_jupiter_quote` → `chaingpt_dex_jupiter_build_swap_tx` → `chaingpt_agent_wallet_solana_sign_and_send` → `chaingpt_strategy_mark_step`. The lamport velocity caps (`policy.solana.maxDailySpendLamports` / `maxDailyTxCount`) are the third safety layer, exactly like the wei caps on EVM.
+
 Related: `skills/strategy/SKILL.md` (planners), `skills/agent-wallet/SKILL.md` (policy gate), `reference/scheduled-autonomy.md` (10-minute end-to-end walkthrough).

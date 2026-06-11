@@ -34,6 +34,8 @@ process.stdin.on('end', () => {
     const input = evt.tool_input || {};
 
     const isAgentSend = /chaingpt_agent_wallet_sign_and_send$/.test(tool);
+    // NOTE: the EVM regex does NOT match the solana tool name — both tests are required.
+    const isAgentSolanaSend = /chaingpt_agent_wallet_solana_sign_and_send$/.test(tool);
     const hasAck = input && input.acknowledgeMainnet === true;
     const isOrderSigner =
       /chaingpt_(hl_place_order_payload|hl_submit_signed_action|pm_place_order_payload|pm_submit_signed_order|dex_cow_create_order|dex_cow_submit_signed_order)$/.test(
@@ -42,7 +44,10 @@ process.stdin.on('end', () => {
 
     let ask = false;
     let why = '';
-    if (isAgentSend) {
+    if (isAgentSolanaSend) {
+      ask = true;
+      why = `Agent wallet is about to SIGN AND BROADCAST a Solana transaction autonomously: memo=${input.memo || '(none)'}, tx=${String(input.txBase64 || '').length} base64 chars. The Solana policy gate (program allowlist + lamport caps) has its own checks; this prompt is the human layer on top.`;
+    } else if (isAgentSend) {
       ask = true;
       const v = input.valueWei ? `${input.valueWei} wei` : 'contract call (no native value)';
       why = `Agent wallet is about to SIGN AND BROADCAST autonomously on ${input.chain || '?'}: to=${input.to || '?'}, value=${v}, memo=${input.memo || '(none)'}. The policy gate has its own checks; this prompt is the human layer on top.`;

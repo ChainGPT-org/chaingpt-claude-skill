@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.19.0] - 2026-06-10
+### Added — Solana signing parity: the policy fence crosses chains
+The agent wallet's bounded autonomy, extended to Solana. Any unsigned `VersionedTransaction` from the existing builders (Jupiter swaps, Marginfi/Kamino deposits/withdrawals, SOL transfers) can now execute autonomously inside hard caps.
+
+- **3 new MCP tools (131 → 134):** `chaingpt_agent_wallet_solana_init` (Ed25519 keystore — same AES-256-GCM/scrypt cipher core and same admin passphrase as the EVM keystore, separate file), `_address`, and `_sign_and_send` (structural checks → simulate → policy gate → sign → journal).
+- **`solana` policy sub-object** — `enabled` (FAIL-CLOSED: every policy file that predates Solana support refuses until the admin opts in; `unrestricted` does NOT bypass it), `allowedPrograms`/`blockedPrograms` (base58, top-level instruction programs — fences which protocols the agent may enter; inner CPIs are invisible by design and documented as such), `maxTxLamports` + `maxDailySpendLamports` + `maxDailyTxCount` + `requireMemo`.
+- **Simulation-priced spend caps:** every send is simulated first; the fee-payer lamport delta is the spend measure for both the per-tx cap and the rolling-24h velocity cap, and a tx that cannot be simulated (or simulates to failure) is refused — fail closed, never broadcast blind.
+- **Structural refusals:** multi-signer transactions and foreign fee payers are rejected outright (closes the co-signing/sponsoring injection hole); blockhash is refreshed at sign time (kills the stale-blockhash flake class; safe — agent is sole signer).
+- **Ledger chain classes:** `spendStats(hours, 'evm'|'solana')` — wei and lamports can never sum together; EVM chokepoints pass `'evm'` explicitly (bit-identical behavior on existing ledgers, proven by test).
+- **Surfacing:** wallet status shows the Solana address, enabled state, caps and the 24h SOL window; the dashboard activity feed renders Solana entries in SOL with solscan links. The PreToolUse mainnet guard asks before every autonomous Solana send. All 4 relevant policy templates ship `solana` blocks (balanced default: System/Token/ATA/ComputeBudget/Jupiter/Marginfi/Kamino, 0.1 SOL/tx, 0.3 SOL + 20 tx per day).
+
+### Tests
+- Suite 365 → 391: Solana keystore (roundtrip, tamper, wrong-pass), checkSolanaPolicy matrix (fail-closed opt-in, allowlist semantics, sim-unavailable refusal, velocity trio, unrestricted-vs-enabled), offline handler suite asserting refusals happen with ZERO network calls, ledger chain-class invariants, template validation.
+
 ## [1.18.0] - 2026-06-10
 ### Added — Usage insights (local-first) + self-healing CI
 - **Tool-usage counters, local-only by construction** (`lib/usage.ts`): every tool call increments a per-tool count in `~/.chaingpt-mcp/usage.json` (debounced flush, never blocks a call). Stored: tool names, counts, last-used timestamps — never arguments, addresses, amounts, or results. No remote endpoint exists in the code. `CHAINGPT_USAGE=off` disables entirely.
