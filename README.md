@@ -27,6 +27,11 @@ One install gives Claude Code 140 MCP tools across **ChainGPT AI products** (cha
 
 ## 👀 60-second tour
 
+![Agent wallet refuses an over-cap transfer](docs/demo/agent-wallet-refusal.gif)
+
+> The agent tries to overspend; the policy gate — a file the model has no tool to write — refuses in code. Prompt injection gets a refusal, not your funds.
+
+
 Three exchanges that show the whole philosophy — capability, then the guardrails that make it safe to walk away:
 
 ```text
