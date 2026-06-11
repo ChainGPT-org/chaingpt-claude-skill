@@ -25,7 +25,7 @@ import {
   bundlerRpc,
   type UserOpInput,
 } from '../lib/erc4337.js';
-import { resolveChain, rpcEndpoints } from '../lib/chains.js';
+import { resolveChainWithCustom, rpcEndpointsWithCustom } from '../lib/agent-custom-chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 
 /**
@@ -125,11 +125,11 @@ export async function handleAgentWallet4337Tool(
     if (!gate.allowed) return refusalBlock(gate.reason, gate.policyDigest);
 
     // 2. Account kind — v1 signs only for Nexus 1.x
-    const chain = resolveChain(String(args.chain));
+    const chain = resolveChainWithCustom(String(args.chain));
     if (!chain?.chainId) {
       return { content: [{ type: 'text', text: `chain "${args.chain}" is not a known EVM chain.` }] };
     }
-    const rpcs = rpcEndpoints(chain.slug);
+    const rpcs = rpcEndpointsWithCustom(chain.slug);
     let accountKind = 'unknown';
     try {
       const id = await readAccountId(rpcs, account);

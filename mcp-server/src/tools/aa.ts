@@ -8,7 +8,8 @@ import {
   ENTRY_POINT_V07,
   type UserOpInput,
 } from '../lib/erc4337.js';
-import { CHAINS, resolveChain } from '../lib/chains.js';
+import { CHAINS } from '../lib/chains.js';
+import { resolveChainWithCustom } from '../lib/agent-custom-chains.js';
 
 /**
  * Tier-7 ERC-4337 v0.7 foundation. Custody-free.
@@ -171,8 +172,8 @@ export const aaTools: Tool[] = [
 ];
 
 function chainIdFor(slug: string): number {
-  const c = resolveChain(slug);
-  if (!c) throw new Error(`chain: "${slug}" not supported. Use one of: ${Object.keys(CHAINS).join(', ')}`);
+  const c = resolveChainWithCustom(slug);
+  if (!c) throw new Error(`chain: "${slug}" not supported. Use one of: ${Object.keys(CHAINS).join(', ')} (or register a custom chain like base-sepolia).`);
   if (c.chainId === null) throw new Error(`chain: "${slug}" has no numeric chainId (non-EVM); ERC-4337 only applies to EVM chains`);
   return c.chainId;
 }
