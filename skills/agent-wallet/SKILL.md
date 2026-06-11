@@ -148,13 +148,13 @@ Hard facts to relay accurately:
 
 ## On-chain caps — ERC-4337 session keys (v1.21+)
 
-The endgame: the user's ERC-7579 smart account grants the agent's EOA a SCOPED on-chain session (Smart Sessions module). The caps live in audited contracts and are enforced by the EntryPoint — they survive what nothing local can:
+The endgame: the user's ERC-7579 smart account grants the agent's EOA a SCOPED on-chain session (Smart Sessions module). The caps live in audited contracts and are validated by the EntryPoint. **Status: BETA — the module addresses are verified deployed on Base Sepolia and the encoders are unit-tested, but the end-to-end live proof is not yet published. Treat the on-chain column below as the DESIGNED guarantee, not yet an independently-demonstrated one; the local gate is your tested fence today.**
 
-| Threat | Local policy gate | On-chain session caps |
+| Threat | Local policy gate (tested) | On-chain session caps (designed, beta) |
 |---|---|---|
-| Prompt injection | ✅ blocks | ✅ blocks |
-| Policy file tampered/rewritten | ❌ falls | ✅ blocks |
-| Full host compromise (keystore stolen) | ❌ falls | ✅ blocks (bounded by remaining allowance + expiry) |
+| Prompt injection | ✅ blocks | ✅ designed to block |
+| Policy file tampered/rewritten | ❌ falls | ✅ designed to block |
+| Full host compromise (keystore stolen) | ❌ falls | ✅ designed to block, bounded by remaining allowance + expiry (live proof pending) |
 
 ```text
 chaingpt_aa_session_build_grant chain=base account=<user SCW> tokenCaps=[{token: USDC, cap: "100000000"}] validUntil=<unix>

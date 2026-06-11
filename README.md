@@ -803,6 +803,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **Prediction markets** | Polymarket native | No | No | No | No |
 | **Perps** | Hyperliquid (signed) + Drift (read) | Add‑on | No | No | No |
 | **Spending limits under autonomy** | Per‑tx cap + rolling‑24h spend/tx‑count caps enforced in code the LLM can't modify | No | Smart‑wallet policies (CDP) | Per‑tx MetaMask approval | N/A |
+| **On‑chain caps (ERC‑4337 session keys)** | Yes — designed so the chain enforces per‑token caps at validation _(beta: addresses verified on Base Sepolia; full live proof pending)_ | No | No | No | No |
 | **Scheduled execution safety** | Crash‑safe execution journal (re‑runs can't double‑buy) | No | No | No | No |
 | **Shipped agents** | 3 (researcher / auditor / trader) with tuned guardrails | No | No | No | No |
 | **Test harness** | 6 layers + daily live smoke + self‑healing CI (drift auto‑PRs) | Per‑plugin | Examples only | Snap testing | None |
