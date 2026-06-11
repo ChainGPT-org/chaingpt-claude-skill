@@ -32,6 +32,16 @@ export function policyPath(): string {
 }
 
 
+
+export interface Erc4337Policy {
+  /** Master opt-in. Missing/false ⇒ refuse (fail closed, type-strict). */
+  enabled: boolean;
+  /** Smart-account (userOp sender) allowlist. undefined ⇒ any; [] ⇒ none. */
+  allowedAccounts?: string[];
+  /** Bundler hostname allowlist (https enforced regardless). undefined ⇒ any. */
+  allowedBundlerHosts?: string[];
+}
+
 export interface SolanaPolicy {
   /** Master opt-in. Missing/false ⇒ every Solana signing op refused (fail closed). */
   enabled: boolean;
@@ -100,6 +110,15 @@ export interface AgentPolicy {
    * second chain. Enforced by checkSolanaPolicy at the solana sign chokepoint.
    */
   solana?: SolanaPolicy;
+  /**
+   * ERC-4337 session-key sub-policy. ABSENT or enabled:false ⇒ every 4337
+   * signing op refused (fail closed). OFF even in the balanced default —
+   * this surface acts on a THIRD-PARTY smart account, so opt-in is the only
+   * correct posture. The on-chain session caps are the primary fence; this
+   * gate controls whether the agent participates at all + which accounts
+   * and bundlers it may touch.
+   */
+  erc4337?: Erc4337Policy;
   /** Informational only — not enforced. Helps the admin remember what this policy is for. */
   notes?: string;
   /** Last time the file was updated. Set by the admin; not enforced. */
@@ -136,6 +155,7 @@ const FAIL_CLOSED_POLICY: AgentPolicy = {
   blockedSelectors: [],
   requireMemo: true,
   solana: { enabled: false },
+  erc4337: { enabled: false },
   notes: 'Fail-closed fallback (policy file missing a field or unparseable). Every signing op is refused. Fix or replace policy.json to restore your intended policy.',
   updatedAt: new Date(0).toISOString(),
 };
@@ -192,6 +212,7 @@ const DEFAULT_POLICY: AgentPolicy = {
     maxDailyTxCount: 20,
     requireMemo: true,
   },
+  erc4337: { enabled: false }, // third-party-account surface: opt-in only, even in the balanced default
   notes:
     'Balanced DeFi default (killSwitch OFF). The agent may interact with major DEX aggregators ' +
     '(OpenOcean, 1inch) + Aave V3 + Lido on Ethereum / Base / Arbitrum / Optimism / Polygon, capped at ' +
@@ -526,6 +547,71 @@ export function checkSolanaPolicy(
   return { allowed: true, reason: 'OK', policyDigest: digest };
 }
 
+// ── ERC-4337 session-key gate ────────────────────────────────────────
+
+export interface Erc4337Intent {
+  /** The smart account (userOp sender) the agent would act through. */
+  account: string;
+  /** The bundler endpoint the userOp would be submitted to. */
+  bundlerUrl: string;
+}
+
+/**
+ * Local gate for the 4337 surface. Deliberately thin: WHO (which accounts)
+ * and WHERE (which bundlers) — the inner execution intent then goes through
+ * the unchanged checkPolicy, and the on-chain session policies are the
+ * authoritative spend fence.
+ */
+export function checkErc4337Gate(
+  intent: Erc4337Intent,
+  policy: AgentPolicy = loadPolicy()
+): PolicyCheck {
+  const digest = policyDigest(policy);
+
+  if (policy.killSwitch) {
+    return { allowed: false, reason: 'Policy kill switch is active. Edit policy.json (set killSwitch: false) to allow operations.', policyDigest: digest };
+  }
+  const sub = policy.erc4337;
+  if (sub?.enabled !== true) { // type-strict, fail closed — third-party-account surface
+    return {
+      allowed: false,
+      reason: 'ERC-4337 session-key signing is not enabled in the policy. An admin must add `"erc4337": { "enabled": true, ... }` via the dashboard or a text editor.',
+      policyDigest: digest,
+    };
+  }
+  if (policy.unrestricted) {
+    return { allowed: true, reason: 'OK (unrestricted mode — erc4337.enabled was still required)', policyDigest: digest };
+  }
+
+  const account = intent.account.toLowerCase();
+  if (sub.allowedAccounts !== undefined) {
+    if (sub.allowedAccounts.length === 0) {
+      return { allowed: false, reason: 'erc4337.allowedAccounts is explicitly empty — no smart account is permitted.', policyDigest: digest };
+    }
+    if (!sub.allowedAccounts.some((a) => a.toLowerCase() === account)) {
+      return { allowed: false, reason: `Smart account ${intent.account} is not in erc4337.allowedAccounts (${sub.allowedAccounts.length} entries).`, policyDigest: digest };
+    }
+  }
+
+  let host: string;
+  try {
+    const u = new URL(intent.bundlerUrl);
+    if (u.protocol !== 'https:') {
+      return { allowed: false, reason: 'bundlerUrl must be https.', policyDigest: digest };
+    }
+    host = u.hostname;
+  } catch {
+    return { allowed: false, reason: `bundlerUrl is not a valid URL: ${intent.bundlerUrl}`, policyDigest: digest };
+  }
+  if (sub.allowedBundlerHosts !== undefined) {
+    if (!sub.allowedBundlerHosts.some((h) => h.toLowerCase() === host.toLowerCase())) {
+      return { allowed: false, reason: `Bundler host ${host} is not in erc4337.allowedBundlerHosts.`, policyDigest: digest };
+    }
+  }
+
+  return { allowed: true, reason: 'OK', policyDigest: digest };
+}
+
 // ── Policy editing (USED ONLY BY THE LOCALHOST ADMIN UI) ─────────────
 //
 // IMPORTANT: validatePolicyInput + savePolicy must NEVER be exposed via any
@@ -549,6 +635,7 @@ const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'blockedSelectors',
   'requireMemo',
   'solana',
+  'erc4337',
   'notes',
   'updatedAt',
 ]);
@@ -631,6 +718,29 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     return { ok: false, error: 'notes must be a string' };
   }
   const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  if (o.erc4337 !== undefined) {
+    if (o.erc4337 === null || typeof o.erc4337 !== 'object' || Array.isArray(o.erc4337)) {
+      return { ok: false, error: 'erc4337 must be an object' };
+    }
+    const e4 = o.erc4337 as Record<string, unknown>;
+    const E4_FIELDS = new Set(['enabled', 'allowedAccounts', 'allowedBundlerHosts']);
+    for (const k of Object.keys(e4)) {
+      if (!E4_FIELDS.has(k)) return { ok: false, error: `Unknown erc4337 policy field: ${k}` };
+    }
+    if (typeof e4.enabled !== 'boolean') return { ok: false, error: 'erc4337.enabled must be true or false' };
+    if (e4.allowedAccounts !== undefined) {
+      if (!Array.isArray(e4.allowedAccounts)) return { ok: false, error: 'erc4337.allowedAccounts must be an array of addresses' };
+      for (const a of e4.allowedAccounts) {
+        if (typeof a !== 'string' || !HEX_ADDR_RE.test(a)) return { ok: false, error: `erc4337.allowedAccounts entries must be 0x addresses, got ${a}` };
+      }
+    }
+    if (e4.allowedBundlerHosts !== undefined) {
+      if (!Array.isArray(e4.allowedBundlerHosts)) return { ok: false, error: 'erc4337.allowedBundlerHosts must be an array of hostnames' };
+      for (const h of e4.allowedBundlerHosts) {
+        if (typeof h !== 'string' || !/^[a-z0-9.-]+$/i.test(h)) return { ok: false, error: `erc4337.allowedBundlerHosts entries must be bare hostnames, got ${h}` };
+      }
+    }
+  }
   if (o.solana !== undefined) {
     if (o.solana === null || typeof o.solana !== 'object' || Array.isArray(o.solana)) {
       return { ok: false, error: 'solana must be an object' };
@@ -682,6 +792,7 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     blockedSelectors: o.blockedSelectors as string[] | undefined,
     requireMemo: o.requireMemo as boolean | undefined,
     solana: o.solana as SolanaPolicy | undefined,
+    erc4337: o.erc4337 as Erc4337Policy | undefined,
     notes: o.notes as string | undefined,
     updatedAt: new Date().toISOString(),
   };
