@@ -69,7 +69,7 @@ That last refusal is the product: the policy file lives outside the model's reac
 
 ## 🆕 What's new
 
-**[v1.19](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights + self-healing CI · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a crash-safe execution journal) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+**[v1.22](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.22.0)** Tron (TVM) integration — non-EVM chain at EVM/Solana parity (14 tools, reuses the EVM key, fail-closed `tron` policy, SunSwap + JustLend) · **[v1.19](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights + self-healing CI · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a crash-safe execution journal) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 
 ## ⚡ Quickstart — full step‑by‑step
 
@@ -512,7 +512,7 @@ The agent‑economy layer: pay for things autonomously, get a human‑readable i
 
 ### Web3 toolkit (14 tools)
 
-Across **11 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll, solana.
+Across **12 chains**: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, blast, linea, scroll, solana, tron. (Solana + Tron are non‑EVM: research/risk resolve via their `tron`/`solana` provider slugs; the dedicated `chaingpt_tron_*` / `chaingpt_solana_*` tools are the full on‑chain surface.)
 
 | Tool | What it does | Backend |
 |---|---|---|
@@ -603,6 +603,19 @@ Live mainnet data. Hyperliquid supports **signed EIP‑712 L1 actions** (custody
 | `chaingpt_defi_marginfi_banks` · `_account` | Marginfi v2 banks + user account |
 | `chaingpt_defi_kamino_markets` · `_vaults` | Kamino markets + automated yield vaults |
 
+### Tron (TVM) — 14 tools
+
+Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as the EVM agent wallet** (only the address encoding differs), so there is no separate keystore. Custody‑free builders return an UNSIGNED tx (sign in TronLink); the agent wallet signs autonomously behind a fail‑closed `tron` policy. OpenOcean/1inch/Moralis don't support Tron, so DEX routing is SunSwap‑direct. See [reference/tron.md](reference/tron.md).
+
+| Tool | What it does |
+|---|---|
+| `chaingpt_tron_validate_address` · `_balances` · `_token_balance` · `_account_resources` · `_tx_info` | Reads: address forms, TRX + TRC‑20 balances, bandwidth/energy, tx receipt |
+| `chaingpt_tron_research_token` · `_risk_token` | DexScreener pairs + GoPlus security (slug `tron`) |
+| `chaingpt_tron_build_transfer_tx` · `_build_trc20_transfer_tx` | Unsigned TRX + TRC‑20 transfers (custody‑free, mainnet‑ack‑gated) |
+| `chaingpt_tron_dex_sunswap_quote` | SunSwap swap quote (V2 `getAmountsOut`) |
+| `chaingpt_tron_lend_justlend_account` · `_lend_justlend_build_tx` | JustLend liquidity read + unsigned approve/supply/withdraw/borrow/repay |
+| `chaingpt_agent_wallet_tron_address` · `_sign_and_send` | Agent's Tron address + autonomous build→sign→broadcast under the `tron` policy gate |
+
 ### Portfolio + strategy plans + backtest (7 tools)
 
 | Tool | What it does |
@@ -632,6 +645,8 @@ The plugin works without these but unlocks more if present:
 | `MORALIS_API_KEY` | Full multi‑chain ERC‑20 scan + DeFi positions + P&L | https://moralis.io (25k req/month free) |
 | `ETHERSCAN_API_KEY` | Higher Etherscan rate limit (Etherscan v2 covers every major EVM chain) | https://etherscan.io/myapikey (free) |
 | `ONEINCH_API_KEY` | 1inch v6 aggregator routing | https://portal.1inch.dev |
+| `TRON_PRO_API_KEY` | Higher TronGrid rate limit for Tron tools (mainnet keyless is throttled) | https://www.trongrid.io (free) |
+| `TRON_RPC_URL` | Override the Tron node host (mainnet/Shasta/Nile). Agent‑wallet signing refuses a non‑TronGrid host. | — |
 
 <br/>
 
@@ -854,6 +869,7 @@ chaingpt-claude-skill/
 │   ├── dashboard/SKILL.md            #   Localhost marketplace dashboard
 │   ├── scheduled-autonomy/SKILL.md   #   Run saved strategies on a schedule (journal + caps)
 │   ├── solana/SKILL.md               #   Solana signing foundation + transfers
+│   ├── tron/SKILL.md                 #   Tron (TVM) — TRC-20, SunSwap, JustLend, agent-wallet signing
 │   ├── strategy/SKILL.md             #   Plan persistence + backtest
 │   ├── trade/SKILL.md                #   OpenOcean / 1inch / CoW / Jupiter
 │   ├── trustless-agents/SKILL.md     #   ERC-8004 agent identity/reputation
@@ -878,7 +894,7 @@ chaingpt-claude-skill/
 
 ### Shipped (1.0 → 1.9)
 - [x] Complete API reference for all 7 ChainGPT products
-- [x] **154 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
+- [x] **154 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), Tron (TRC‑20 · SunSwap · JustLend · agent‑wallet signing), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
 - [x] **Agent wallet** — encrypted keystore + prompt‑injection‑resistant admin policy gate + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
 - [x] **Custody‑free signing** — every state‑changing tool returns an unsigned tx / EIP‑712 intent; the plugin never sees a private key. `acknowledgeMainnet: true` gate on every mainnet write
 - [x] 10 project templates including multi‑product compositions
