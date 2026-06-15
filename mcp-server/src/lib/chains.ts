@@ -169,6 +169,17 @@ export const CHAINS: Record<string, ChainInfo> = {
     publicRpc: 'https://api.mainnet-beta.solana.com',
     explorer: 'https://solscan.io',
   },
+  tron: {
+    slug: 'tron',
+    chainId: null,
+    name: 'Tron',
+    native: 'TRX',
+    dexscreener: 'tron',
+    goplus: 'tron',
+    coingecko: 'tron',
+    publicRpc: 'https://api.trongrid.io',
+    explorer: 'https://tronscan.org',
+  },
 };
 
 /** Look up a chain by slug, chain id (as string or number), or common alias. Returns undefined if unknown. */
@@ -204,6 +215,8 @@ export function resolveChain(input: string | number | undefined | null): ChainIn
     op: 'optimism',
     'op-mainnet': 'optimism',
     sol: 'solana',
+    trx: 'tron',
+    trc20: 'tron',
   };
   if (aliases[s] && CHAINS[aliases[s]]) return CHAINS[aliases[s]];
 

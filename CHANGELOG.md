@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.22.0] - 2026-06-15
+### Added — Tron (TVM): full non-EVM chain support at parity with EVM + Solana
+Tron joins as a first-class non-EVM chain (`chainId: null`), the same way Solana did. The agent's Tron account is controlled by the SAME secp256k1 key as the EVM keystore — only the address encoding differs (`0x41` + Base58Check) — so there is NO separate keystore. Custody-free by default (every builder returns an UNSIGNED tx for TronLink / external signing, mainnet-ack-gated); the agent-wallet path signs autonomously behind a new deterministic `tron` policy chokepoint. Signing is build-via-node then verify-`txID == SHA256(raw_data_hex)`-and-sign-locally: no protobuf hand-rolling, ZERO new dependencies (sha256 / secp256k1 / ABI from viem, base58 hand-rolled + golden-vector tested).
+
+- **14 new MCP tools (140 → 154):**
+  - Reads: `chaingpt_tron_validate_address`, `_balances`, `_token_balance`, `_account_resources`, `_tx_info`
+  - Research / risk: `_research_token` (DexScreener `tron`), `_risk_token` (GoPlus `tron`)
+  - Builders (custody-free, mainnet-ack-gated): `_build_transfer_tx` (TRX), `_build_trc20_transfer_tx`
+  - DeFi: `_dex_sunswap_quote` (V2 `getAmountsOut`), `_lend_justlend_account` (read), `_lend_justlend_build_tx` (approve/supply/withdraw/borrow/repay)
+  - Agent wallet: `chaingpt_agent_wallet_tron_address`, `chaingpt_agent_wallet_tron_sign_and_send` (intents: `trx_transfer` / `trc20_transfer` / `contract_call`)
+- **`tron` policy sub-policy** — fail-closed, type-strict (refused for every policy file that predates Tron; `unrestricted` does not bypass the enable gate). Destination allowlist + per-tx SUN cap + rolling-24h SUN spend / tx-count caps + `fee_limit` (energy) cap + memo. The balanced default enables Tron with USDT / SunSwap / JustLend allowlisted at 100 TRX/tx.
+- **Velocity ledger** gains a `tron` class — SUN is isolated from EVM wei and Solana lamports (the three never sum).
+- **`chains.ts`** gains a verified `tron` entry (DexScreener / GoPlus / CoinGecko `tron` slugs, Tronscan explorer) + `trx` / `trc20` aliases.
+- Verified mainnet registry (USDT / USDC / WTRX / JST / SUN / USDD / TUSD / stUSDT + SunSwap + JustLend) with a poisoned-address blocklist (USDDOLD, old SUN, a dead contract).
+- **Safety:** `sign_and_send` builds from a structured intent (never LLM bytes), cross-checks the node's decoded `raw_data` against the intent (owner / destination / value), verifies `txID == SHA256(raw_data_hex)` before signing, revert-prechecks contract calls (never broadcasts a sim-failure), and refuses autonomous signing against a non-TronGrid host. OpenOcean / Moralis don't support Tron, so DEX routing uses SunSwap directly.
+
+### Tests
+- Suite 428 → 491 (+63): tron-address golden vectors + base58 codec, token/DeFi registry integrity + poisoned-address safety, the `checkTronPolicy` fail-closed matrix, signing (txID verify, recid mapping proven via signature recovery, raw_data decode), tool offline behavior + mainnet-ack gate + zero-network refusal assertions, and SUN-isolation in the velocity ledger.
+
 ## [1.21.0] - 2026-06-11
 ### Added — ERC-4337 session keys: caps designed to be enforced on-chain (beta)
 The trust-story endgame. The user's ERC-7579 smart account grants the agent's existing EOA a scoped on-chain session via the audited Smart Sessions module (ChainLight/Ackee/Cantina-reviewed, vendor-neutral across Nexus/Kernel/Safe7579): cumulative per-token spend caps, mandatory expiry, optional usage caps — validated by the EntryPoint on every operation. The intent: even a fully compromised host (policy file rewritten, `unrestricted: true`) should not be able to exceed what the chain granted. **This on-chain layer is BETA: the module addresses are verified deployed on Base Sepolia, and the full grant → over-cap-refusal loop will be published before we claim it unconditionally. Until then, rely on the local policy gate (tested) as your primary fence.** Zero new dependencies: deterministic module addresses + viem encoders only.

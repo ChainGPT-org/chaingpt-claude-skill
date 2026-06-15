@@ -84,6 +84,23 @@ describe('spendStats', () => {
     expect(all.txCount).toBe(4); // default unchanged: everything
   });
 
+  it('chain-class filter: tron SUN is isolated from wei and lamports', () => {
+    writeFileSync(
+      process.env.CHAINGPT_ACTIVITY_FILE!,
+      [
+        entry(-60_000, '1000'), // evm wei
+        JSON.stringify({ ts: new Date(Date.now() - 60_000).toISOString(), chain: 'solana', chainId: 0, from: 'agentSol', to: 'JUP6', valueWei: '7000', hash: 'sig1', policyDigest: 'd' }),
+        JSON.stringify({ ts: new Date(Date.now() - 60_000).toISOString(), chain: 'tron', chainId: 0, from: 'Tagent', to: 'TR7N', valueWei: '5000000', hash: 'txt1', policyDigest: 'd' }),
+        JSON.stringify({ ts: new Date(Date.now() - 90_000).toISOString(), chain: 'tron-nile', chainId: 0, from: 'Tagent', to: 'TR7N', valueWei: '2000000', hash: 'txt2', policyDigest: 'd' }),
+      ].join('\n') + '\n'
+    );
+    const tron = spendStats(24, 'tron');
+    expect(tron.totalWei).toBe(7_000_000n); // SUN, both mainnet + nile clusters
+    expect(tron.txCount).toBe(2);
+    expect(spendStats(24, 'evm').totalWei).toBe(1000n); // tron NOT summed into evm
+    expect(spendStats(24, 'solana').totalWei).toBe(7000n); // nor into solana
+  });
+
   it("evm-only ledger: spendStats(24,'evm') is identical to the unfiltered default", () => {
     writeFileSync(
       process.env.CHAINGPT_ACTIVITY_FILE!,

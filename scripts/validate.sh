@@ -39,6 +39,8 @@ REQUIRED_FILES=(
   "skills/bridge/SKILL.md"
   "skills/drift/SKILL.md"
   "skills/agent-wallet/SKILL.md"
+  "skills/tron/SKILL.md"
+  "reference/tron.md"
   "reference/llm-chatbot.md"
   "reference/nft-generator.md"
   "reference/smart-contract-generator.md"

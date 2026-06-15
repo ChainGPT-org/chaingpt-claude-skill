@@ -14,11 +14,11 @@ import { policyPath } from './agent-policy.js';
 
 export interface ActivityEntry {
   ts: string;           // ISO timestamp
-  chain: string;        // EVM slug (ethereum/base/…) or 'solana'
+  chain: string;        // EVM slug (ethereum/base/…), 'solana', or 'tron'
   chainId: number;
   from: string;
   to: string;
-  valueWei: string;     // base units: wei (EVM) or simulated fee-payer lamport delta (Solana)
+  valueWei: string;     // base units: wei (EVM), simulated fee-payer lamport delta (Solana), or SUN (Tron)
   hash: string;
   memo?: string;
   policyDigest: string;
@@ -53,18 +53,20 @@ export function logActivity(e: ActivityEntry): void {
  */
 /**
  * Chain class for ledger filtering. 'evm' sums wei across EVM chains;
- * 'solana' sums lamports. The two MUST never sum together — they are
- * different units. 'all' (default) preserves the historical unfiltered
+ * 'solana' sums lamports; 'tron' sums SUN. The three MUST never sum together —
+ * they are different units. 'all' (default) preserves the historical unfiltered
  * behavior for display callers; the security chokepoints always pass an
  * explicit class.
  */
-export type ChainClass = 'evm' | 'solana' | 'all';
+export type ChainClass = 'evm' | 'solana' | 'tron' | 'all';
 
 function entryClass(e: ActivityEntry): Exclude<ChainClass, 'all'> {
-  // 'solana', 'solana-devnet', 'solana-testnet' — all clusters share the class.
-  // Devnet/testnet sends therefore CONSUME the lamport caps: conservative on
+  // Cluster suffixes ('solana-devnet', 'tron-nile', …) all share their base
+  // class. Testnet sends therefore CONSUME the same caps: conservative on
   // purpose (a cap that over-counts fails safe; one that under-counts does not).
-  return e.chain.startsWith('solana') ? 'solana' : 'evm';
+  if (e.chain.startsWith('solana')) return 'solana';
+  if (e.chain === 'tron' || e.chain.startsWith('tron')) return 'tron';
+  return 'evm';
 }
 
 export function spendStats(windowHours = 24, chainClass: ChainClass = 'all'): { totalWei: bigint; txCount: number; ok: boolean } {

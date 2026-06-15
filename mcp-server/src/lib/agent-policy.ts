@@ -63,6 +63,29 @@ export interface SolanaPolicy {
   requireMemo?: boolean;
 }
 
+export interface TronPolicy {
+  /** Master opt-in. Missing/false ⇒ every Tron signing op refused (fail closed). */
+  enabled: boolean;
+  /**
+   * Destination allowlist (base58 "T…"): the to-address for a native TRX send,
+   * or the contract address for a TRC-20 / DeFi call. undefined ⇒ any; [] ⇒
+   * EXPLICIT EMPTY: none allowed. Like the EVM allowedToAddresses, this gates
+   * the contract, not the inner TRC-20 recipient.
+   */
+  allowedContracts?: string[];
+  /** Blocklist (base58) — wins over allowedContracts. */
+  blockedContracts?: string[];
+  /** Max TRX value per tx, as a SUN string (native amount or contract call_value). Parse failure ⇒ refuse. */
+  maxTxSun?: string;
+  /** Rolling-24h SUN spend cap (tron-class ledger entries only). */
+  maxDailySpendSun?: string;
+  /** Rolling-24h signed-tx count cap (tron-class only). */
+  maxDailyTxCount?: number;
+  /** Max fee_limit (energy cap) per contract call, as a SUN string. Anti energy-drain. */
+  maxFeeLimitSun?: string;
+  requireMemo?: boolean;
+}
+
 export interface AgentPolicy {
   version: 1;
   /** Master kill switch. If true, every signing operation refuses. Wins over `unrestricted`. */
@@ -111,6 +134,12 @@ export interface AgentPolicy {
    */
   solana?: SolanaPolicy;
   /**
+   * Tron sub-policy. ABSENT or enabled:false ⇒ every Tron signing op is
+   * refused (fail closed) — existing policy files never silently gain a third
+   * chain. Enforced by checkTronPolicy at the Tron sign chokepoint.
+   */
+  tron?: TronPolicy;
+  /**
    * ERC-4337 session-key sub-policy. ABSENT or enabled:false ⇒ every 4337
    * signing op refused (fail closed). OFF even in the balanced default —
    * this surface acts on a THIRD-PARTY smart account, so opt-in is the only
@@ -155,6 +184,7 @@ const FAIL_CLOSED_POLICY: AgentPolicy = {
   blockedSelectors: [],
   requireMemo: true,
   solana: { enabled: false },
+  tron: { enabled: false },
   erc4337: { enabled: false },
   notes: 'Fail-closed fallback (policy file missing a field or unparseable). Every signing op is refused. Fix or replace policy.json to restore your intended policy.',
   updatedAt: new Date(0).toISOString(),
@@ -210,6 +240,22 @@ const DEFAULT_POLICY: AgentPolicy = {
     maxTxLamports: '100000000',          // 0.1 SOL — mirrors the 0.1-native EVM cap
     maxDailySpendLamports: '300000000',  // 0.3 SOL per rolling 24h
     maxDailyTxCount: 20,
+    requireMemo: true,
+  },
+  tron: {
+    enabled: true,
+    allowedContracts: [
+      'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', // USDT
+      'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR', // WTRX
+      'TCFNp179Lg46D16zKoumd4Poa2WFFdtqYj', // SunSwap Smart Exchange Router
+      'TGjYzgCyPobsNS9n6WcbdLVR9dH7mWqFx7', // JustLend Unitroller
+      'TXJgMdjVX5dKiQaUi9QobwNxtSQaFqccvd', // jUSDT
+      'TE2RzoSV3wFK99w6J9UnnZ4vLfXYoxvRwP', // jTRX
+    ],
+    maxTxSun: '100000000',          // 100 TRX per tx (call_value / native amount)
+    maxDailySpendSun: '300000000',  // 300 TRX per rolling 24h
+    maxDailyTxCount: 20,
+    maxFeeLimitSun: '150000000',    // 150 TRX energy cap per contract call (anti energy-drain)
     requireMemo: true,
   },
   erc4337: { enabled: false }, // third-party-account surface: opt-in only, even in the balanced default
@@ -547,6 +593,125 @@ export function checkSolanaPolicy(
   return { allowed: true, reason: 'OK', policyDigest: digest };
 }
 
+// ── Tron policy chokepoint ───────────────────────────────────────────
+
+export interface TronTxIntent {
+  /** base58 owner — must equal the agent's Tron address (checked by the handler). */
+  owner: string;
+  /** base58 destination: the to-address (native TRX) or contract address (TRC-20 / DeFi). */
+  to: string;
+  /** TRX value moved by this tx, in SUN: `amount` for a transfer, `call_value` for a contract call. */
+  valueSun: bigint;
+  /** fee_limit (energy cap) in SUN for contract calls; 0n for a plain TRX transfer. */
+  feeLimitSun: bigint;
+  memo?: string;
+}
+
+/**
+ * The single deterministic decision point for Tron signing — the exact
+ * counterpart of checkPolicy / checkSolanaPolicy. Pure: reads nothing but its
+ * inputs. Callers pass spendStats(24, 'tron') so SUN never mixes with wei/lamports.
+ */
+export function checkTronPolicy(
+  intent: TronTxIntent,
+  policy: AgentPolicy = loadPolicy(),
+  spend?: SpendWindow
+): PolicyCheck {
+  const digest = policyDigest(policy);
+
+  if (policy.killSwitch) {
+    return { allowed: false, reason: 'Policy kill switch is active. Edit policy.json (set killSwitch: false) to allow operations.', policyDigest: digest };
+  }
+
+  const tron = policy.tron;
+  // Fail closed for every policy file that predates Tron support: the admin
+  // must explicitly opt in. unrestricted does NOT bypass this — silently
+  // arming a third chain the admin never enabled violates least surprise.
+  if (tron?.enabled !== true) { // type-strict: a hand-edited "true"/1 must not arm a chain
+    return {
+      allowed: false,
+      reason: 'Tron signing is not enabled in the policy. An admin must add `"tron": { "enabled": true, ... }` via the dashboard or a text editor.',
+      policyDigest: digest,
+    };
+  }
+
+  if (policy.unrestricted) {
+    return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks; tron.enabled was still required)', policyDigest: digest };
+  }
+
+  if (tron.blockedContracts?.length) {
+    const blocked = new Set(tron.blockedContracts);
+    if (blocked.has(intent.to)) {
+      return { allowed: false, reason: `Destination ${intent.to} is in tron.blockedContracts.`, policyDigest: digest };
+    }
+  }
+
+  if (tron.allowedContracts !== undefined) {
+    if (tron.allowedContracts.length === 0) {
+      return { allowed: false, reason: 'tron.allowedContracts is explicitly empty — no destination is permitted.', policyDigest: digest };
+    }
+    if (!tron.allowedContracts.includes(intent.to)) {
+      return { allowed: false, reason: `Destination ${intent.to} is not in tron.allowedContracts (${tron.allowedContracts.length} entries).`, policyDigest: digest };
+    }
+  }
+
+  if (tron.maxTxSun !== undefined) {
+    let max: bigint;
+    try { max = BigInt(tron.maxTxSun); }
+    catch { return { allowed: false, reason: 'Policy tron.maxTxSun is not a valid integer string.', policyDigest: digest }; }
+    if (intent.valueSun > max) {
+      return { allowed: false, reason: `Value ${intent.valueSun} SUN exceeds tron.maxTxSun ${max}.`, policyDigest: digest };
+    }
+  }
+
+  if (tron.maxFeeLimitSun !== undefined) {
+    let max: bigint;
+    try { max = BigInt(tron.maxFeeLimitSun); }
+    catch { return { allowed: false, reason: 'Policy tron.maxFeeLimitSun is not a valid integer string.', policyDigest: digest }; }
+    if (intent.feeLimitSun > max) {
+      return { allowed: false, reason: `fee_limit ${intent.feeLimitSun} SUN exceeds tron.maxFeeLimitSun ${max}.`, policyDigest: digest };
+    }
+  }
+
+  const hasVelocityCap = tron.maxDailySpendSun !== undefined || tron.maxDailyTxCount !== undefined;
+  if (hasVelocityCap) {
+    if (!spend || !spend.ok) {
+      return {
+        allowed: false,
+        reason: !spend
+          ? 'Policy sets a Tron daily velocity cap but no spend-window stats were provided — refusing (fail closed).'
+          : 'Policy sets a Tron daily velocity cap but the activity ledger could not be read — refusing (fail closed).',
+        policyDigest: digest,
+      };
+    }
+    if (tron.maxDailySpendSun !== undefined) {
+      let maxSpend: bigint;
+      try { maxSpend = BigInt(tron.maxDailySpendSun); }
+      catch { return { allowed: false, reason: 'Policy tron.maxDailySpendSun is not a valid integer string.', policyDigest: digest }; }
+      if (spend.totalWei + intent.valueSun > maxSpend) {
+        return {
+          allowed: false,
+          reason: `Daily Tron spend cap: ${spend.totalWei} SUN already signed in the last 24h + ${intent.valueSun} now would exceed maxDailySpendSun ${maxSpend}.`,
+          policyDigest: digest,
+        };
+      }
+    }
+    if (tron.maxDailyTxCount !== undefined && spend.txCount + 1 > tron.maxDailyTxCount) {
+      return {
+        allowed: false,
+        reason: `Daily Tron tx-count cap: ${spend.txCount} txs signed in the last 24h; maxDailyTxCount is ${tron.maxDailyTxCount}.`,
+        policyDigest: digest,
+      };
+    }
+  }
+
+  if (tron.requireMemo && !intent.memo) {
+    return { allowed: false, reason: 'Tron policy requires every signing operation to include a memo (audit trail). Provide one via the `memo` arg.', policyDigest: digest };
+  }
+
+  return { allowed: true, reason: 'OK', policyDigest: digest };
+}
+
 // ── ERC-4337 session-key gate ────────────────────────────────────────
 
 export interface Erc4337Intent {
@@ -635,6 +800,7 @@ const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'blockedSelectors',
   'requireMemo',
   'solana',
+  'tron',
   'erc4337',
   'notes',
   'updatedAt',
@@ -776,6 +942,42 @@ export function validatePolicyInput(input: unknown): ValidationResult {
       return { ok: false, error: 'solana.requireMemo must be true or false' };
     }
   }
+  if (o.tron !== undefined) {
+    if (o.tron === null || typeof o.tron !== 'object' || Array.isArray(o.tron)) {
+      return { ok: false, error: 'tron must be an object' };
+    }
+    const tron = o.tron as Record<string, unknown>;
+    const TRON_FIELDS = new Set(['enabled', 'allowedContracts', 'blockedContracts', 'maxTxSun', 'maxDailySpendSun', 'maxDailyTxCount', 'maxFeeLimitSun', 'requireMemo']);
+    for (const k of Object.keys(tron)) {
+      if (!TRON_FIELDS.has(k)) return { ok: false, error: `Unknown tron policy field: ${k}` };
+    }
+    if (typeof tron.enabled !== 'boolean') return { ok: false, error: 'tron.enabled must be true or false' };
+    const TRON_ADDR_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
+    for (const listField of ['allowedContracts', 'blockedContracts'] as const) {
+      const v = tron[listField];
+      if (v !== undefined) {
+        if (!Array.isArray(v)) return { ok: false, error: `tron.${listField} must be an array of base58 Tron addresses` };
+        for (const a of v) {
+          if (typeof a !== 'string' || !TRON_ADDR_RE.test(a)) {
+            return { ok: false, error: `tron.${listField} entries must be base58 "T…" addresses, got ${a}` };
+          }
+        }
+      }
+    }
+    for (const sunField of ['maxTxSun', 'maxDailySpendSun', 'maxFeeLimitSun'] as const) {
+      const v = tron[sunField];
+      if (v !== undefined) {
+        if (typeof v !== 'string') return { ok: false, error: `tron.${sunField} must be a string (to preserve precision)` };
+        try { BigInt(v); } catch { return { ok: false, error: `tron.${sunField} must be a valid integer string` }; }
+      }
+    }
+    if (tron.maxDailyTxCount !== undefined && (typeof tron.maxDailyTxCount !== 'number' || !Number.isInteger(tron.maxDailyTxCount) || tron.maxDailyTxCount < 0)) {
+      return { ok: false, error: 'tron.maxDailyTxCount must be a non-negative integer' };
+    }
+    if (tron.requireMemo !== undefined && typeof tron.requireMemo !== 'boolean') {
+      return { ok: false, error: 'tron.requireMemo must be true or false' };
+    }
+  }
   // updatedAt: we set this ourselves, so anything from input is overwritten
 
   const policy: AgentPolicy = {
@@ -792,6 +994,7 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     blockedSelectors: o.blockedSelectors as string[] | undefined,
     requireMemo: o.requireMemo as boolean | undefined,
     solana: o.solana as SolanaPolicy | undefined,
+    tron: o.tron as TronPolicy | undefined,
     erc4337: o.erc4337 as Erc4337Policy | undefined,
     notes: o.notes as string | undefined,
     updatedAt: new Date().toISOString(),
