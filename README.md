@@ -519,6 +519,7 @@ The agent‑economy layer: pay for things autonomously, get a human‑readable i
 |---|---|
 | `chaingpt_x402_decode` | Decode an x402 `402` challenge / `X‑PAYMENT` header into human terms before paying |
 | `chaingpt_x402_build_payment` | Build the UNSIGNED EIP‑3009 `transferWithAuthorization` typed data; return the `X‑PAYMENT` header once signed |
+| `chaingpt_x402_fetch` | Fetch an x402‑gated URL end‑to‑end: handle the `402`, attach the signed payment, retry |
 | `chaingpt_x402_facilitator` | Call a facilitator — `supported` / `verify` / `settle` |
 | `chaingpt_x402_create_requirements` | Generate `PaymentRequirements` + a 402 body to monetize your own API |
 | `chaingpt_base_resolve_name` | Resolve `name.base.eth` ↔ address (forward + reverse) — *verified live on Base mainnet* |
@@ -540,11 +541,12 @@ The agent‑economy layer: pay for things autonomously, get a human‑readable i
 | `chaingpt_chat` | Ask the Web3 AI chatbot — crypto‑native LLM with live on‑chain data |
 | `chaingpt_chat_with_context` | Branded chatbot with company / token context injection |
 | `chaingpt_chat_history` | Retrieve past conversations by session id |
-| `chaingpt_nft_generate_image` · `_enhance_prompt` · `_generate_and_mint` · `_get_chains` | Generate AI art, mint on 22+ chains |
-| `chaingpt_audit_contract` | AI security audit with scored report |
-| `chaingpt_generate_contract` | Natural language → production Solidity |
+| `chaingpt_nft_generate_image` · `_enhance_prompt` · `_surprise_me` · `_generate_multiple` · `_generate_and_mint` · `_get_chains` · `_get_collections` | Generate AI art (7 tools), mint on 22+ chains |
+| `chaingpt_audit_contract` · `chaingpt_audit_history` | AI security audit with scored report + past audits |
+| `chaingpt_generate_contract` · `chaingpt_generate_history` | Natural language → production Solidity + past generations |
 | `chaingpt_news_fetch` · `chaingpt_news_categories` | Crypto news with category + token filters |
-| `chaingpt_estimate_credits` · `chaingpt_check_balance` | Cost + balance utilities |
+
+(`chaingpt_estimate_credits` and `chaingpt_check_balance` are counted under Utility.)
 
 ### Web3 toolkit (14 tools)
 
@@ -636,8 +638,10 @@ Live mainnet data. Hyperliquid supports **signed EIP‑712 L1 actions** (custody
 
 | Tool | What it does |
 |---|---|
-| `chaingpt_defi_marginfi_banks` · `_account` | Marginfi v2 banks + user account |
-| `chaingpt_defi_kamino_markets` · `_vaults` | Kamino markets + automated yield vaults |
+| `chaingpt_defi_marginfi_banks` · `_account` | Marginfi v2 banks + user account (read) |
+| `chaingpt_defi_marginfi_deposit_tx` · `_withdraw_tx` | Marginfi deposit / withdraw (custody‑free, mainnet‑verified, simulated) |
+| `chaingpt_defi_kamino_markets` · `_vaults` | Kamino markets + automated yield vaults (read) |
+| `chaingpt_defi_kamino_deposit_tx` · `_withdraw_tx` | Kamino deposit / withdraw (custody‑free, mainnet‑verified, simulated) |
 
 ### Tron (TVM) — 14 tools
 
@@ -657,9 +661,10 @@ Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as
 | Tool | What it does |
 |---|---|
 | `chaingpt_portfolio_snapshot` | Fan‑out parallel to HL + PM + Morpho + Drift for one user |
-| `chaingpt_strategy_dca` · `_grid` · `_funding_arb` · `_copy_trade` | Strategy template planners |
+| `chaingpt_strategy_dca_plan` · `_grid_plan` · `_funding_arb_plan` · `_copy_plan` | Strategy template planners (DCA, grid, funding‑arb, copy‑trade) |
 | `chaingpt_strategy_save_plan` · `_load_plan` · `_list_plans` · `_delete_plan` | Persist strategy plans to `~/.chaingpt-mcp/plans/` |
-| `chaingpt_backtest_grid` | Replay a buy/sell ladder against historical CoinGecko prices; reports realized P&L from grid spreads vs buy‑and‑hold |
+| `chaingpt_strategy_due_steps` · `_mark_step` | Crash‑safe execution journal (scheduled re‑runs can't double‑buy) |
+| `chaingpt_backtest_dca` · `_grid` | Replay DCA / grid ladders against historical CoinGecko prices; realized P&L vs buy‑and‑hold |
 
 ### Agent wallet (7 tools)
 
