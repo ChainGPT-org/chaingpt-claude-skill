@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.22.2] - 2026-06-29
+### Fixed — duplicate hooks-file load error
+The plugin loaded with `Failed to load hooks … Duplicate hooks file detected:
+./hooks/hooks.json`. Claude Code auto-loads the standard `hooks/hooks.json`, so
+`plugin.json` must not also reference it — `manifest.hooks` is only for
+*additional* hook files. Removed the redundant `"hooks": "./hooks/hooks.json"`
+key from `.claude-plugin/plugin.json`; the `mainnet-guard` PreToolUse hook still
+loads automatically. No functional change to the hook.
+
 ## [1.22.1] - 2026-06-28
 ### Fixed — plugin install no longer fails to start the MCP server (`-32000`)
 A fresh `claude plugin install` could not start the MCP server, surfacing as
