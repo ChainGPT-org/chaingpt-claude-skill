@@ -134,7 +134,7 @@ You'll see: `✓ Installed chaingpt. Run /reload-plugins to apply.`
 > [!TIP]
 > Shortcut if you don't want to use the picker: `/plugin install chaingpt@chaingpt-claude-skill` (one shot, no picker).
 
-### Step 4 — Reload plugins
+### Step 4 — Load the plugin
 
 Same Claude Code session:
 
@@ -144,7 +144,8 @@ Same Claude Code session:
 
 This re‑scans installed plugins, spawns the ChainGPT MCP server over stdio, and registers all 24 sub‑skills + 154 MCP tools.
 
-**Alternative:** quit Claude Code (`/quit` or Cmd+Q) and relaunch. Plugins are loaded at startup.
+> [!IMPORTANT]
+> Because this plugin ships an **MCP server**, `/reload-plugins` may warn that it can't apply the MCP change in‑place and skip it — in which case the plugin won't appear in `/plugin` or `/mcp`. If that happens, run `/reload-plugins --force`, **or just quit Claude Code (`/quit` or Cmd+Q) and relaunch**. A full restart is the most reliable way to load the plugin and its MCP server, since plugins are loaded at startup. After a fresh install the MCP server also runs a one‑time `npm install` on first launch (~30–60s) before it shows `connected`.
 
 ### Step 5 — Set your API key (optional but recommended)
 
@@ -254,8 +255,8 @@ Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.
 | Symptom | Fix |
 |---|---|
 | `Marketplace 'ChainGPT-org/chaingpt-claude-skill' not found` | You skipped Step 2. Run `/plugin marketplace add ChainGPT-org/chaingpt-claude-skill` first. |
-| `/plugin install` ran but no `chaingpt` server in `/mcp` | You skipped Step 4 (`/reload-plugins`) or never restarted Claude Code. Plugins load at startup. |
-| `Unknown command: /chaingpt:dashboard` | The plugin isn't installed or wasn't reloaded. Repeat Steps 3 + 4. |
+| `/plugin install` ran but the plugin / `chaingpt` server doesn't show up in `/plugin` or `/mcp` | `/reload-plugins` skipped the MCP change in‑place. Run `/reload-plugins --force`, or **fully quit Claude Code and relaunch** — plugins + MCP servers load at startup. (Reinstalling in the same session won't take effect until then.) |
+| `Unknown command: /chaingpt:dashboard` | The plugin isn't installed or wasn't loaded. Repeat Steps 3 + 4 (use `/reload-plugins --force` or restart). |
 | Dashboard URL prints but browser shows "can't connect" | The dashboard server exited (the demo-test process might have ended). Re-run `/chaingpt:dashboard` to boot it again. |
 | Dashboard login says "Invalid token" | Tokens rotate every time the dashboard starts. Use the **most recent** token printed by the most recent `/chaingpt:dashboard` call. |
 | Port 8788 already in use | `/chaingpt:dashboard 9999` (or any free port). |
