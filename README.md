@@ -23,6 +23,25 @@ One install gives Claude Code 154 MCP tools across **ChainGPT AI products** (cha
 
 ---
 
+## ⚡ Install (2 commands)
+
+In the Claude Code prompt, paste these two lines:
+
+```text
+/plugin marketplace add ChainGPT-org/chaingpt-claude-skill
+/plugin install chaingpt@chaingpt-claude-skill
+```
+
+Then **fully restart Claude Code** (quit and relaunch) — or run `/reload-plugins --force`. The plugin ships an MCP server, so a plain `/reload-plugins` won't load it. First launch installs dependencies once (~30–60s). Verify with `/mcp` — you'll see `chaingpt` **connected**.
+
+That's it. Optional API key (only for the ChainGPT chat / NFT / audit / news tools — everything on-chain works without it) and the guided walkthrough are in the [full Quickstart](#-quickstart).
+
+> **Don't have Claude Code yet?** Install it first, then run the two commands above.
+> ```bash
+> curl -fsSL https://claude.ai/install.sh | bash   # macOS / Linux
+> ```
+> Windows: download from <https://code.claude.com/download>. More detail in [Step 1](#-quickstart).
+
 <br/>
 
 ## 👀 60-second tour
