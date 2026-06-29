@@ -88,6 +88,27 @@ jobs:
       - name: Compile every Solidity block under patterns/
         run: node scripts/check-patterns.mjs
 
+  build-check:
+    name: committed dist/ is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      # The plugin ships mcp-server/dist/ prebuilt (Claude Code runs no build on
+      # install). Rebuild from src and fail if the committed output drifted —
+      # otherwise users would silently run a stale server.
+      - name: Rebuild and diff committed dist/
+        run: |
+          cd mcp-server && npm ci && npm run build
+          git diff --exit-code -- dist \
+            || { echo "::error::mcp-server/dist is stale — run 'npm run build' in mcp-server and commit the result"; exit 1; }
+
   boot-smoke:
     name: MCP server boot smoke (tools/list)
     runs-on: ubuntu-latest

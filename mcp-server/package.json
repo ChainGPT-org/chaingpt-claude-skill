@@ -1,6 +1,6 @@
 {
   "name": "@chaingpt/mcp-server",
-  "version": "1.22.0",
+  "version": "1.22.1",
   "description": "MCP server exposing ChainGPT Web3 AI APIs + generic Web3 tools + mainnet deploy + mainnet DEX (OpenOcean + 1inch + CoW + Jupiter) + mainnet DeFi (Aave + Lido + EigenLayer + Pendle + Morpho) + perps (Hyperliquid + Drift) + Polymarket + Across cross-chain bridge + multi-protocol portfolio snapshot as tools for Claude",
   "main": "dist/index.js",
   "bin": {
@@ -8,7 +8,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc",
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "dev": "ts-node --esm src/index.ts",
     "test": "vitest run",

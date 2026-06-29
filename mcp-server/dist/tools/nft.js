@@ -1,0 +1,439 @@
+import { Nft } from '@chaingpt/nft';
+let _nft = null;
+function getClient() {
+    if (!_nft) {
+        _nft = new Nft({ apiKey: process.env.CHAINGPT_API_KEY });
+    }
+    return _nft;
+}
+export const nftTools = [
+    {
+        name: 'chaingpt_nft_generate_image',
+        description: 'Generate an AI image from a text prompt using ChainGPT NFT Generator. Returns base64-encoded image data. Costs 1 credit base (+ upscale/model surcharges). Models: velogen (fast, 1-4 steps), nebula_forge_xl (quality, 1-50 steps), VisionaryForge (quality, 1-50 steps), Dale3 (4.75 credits, fixed 1024x1024).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                prompt: {
+                    type: 'string',
+                    description: 'Text description of the image to generate',
+                },
+                model: {
+                    type: 'string',
+                    description: 'AI model to use for generation',
+                    enum: ['velogen', 'nebula_forge_xl', 'VisionaryForge', 'Dale3'],
+                    default: 'velogen',
+                },
+                width: {
+                    type: 'number',
+                    description: 'Image width in pixels (512-1024 depending on model)',
+                    default: 512,
+                },
+                height: {
+                    type: 'number',
+                    description: 'Image height in pixels (512-1024 depending on model)',
+                    default: 512,
+                },
+                steps: {
+                    type: 'number',
+                    description: 'Inference steps. velogen: 1-4 (default 2), nebula/visionary: 1-50 (default 25), Dale3: N/A',
+                    default: 2,
+                },
+                enhance: {
+                    type: 'string',
+                    description: 'Upscale option. "1x" adds +1 credit, "2x" adds +2 credits',
+                    enum: ['original', '1x', '2x'],
+                    default: 'original',
+                },
+                style: {
+                    type: 'string',
+                    description: 'Art style to apply',
+                    enum: [
+                        '3d-model',
+                        'analog-film',
+                        'anime',
+                        'cinematic',
+                        'comic-book',
+                        'digital-art',
+                        'enhance',
+                        'fantasy-art',
+                        'isometric',
+                        'line-art',
+                        'low-poly',
+                        'neon-punk',
+                        'origami',
+                        'photographic',
+                        'pixel-art',
+                        'texture',
+                        'craft-clay',
+                    ],
+                },
+                image: {
+                    type: 'string',
+                    description: 'URL of an input image for image-to-image generation. The AI will use this as a reference.',
+                },
+                isCharacterPreserve: {
+                    type: 'boolean',
+                    description: 'Preserve character identity across generations. Adds +5 credits to the cost.',
+                    default: false,
+                },
+            },
+            required: ['prompt'],
+        },
+    },
+    {
+        name: 'chaingpt_nft_enhance_prompt',
+        description: 'Enhance a text prompt using AI for better NFT/image generation results. Returns an improved, detailed prompt. Costs 0.5 credits.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                prompt: {
+                    type: 'string',
+                    description: 'The original prompt to enhance',
+                },
+            },
+            required: ['prompt'],
+        },
+    },
+    {
+        name: 'chaingpt_nft_get_chains',
+        description: 'List all blockchain networks supported for NFT minting, with their chain IDs. Free (0 credits).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                testNet: {
+                    type: 'boolean',
+                    description: 'If true, return testnet chains instead of mainnet',
+                    default: false,
+                },
+            },
+            required: [],
+        },
+    },
+    {
+        name: 'chaingpt_nft_generate_and_mint',
+        description: 'Full pipeline: generate an NFT image from a prompt, queue it for on-chain minting, poll for completion, and prepare mint metadata. Returns collection ID and IPFS metadata. Requires wallet address and target chain.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                prompt: {
+                    type: 'string',
+                    description: 'Text description of the NFT to generate',
+                },
+                model: {
+                    type: 'string',
+                    enum: ['velogen', 'nebula_forge_xl', 'VisionaryForge', 'Dale3'],
+                    default: 'velogen',
+                },
+                walletAddress: {
+                    type: 'string',
+                    description: 'Destination wallet address for the NFT',
+                },
+                chainId: {
+                    type: 'number',
+                    description: 'Target blockchain chain ID (e.g. 1=Ethereum, 56=BSC, 137=Polygon, 8453=Base, 42161=Arbitrum)',
+                },
+                name: {
+                    type: 'string',
+                    description: 'NFT collection name',
+                },
+                description: {
+                    type: 'string',
+                    description: 'NFT collection description',
+                },
+                symbol: {
+                    type: 'string',
+                    description: 'NFT collection symbol (e.g. "MYNFT")',
+                },
+                amount: {
+                    type: 'number',
+                    description: 'Number of NFTs to generate (default 1)',
+                    default: 1,
+                },
+                steps: {
+                    type: 'number',
+                    description: 'Inference steps',
+                    default: 2,
+                },
+                enhance: {
+                    type: 'string',
+                    enum: ['original', '1x', '2x'],
+                    default: 'original',
+                },
+                style: {
+                    type: 'string',
+                    description: 'Art style',
+                },
+            },
+            required: ['prompt', 'walletAddress', 'chainId', 'name'],
+        },
+    },
+    {
+        name: 'chaingpt_nft_surprise_me',
+        description: 'Get a random creative AI-generated prompt suggestion for NFT art. Free (0 credits). Great for inspiration.',
+        inputSchema: {
+            type: 'object',
+            properties: {},
+            required: [],
+        },
+    },
+    {
+        name: 'chaingpt_nft_generate_multiple',
+        description: 'Generate multiple AI images from a single prompt. Returns an array of base64-encoded images. Cost scales per image.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                prompt: {
+                    type: 'string',
+                    description: 'Text description of the images to generate',
+                },
+                model: {
+                    type: 'string',
+                    enum: ['velogen', 'nebula_forge_xl', 'VisionaryForge', 'Dale3'],
+                    default: 'velogen',
+                },
+                count: {
+                    type: 'number',
+                    description: 'Number of images to generate (default 2)',
+                    default: 2,
+                },
+                width: { type: 'number', default: 512 },
+                height: { type: 'number', default: 512 },
+                steps: { type: 'number', default: 2 },
+            },
+            required: ['prompt'],
+        },
+    },
+    {
+        name: 'chaingpt_nft_get_collections',
+        description: 'List NFT collections associated with your API key. Filter by wallet, mint status, visibility, name, or symbol. Free (0 credits).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                walletAddress: {
+                    type: 'string',
+                    description: 'Filter by wallet address',
+                },
+                page: {
+                    type: 'number',
+                    description: 'Page number for pagination',
+                    default: 1,
+                },
+                limit: {
+                    type: 'number',
+                    description: 'Results per page',
+                    default: 10,
+                },
+                isPublic: {
+                    type: 'boolean',
+                    description: 'Filter by public visibility',
+                },
+                isDraft: {
+                    type: 'boolean',
+                    description: 'Filter draft collections',
+                },
+                isMinted: {
+                    type: 'boolean',
+                    description: 'Filter minted collections',
+                },
+                name: {
+                    type: 'string',
+                    description: 'Filter by collection name',
+                },
+                symbol: {
+                    type: 'string',
+                    description: 'Filter by collection symbol',
+                },
+            },
+            required: [],
+        },
+    },
+];
+export async function handleNftTool(name, args) {
+    if (!args) {
+        return { content: [{ type: 'text', text: 'Error: No arguments provided' }] };
+    }
+    try {
+        if (name === 'chaingpt_nft_generate_image') {
+            const result = await getClient().generateImage({
+                prompt: args.prompt,
+                model: (args.model || 'velogen'),
+                width: args.width || 512,
+                height: args.height || 512,
+                steps: args.steps || 2,
+                ...(args.walletAddress ? { walletAddress: args.walletAddress } : {}),
+                ...(args.enhance ? { enhance: args.enhance } : {}),
+                ...(args.style ? { style: args.style } : {}),
+                ...(args.image ? { image: args.image } : {}),
+                ...(args.isCharacterPreserve ? { isCharacterPreserve: true } : {}),
+            });
+            // Convert byte array to base64 data URI
+            const data = result.data;
+            if (data && Array.isArray(data)) {
+                const buffer = Buffer.from(data);
+                const base64 = buffer.toString('base64');
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `Image generated successfully.\n\nBase64 data URI (JPEG):\ndata:image/jpeg;base64,${base64.substring(0, 200)}...\n\nFull base64 length: ${base64.length} characters\n\nTo display this image, the full base64 string would need to be rendered in an <img> tag or saved to a file.`,
+                        },
+                    ],
+                };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        if (name === 'chaingpt_nft_enhance_prompt') {
+            const result = await getClient().enhancePrompt({
+                prompt: args.prompt,
+            });
+            const enhanced = result.enhancedPrompt ??
+                result.data?.enhancedPrompt ??
+                JSON.stringify(result);
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Enhanced prompt:\n\n${enhanced}`,
+                    },
+                ],
+            };
+        }
+        if (name === 'chaingpt_nft_get_chains') {
+            const result = await getClient().getChains(args.testNet ?? false);
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Supported chains for NFT minting:\n\n${JSON.stringify(result, null, 2)}`,
+                    },
+                ],
+            };
+        }
+        if (name === 'chaingpt_nft_generate_and_mint') {
+            // Step 1: Queue NFT generation
+            const generation = await getClient().generateNftWithQueue({
+                prompt: args.prompt,
+                model: (args.model || 'velogen'),
+                height: 512,
+                width: 512,
+                steps: args.steps || 2,
+                walletAddress: args.walletAddress,
+                chainId: args.chainId,
+                amount: args.amount || 1,
+                ...(args.enhance ? { enhance: args.enhance } : {}),
+                ...(args.style ? { style: args.style } : {}),
+            });
+            const collectionId = generation?.data?.collectionId ?? generation?.collectionId;
+            if (!collectionId) {
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `NFT generation queued but no collection ID returned. Response: ${JSON.stringify(generation)}`,
+                        },
+                    ],
+                };
+            }
+            // Step 2: Poll for completion (max 60 attempts = ~3 minutes)
+            let status = 'processing';
+            let attempts = 0;
+            while (status !== 'completed' && attempts < 60) {
+                await new Promise((r) => setTimeout(r, 3000));
+                const progress = await getClient().getNftProgress({ collectionId });
+                status = progress.status || 'unknown';
+                attempts++;
+                if (status === 'failed' || status === 'error') {
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: `NFT generation failed. Collection ID: ${collectionId}, Status: ${status}`,
+                            },
+                        ],
+                    };
+                }
+            }
+            if (status !== 'completed') {
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `NFT generation timed out after ${attempts * 3}s. Collection ID: ${collectionId}. You can check progress manually or try again.`,
+                        },
+                    ],
+                };
+            }
+            // Step 3: Mint
+            const minted = await getClient().mintNft({
+                collectionId,
+                name: args.name,
+                description: args.description || '',
+                ids: Array.from({ length: args.amount || 1 }, (_, i) => i + 1),
+            });
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `NFT generated and minted successfully!\n\nCollection ID: ${collectionId}\nName: ${args.name}\nSymbol: ${args.symbol}\nChain ID: ${args.chainId}\nWallet: ${args.walletAddress}\n\nMint result:\n${JSON.stringify(minted, null, 2)}`,
+                    },
+                ],
+            };
+        }
+        if (name === 'chaingpt_nft_surprise_me') {
+            const result = await getClient().surpriseMe();
+            const prompt = result?.prompt ?? result?.data?.prompt ?? JSON.stringify(result);
+            return {
+                content: [{ type: 'text', text: `Random NFT prompt suggestion:\n\n${prompt}` }],
+            };
+        }
+        if (name === 'chaingpt_nft_generate_multiple') {
+            const numImages = args.count || 2;
+            const promptsArray = Array(numImages).fill(args.prompt);
+            const buffers = await getClient().generateMultipleImages({
+                prompts: promptsArray,
+                model: (args.model || 'velogen'),
+                width: args.width || 512,
+                height: args.height || 512,
+                steps: args.steps || 2,
+            });
+            const count = Array.isArray(buffers) ? buffers.length : 0;
+            const summaries = Array.isArray(buffers)
+                ? buffers.map((buf, i) => {
+                    const b64 = Buffer.from(buf).toString('base64');
+                    return `Image ${i + 1}: ${b64.length} chars base64`;
+                })
+                : ['No images returned'];
+            return {
+                content: [{ type: 'text', text: `Generated ${count} images:\n${summaries.join('\n')}` }],
+            };
+        }
+        if (name === 'chaingpt_nft_get_collections') {
+            const options = {};
+            if (args.walletAddress)
+                options.walletAddress = args.walletAddress;
+            if (args.page)
+                options.page = args.page;
+            if (args.limit)
+                options.limit = args.limit;
+            if (args.isPublic !== undefined)
+                options.isPublic = args.isPublic;
+            if (args.isDraft !== undefined)
+                options.isDraft = args.isDraft;
+            if (args.isMinted !== undefined)
+                options.isMinted = args.isMinted;
+            if (args.name)
+                options.name = args.name;
+            if (args.symbol)
+                options.symbol = args.symbol;
+            const result = await getClient().getCollections(options);
+            return {
+                content: [{ type: 'text', text: `NFT Collections:\n\n${JSON.stringify(result, null, 2)}` }],
+            };
+        }
+        return { content: [{ type: 'text', text: `Unknown NFT tool: ${name}` }] };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`ChainGPT NFT error: ${message}`);
+    }
+}

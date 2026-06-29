@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.22.1] - 2026-06-28
+### Fixed — plugin install no longer fails to start the MCP server (`-32000`)
+A fresh `claude plugin install` could not start the MCP server, surfacing as
+`Failed to reconnect to plugin:chaingpt:chaingpt: -32000`. Root cause: the
+plugin shipped TypeScript source only — `dist/` and `node_modules/` are
+`.gitignore`d, and **Claude Code runs no build/install step on plugin install**
+(it copies files as-is). So `.mcp.json`'s `node …/dist/index.js` had nothing to
+run.
+
+- **Ship `dist/` prebuilt.** `mcp-server/dist/` is now committed (un-ignored);
+  a `build-check` CI job fails if it ever drifts from `src/`.
+- **Zero-dep launcher** (`mcp-server/launch.mjs`) is the new MCP entrypoint. On
+  first launch (and after an update wipes the cache) it runs `npm install
+  --omit=dev` once — sending all output to stderr so stdout stays a clean
+  JSON-RPC channel — then imports the prebuilt server. Subsequent launches skip
+  straight to boot. Deps can't be bundled into one file (solc loads its compiler
+  blob via runtime require), hence the one-time install.
+
+No tool or API behavior changed; 154 tools as in 1.22.0.
+
 ## [1.22.0] - 2026-06-15
 ### Added — Tron (TVM): full non-EVM chain support at parity with EVM + Solana
 Tron joins as a first-class non-EVM chain (`chainId: null`), the same way Solana did. The agent's Tron account is controlled by the SAME secp256k1 key as the EVM keystore — only the address encoding differs (`0x41` + Base58Check) — so there is NO separate keystore. Custody-free by default (every builder returns an UNSIGNED tx for TronLink / external signing, mainnet-ack-gated); the agent-wallet path signs autonomously behind a new deterministic `tron` policy chokepoint. Signing is build-via-node then verify-`txID == SHA256(raw_data_hex)`-and-sign-locally: no protobuf hand-rolling, ZERO new dependencies (sha256 / secp256k1 / ABI from viem, base58 hand-rolled + golden-vector tested).
