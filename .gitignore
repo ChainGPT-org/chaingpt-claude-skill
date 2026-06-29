@@ -3,6 +3,10 @@ node_modules/
 
 # Build output
 dist/
+# …except the MCP server's dist, shipped prebuilt because Claude Code runs no
+# build step on plugin install. Kept in sync with src by the build-check CI.
+!mcp-server/dist/
+!mcp-server/dist/**
 
 # Environment
 .env

@@ -8,7 +8,7 @@
 
 One install gives Claude Code 154 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
 
-[![npm version](https://img.shields.io/badge/version-1.22.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+[![npm version](https://img.shields.io/badge/version-1.22.1-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-491%20vitest%20%2B%2026%20mock%20%2B%2039%20live--smoke-brightgreen?style=flat-square)](#-testing)
 [![Live-API smoke](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml/badge.svg)](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml)
