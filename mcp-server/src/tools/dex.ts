@@ -53,6 +53,46 @@ function normalizeTokenAddress(addr: string): string {
   return lower;
 }
 
+// OpenOcean v4's keyless endpoint is up and its payload shape is unchanged, but
+// its latency is severely heavy-tailed and degrades under sustained use — it
+// appears to throttle by tarpitting rather than by returning HTTP 429. Measured
+// against the exact URL the daily smoke calls (2026-07-25, ~70 live probes):
+// every response HTTP 200 with the same shape, but time-to-first-byte ran
+// 0.65s (p50 early) → 10.1s → 22.7s as probing continued. Plain `curl` sees the
+// same spread, so this is the upstream, not our HTTP client.
+//
+// A single 15s ceiling with no retry therefore aborts at random — that is what
+// broke the smoke ("This operation was aborted", ~15.0s elapsed). Attempt one
+// keeps the historical 15s budget so nothing that used to succeed now gets cut
+// short; the retry gets a wider 25s window to ride out a tarpit spell. Worst
+// case is bounded at 40s, well inside the smoke's 10-minute CI budget.
+//
+// Only timeouts/aborts are retried. An HTTP 4xx/5xx or a malformed payload is a
+// real failure and still surfaces on the first attempt. Both `quote` and `swap`
+// are read-only (swap returns unsigned calldata, it does not broadcast), so
+// re-issuing the request has no side effects.
+const OPENOCEAN_ATTEMPT_TIMEOUTS_MS = [15_000, 25_000];
+
+function isTransientTimeout(err: any): boolean {
+  return err?.name === 'AbortError' || /abort|timed? ?out/i.test(err?.message ?? '');
+}
+
+async function openOceanJson<T = any>(url: string): Promise<T> {
+  for (const timeoutMs of OPENOCEAN_ATTEMPT_TIMEOUTS_MS) {
+    try {
+      return await httpJson<T>(url, { timeoutMs });
+    } catch (err) {
+      if (!isTransientTimeout(err)) throw err;
+    }
+  }
+  const budget = OPENOCEAN_ATTEMPT_TIMEOUTS_MS.map((ms) => `${ms / 1000}s`).join(' then ');
+  throw new Error(
+    `OpenOcean did not respond in time (${budget}). The aggregator is reachable but ` +
+      `is currently rate-limiting by delay; the quote is unavailable right now — retry ` +
+      `in a moment.`
+  );
+}
+
 // ─── ERC-20 ABI fragments for approval helper ──────────────────────
 const ERC20_ALLOWANCE_ABI = {
   type: 'function',
@@ -293,7 +333,7 @@ export async function handleDexTool(
         gasPrice: String(resolvedGasPrice),
       });
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await openOceanJson<any>(url);
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
