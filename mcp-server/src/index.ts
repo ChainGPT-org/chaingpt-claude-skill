@@ -13,6 +13,7 @@ import { nftTools, handleNftTool } from './tools/nft.js';
 import { auditTools, handleAuditTool } from './tools/audit.js';
 import { generatorTools, handleGeneratorTool } from './tools/generator.js';
 import { newsTools, handleNewsTool } from './tools/news.js';
+import { signalsTools, handleSignalsTool } from './tools/signals.js';
 import { utilTools, handleUtilTool } from './tools/utils.js';
 import { walletTools, handleWalletTool } from './tools/wallet.js';
 import { researchTools, handleResearchTool } from './tools/research.js';
@@ -74,6 +75,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...auditTools,
     ...generatorTools,
     ...newsTools,
+    ...signalsTools,
     ...utilTools,
     ...walletTools,
     ...researchTools,
@@ -120,6 +122,7 @@ const KEY_REQUIRED_PREFIXES = [
   'chaingpt_audit',
   'chaingpt_generate',
   'chaingpt_news',
+  'chaingpt_signals',
   'chaingpt_intel',
 ];
 
@@ -154,6 +157,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     //   chaingpt_audit*      -> audit handler
     //   chaingpt_generate*   -> generator handler
     //   chaingpt_news*       -> news handler
+    //   chaingpt_signals*    -> signals handler (AI Signals feed — burns credits)
     //
     // Tier 1 — generic Web3 toolkit (new in 1.2):
     //   chaingpt_wallet*     -> wallet handler  (balances/positions/pnl)
@@ -168,6 +172,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_audit')) return await handleAuditTool(name, args);
     if (name.startsWith('chaingpt_generate')) return await handleGeneratorTool(name, args);
     if (name.startsWith('chaingpt_news')) return await handleNewsTool(name, args);
+    if (name.startsWith('chaingpt_signals')) return await handleSignalsTool(name, args);
     if (name.startsWith('chaingpt_wallet')) return await handleWalletTool(name, args);
     if (name.startsWith('chaingpt_research')) return await handleResearchTool(name, args);
     if (name.startsWith('chaingpt_risk')) return await handleRiskTool(name, args);
