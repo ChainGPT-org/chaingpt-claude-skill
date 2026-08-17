@@ -345,6 +345,13 @@ contract Hello { string public greeting = "hi"; }`,
         expect: /Saved strategy plans/i,
     },
     // ─── Grid backtester ─────────────────────────────────────────────
+    // CoinGecko's keyless tier rate-limits per IP in bursts: once tripped it
+    // 429s *every* endpoint (/ping included) for a window, then recovers on
+    // its own. Shared CI egress makes that likely on any given run. The shape
+    // is unchanged — a request that gets through still returns
+    // {prices: [[ts, price], …]} — so a 429 says nothing about our parser.
+    // degradedOk keeps the case visible as WARN instead of failing the run on
+    // someone else's rate limit; any non-429 failure still hard-fails.
     {
         name: 'backtest_grid (ethereum, 30d, 90-110 range)',
         fn: () => handleStrategyTool('chaingpt_backtest_grid', {
@@ -356,6 +363,7 @@ contract Hello { string public greeting = "hi"; }`,
             totalBudget: 1000,
         }),
         expect: /Backtest — Grid|Not enough price data/i,
+        degradedOk: /HTTP 429|Too Many Requests|exceeded the Rate Limit/i,
     },
 ];
 let pass = 0;
