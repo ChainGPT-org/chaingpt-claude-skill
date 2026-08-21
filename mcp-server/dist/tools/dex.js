@@ -33,6 +33,34 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// Since ~2026-08 OpenOcean fronts its quote/swap routes with a Cloudflare bot
+// challenge that only admits requests carrying its own dapp Referer; server-side
+// clients get an HTML "Just a moment..." interstitial with HTTP 403. The metadata
+// routes on the same host (tokenList / gasPrice / dexList) still answer normally,
+// so this is a route-level gate rather than an outage, and the response shape is
+// unchanged — nothing to reparse. Surface it as DEGRADED instead of leaking the
+// challenge HTML into the tool output.
+const OPENOCEAN_DEGRADED_HINT = 'OpenOcean quote/swap endpoints are currently gated by a Cloudflare bot challenge for ' +
+    'server-side clients (HTTP 403 "Just a moment..."). EVM swap quotes via OpenOcean are ' +
+    'DEGRADED until OpenOcean restores unauthenticated access. Alternatives: ' +
+    'chaingpt_dex_1inch_quote (set ONEINCH_API_KEY — free tier at https://1inch.dev), ' +
+    'chaingpt_dex_cow_create_order on supported chains, or chaingpt_dex_jupiter_quote on Solana.';
+function isCloudflareChallenge(msg) {
+    return /HTTP 403/.test(msg) && /Just a moment|cf-mitigated|__cf_chl|Cloudflare/i.test(msg);
+}
+/** httpJson + a readable degraded error when OpenOcean serves a bot challenge. */
+async function openOceanJson(url) {
+    try {
+        return await httpJson(url);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (isCloudflareChallenge(msg)) {
+            throw new Error(`${msg}\n\n${OPENOCEAN_DEGRADED_HINT}`);
+        }
+        throw e;
+    }
+}
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -276,7 +304,7 @@ export async function handleDexTool(name, args) {
                 gasPrice: String(resolvedGasPrice),
             });
             const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            const res = await openOceanJson(url);
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {
