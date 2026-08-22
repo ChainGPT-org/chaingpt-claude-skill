@@ -185,6 +185,11 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean put /quote and /swap behind a Cloudflare browser challenge in
+    // 2026-08 (403 "Just a moment...", cf-mitigated: challenge) while sibling
+    // paths on the same host still serve JSON — access gating, not drift. Keep
+    // the case asserting the real shape; WARN instead of FAIL until it reopens.
+    degradedOk: /DEGRADED|Just a moment|cf-mitigated|HTTP 403/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
