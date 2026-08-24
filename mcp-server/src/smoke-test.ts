@@ -185,6 +185,11 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean Cloudflare-challenges /quote from some egress IPs. We defeat the
+    // usual challenge by sending the dapp Referer; if they tighten it further this
+    // stays visible as WARN rather than deleting the case. Deliberately narrow —
+    // only the CF signature matches, so a parser regression still FAILs.
+    degradedOk: /cf-mitigated|Just a moment|403 Forbidden[^\n]*openocean/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
