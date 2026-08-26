@@ -37,6 +37,22 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// 2026-08: OpenOcean put the free v4 `quote`/`swap` paths behind a Cloudflare
+// interactive challenge — every request answers 403 "Just a moment…" with
+// `cf-mitigated: challenge`, on v2/v3/v4 and every chain, regardless of
+// user-agent. Metadata paths (gasPrice, tokenList, dexList) still answer 200,
+// and the keyed Pro host answers 401 "No API key found in request".
+// The legacy per-chain-id host is un-gated and serves the SAME JSON shape,
+// so we fall back to it. Differences vs v4: the path segment is a numeric
+// chain id, `amount` is in base units (wei) instead of decimals, and
+// `gasPrice` is in wei instead of gwei.
+// v4 stays the primary so the tool self-heals the day the challenge lifts.
+const OPENOCEAN_LEGACY_BASE = 'https://ethapi.openocean.finance/v2';
+
+const OPENOCEAN_DEGRADED_HINT =
+  'Both OpenOcean hosts are unreachable (v4 open-api is Cloudflare-gated; the legacy host failed too). ' +
+  'EVM swap quotes are DEGRADED until one of them returns. ' +
+  'Solana quotes (chaingpt_dex_jupiter_quote) are unaffected.';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -215,6 +231,43 @@ function formatLargeFloat(n: number, decimals = 6): string {
   return n.toFixed(decimals);
 }
 
+/**
+ * Fallback quote/swap fetch against the legacy OpenOcean host, used when the
+ * v4 open-api host answers with a Cloudflare challenge. Returns the same JSON
+ * shape as v4, minus the {code, data} envelope — see the unwrap in the caller.
+ *
+ * The input amount must be converted to base units here, so this costs one
+ * extra `decimals()` RPC call for ERC-20 inputs. That's why it only runs on
+ * the fallback path, never on the happy path.
+ */
+async function openoceanLegacy(
+  network: string,
+  path: string,
+  q: {
+    inToken: string;
+    outToken: string;
+    amountIn: string;
+    slippagePct: number;
+    account: string;
+    gasPriceWei: bigint;
+  }
+): Promise<any> {
+  const chainId = CHAINS[network]?.chainId;
+  if (!chainId) throw new Error(`No chain id known for ${network}`);
+  const inDec = q.inToken === NATIVE_ADDR ? 18 : await fetchErc20Decimals(network, q.inToken);
+  const params = new URLSearchParams({
+    inTokenAddress: q.inToken,
+    outTokenAddress: q.outToken,
+    amount: parseUnits(q.amountIn, inDec).toString(),
+    slippage: String(q.slippagePct),
+    account: q.account,
+    // v2 wants wei, not gwei. Getting this wrong would put a wei-scale gasPrice
+    // on the built tx and leave it permanently underpriced.
+    gasPrice: (q.gasPriceWei > 0n ? q.gasPriceWei : 1_000_000_000n).toString(),
+  });
+  return httpJson<any>(`${OPENOCEAN_LEGACY_BASE}/${chainId}/${path}?${params.toString()}`);
+}
+
 export async function handleDexTool(
   name: string,
   args: Record<string, unknown> | undefined
@@ -262,6 +315,10 @@ export async function handleDexTool(
       // OpenOcean v4 requires a `gasPrice` query param. If the user didn't supply one,
       // fetch the current chain gas price via the chain's public RPC and pass it in gwei.
       let resolvedGasPrice: number;
+      // The legacy host wants wei, and it echoes what we send back onto the built
+      // tx — so keep the un-truncated wei value when the RPC gave us one. Rounding
+      // 0.006 gwei up to 1 gwei would overprice every Base/Arbitrum swap tx.
+      let resolvedGasPriceWei: bigint | undefined;
       if (gasPriceGwei !== undefined) {
         resolvedGasPrice = gasPriceGwei;
       } else {
@@ -276,6 +333,7 @@ export async function handleDexTool(
         }
         try {
           const gpHex = await jsonRpcFallback<string>(endpoints, 'eth_gasPrice', []);
+          resolvedGasPriceWei = BigInt(gpHex);
           // convert wei → gwei (truncate; OpenOcean accepts integers)
           resolvedGasPrice = Number(BigInt(gpHex) / 1_000_000_000n);
           if (resolvedGasPrice === 0) resolvedGasPrice = 1; // degenerate fallback
@@ -293,8 +351,36 @@ export async function handleDexTool(
         gasPrice: String(resolvedGasPrice),
       });
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
-      const data = res?.data ?? res;
+      let res: any;
+      try {
+        res = await httpJson<any>(url);
+      } catch (v4Err) {
+        // v4 quote/swap is Cloudflare-gated (see OPENOCEAN_LEGACY_BASE above).
+        // Retry on the legacy host before surfacing a failure.
+        try {
+          res = await openoceanLegacy(network, path, {
+            inToken,
+            outToken,
+            amountIn,
+            slippagePct,
+            account,
+            gasPriceWei:
+              resolvedGasPriceWei ?? BigInt(Math.max(1, Math.round(resolvedGasPrice))) * 1_000_000_000n,
+          });
+        } catch (legacyErr) {
+          const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+          throw new Error(
+            `OpenOcean ${path} failed on both hosts.\n` +
+              `  v4     — ${msg(v4Err)}\n` +
+              `  legacy — ${msg(legacyErr)}\n\n` +
+              OPENOCEAN_DEGRADED_HINT
+          );
+        }
+      }
+      // v4 wraps the payload as {code, data:{…}}; the legacy host returns it bare.
+      // Only unwrap when `data` is an object — on a bare `swap` response `data` is
+      // the tx calldata hex string, and unwrapping it would drop every field.
+      const data = res && typeof res.data === 'object' && res.data !== null ? res.data : res;
       if (!data || res?.code && res.code !== 200) {
         return {
           content: [{

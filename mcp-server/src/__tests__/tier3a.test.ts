@@ -116,6 +116,88 @@ describe('Tier-3a quote handlers', () => {
     expect(text).toContain('UniswapV3');
   });
 
+  it('chaingpt_dex_quote falls back to the legacy OpenOcean host when v4 is Cloudflare-gated', async () => {
+    // v4 answers 403 with a Cloudflare challenge; the legacy host answers with
+    // the same payload un-wrapped (no {code,data} envelope) and amounts in wei.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.includes('open-api.openocean.finance')) {
+        return new Response('<!DOCTYPE html><html><title>Just a moment...</title>', {
+          status: 403,
+          statusText: 'Forbidden',
+        });
+      }
+      expect(url).toContain('ethapi.openocean.finance/v2/1/quote');
+      // 0.1 ETH must reach the legacy host in base units, not as "0.1"
+      expect(url).toContain('amount=100000000000000000');
+      return new Response(
+        JSON.stringify({
+          inToken: { symbol: 'ETH', decimals: 18, address: '0xeee' },
+          outToken: { symbol: 'USDC', decimals: 6, address: '0xa0b' },
+          inAmount: '100000000000000000',
+          outAmount: '350000000',
+          estimatedGas: '200000',
+          dexes: [{ dexCode: 'UniswapV3' }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+    const res = await handleDexTool('chaingpt_dex_quote', {
+      network: 'ethereum',
+      inToken: '0x0000000000000000000000000000000000000000',
+      outToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      amountIn: '0.1',
+      gasPriceGwei: 30,
+    });
+    const text = res.content[0].text;
+    expect(text).toContain('Swap quote');
+    expect(text).toContain('350 USDC');
+    expect(text).toContain('UniswapV3');
+  });
+
+  it('chaingpt_dex_build_swap_tx keeps legacy-host tx fields (bare `data` is calldata, not an envelope)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.includes('open-api.openocean.finance')) {
+        return new Response('<!DOCTYPE html><html><title>Just a moment...</title>', {
+          status: 403,
+          statusText: 'Forbidden',
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          inToken: { symbol: 'ETH', decimals: 18, address: '0xeee' },
+          outToken: { symbol: 'USDC', decimals: 6, address: '0xa0b' },
+          inAmount: '100000000000000000',
+          outAmount: '350000000',
+          minOutAmount: '346500000',
+          estimatedGas: '200000',
+          gasPrice: '6000000',
+          to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64',
+          value: '100000000000000000',
+          data: '0x90411a32deadbeef',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+    const res = await handleDexTool('chaingpt_dex_build_swap_tx', {
+      network: 'ethereum',
+      inToken: '0x0000000000000000000000000000000000000000',
+      outToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      amountIn: '0.1',
+      account: '0x1111111111111111111111111111111111111111',
+      gasPriceGwei: 30,
+      acknowledgeMainnet: true,
+    });
+    const text = res.content[0].text;
+    expect(text).toContain('Swap transaction');
+    expect(text).toContain('0x90411a32deadbeef');
+    expect(text).toContain('0x6352a56caadc4f1e25cd6c75970fa768a3304e64');
+    // native swap must carry the value, and gasPrice must stay wei-scale
+    expect(text).toContain('"value": "0x16345785d8a0000"');
+    expect(text).toContain('"gasPrice": "0x5b8d80"');
+  });
+
   it('chaingpt_dex_jupiter_quote surfaces input + output mints', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
