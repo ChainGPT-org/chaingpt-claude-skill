@@ -136,6 +136,12 @@ contract Hello { string public greeting = "hi"; }`,
     },
     // ─── Tier 3a: DEX (quote only — no signing) ──────────────────────
     {
+        // OpenOcean put a Cloudflare managed challenge on its public pricing routes
+        // (/v4/{chain}/quote and /swap) around 2026-08 — they 403 for every API client
+        // while /gasPrice, /dexList and /tokenList still serve normal JSON, so the
+        // response shape is unchanged and the parser stays asserted below. degradedOk
+        // keeps this visible as WARN instead of failing the run; it flips back to a
+        // hard assert the day the route opens up (or when OPENOCEAN_API_KEY is set).
         name: 'dex_quote (ETH→USDC on base)',
         fn: () => handleDexTool('chaingpt_dex_quote', {
             network: 'base',
@@ -145,6 +151,7 @@ contract Hello { string public greeting = "hi"; }`,
         }),
         expect: /Swap quote|expected|USDC/i,
         expectData: /Out \(expected\):\s+[\d.]+/,
+        degradedOk: /DEGRADED|Cloudflare challenge|HTTP 403/i,
     },
     {
         name: 'dex_build_swap_tx (mainnet refusal without ack)',
