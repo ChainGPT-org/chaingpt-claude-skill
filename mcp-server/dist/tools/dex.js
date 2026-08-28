@@ -6,7 +6,9 @@ import { fetchErc20Decimals } from '../lib/agent-erc20.js';
  * Tier-3a DEX trading on mainnet. Custody-free.
  *
  * Backends:
- *  - EVM swaps:      OpenOcean v4 aggregator (no API key, covers all 10 mainnets)
+ *  - EVM swaps:      OpenOcean v4 aggregator (covers all 10 mainnets; the free
+ *                    routing endpoints are Cloudflare-gated as of 2026-08 —
+ *                    set OPENOCEAN_API_KEY for the keyed gateway)
  *  - Solana swaps:   Jupiter v6 (no API key)
  *
  * The plugin returns:
@@ -33,10 +35,51 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// OpenOcean moved its routing endpoints behind a Cloudflare managed challenge
+// in 2026-08: /quote, /quoteAll and /swap on open-api.openocean.finance answer
+// HTTP 403 with `cf-mitigated: challenge` and a "Just a moment…" interstitial,
+// while the metadata routes on the same host (/gasPrice, /tokenList, /dexList)
+// still return 200. So this is route-level gating, not an outage — and it is
+// not something a server-side fetch can solve on its own.
+// The keyed Kong gateway still serves the same v4 routes; it answers
+// 401 {"message":"No API key found in request"} without credentials and
+// expects the key in an `apikey` header. Set OPENOCEAN_API_KEY to use it.
+const OPENOCEAN_PRO_BASE = 'https://open-api-pro.openocean.finance/v4';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
 const EVM_NETWORKS = Object.keys(OPENOCEAN_CHAIN);
+const OPENOCEAN_DEGRADED_HINT = "OpenOcean's free swap-routing endpoints are currently gated behind a Cloudflare managed " +
+    'challenge (open-api.openocean.finance /quote and /swap return 403 `cf-mitigated: challenge`, ' +
+    'while /gasPrice and /tokenList on the same host still return 200). EVM DEX quotes and swap ' +
+    'transactions are DEGRADED until OpenOcean reopens the free routes. ' +
+    'Options: set OPENOCEAN_API_KEY to route through the keyed gateway ' +
+    '(open-api-pro.openocean.finance — https://docs.openocean.finance), or use ' +
+    'chaingpt_dex_1inch_quote for EVM quotes. Solana quotes (chaingpt_dex_jupiter_quote) are unaffected.';
+function openoceanKey() {
+    return process.env.OPENOCEAN_API_KEY?.trim() || null;
+}
+/**
+ * GET an OpenOcean route, using the keyed gateway when OPENOCEAN_API_KEY is
+ * set. A challenge/auth rejection is re-thrown with the degraded hint attached
+ * and the interstitial HTML collapsed, so callers get an explanation instead
+ * of a wall of Cloudflare markup.
+ */
+async function openoceanGet(url) {
+    const key = openoceanKey();
+    try {
+        return await httpJson(url, key ? { headers: { apikey: key } } : {});
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/HTTP (401|403)\b/.test(msg) || /just a moment|cf-mitigated/i.test(msg)) {
+            const status = msg.match(/HTTP (\d{3})/)?.[1] ?? '403';
+            const why = status === '401' ? 'gateway rejected the API key' : 'Cloudflare challenge';
+            throw new Error(`HTTP ${status} for ${url.split('?')[0]} (${why})\n\n${OPENOCEAN_DEGRADED_HINT}`);
+        }
+        throw e;
+    }
+}
 // OpenOcean's "native" token sentinel is 0xEee...EeEEEe. Some EVM aggregators
 // use 0x000...0000. We accept both as input and translate to OO's sentinel.
 const NATIVE_ADDR = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
@@ -275,8 +318,9 @@ export async function handleDexTool(name, args) {
                 account,
                 gasPrice: String(resolvedGasPrice),
             });
-            const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            const ooBase = openoceanKey() ? OPENOCEAN_PRO_BASE : OPENOCEAN_BASE;
+            const url = `${ooBase}/${ooChain}/${path}?${params.toString()}`;
+            const res = await openoceanGet(url);
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {

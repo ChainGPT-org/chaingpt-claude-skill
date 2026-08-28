@@ -185,6 +185,12 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean put the free /quote and /swap routes behind a Cloudflare
+    // managed challenge in 2026-08 (403 + cf-mitigated: challenge) while the
+    // metadata routes on the same host still answer 200. degradedOk keeps the
+    // case visible as WARN without failing the run; it flips back to a hard
+    // assert the day the free routes reopen (or when OPENOCEAN_API_KEY is set).
+    degradedOk: /DEGRADED|cf-mitigated|Just a moment|Cloudflare challenge|403/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
