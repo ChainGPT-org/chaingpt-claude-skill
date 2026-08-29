@@ -33,6 +33,24 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// Since ~2026-08 the free public /quote and /swap paths on open-api.openocean.finance sit behind a
+// Cloudflare managed challenge — HTTP 403 with `cf-mitigated: challenge` and a "Just a moment..."
+// interstitial — while every other v4 path on the same host (tokenList / dexList / gasPrice) still
+// answers 200 JSON. The response shape did not change; only the free tier was gated. The keyed Pro
+// host serves the identical v4 paths and shape, so route through it when OPENOCEAN_API_KEY is set.
+const OPENOCEAN_PRO_BASE = 'https://open-api-pro.openocean.finance/v4';
+function openoceanApiKey() {
+    return process.env.OPENOCEAN_API_KEY?.trim() || null;
+}
+const OPENOCEAN_DEGRADED_HINT = "OpenOcean's free /quote and /swap endpoints are behind a Cloudflare challenge (HTTP 403, " +
+    'cf-mitigated: challenge) that a server cannot solve. EVM swap quotes are DEGRADED until ' +
+    'OpenOcean reopens the free tier. Options: set OPENOCEAN_API_KEY to route via the keyed Pro host ' +
+    '(https://open-api-pro.openocean.finance — key from https://openocean.finance), or use ' +
+    'chaingpt_dex_1inch_quote with ONEINCH_API_KEY. Solana quotes (chaingpt_dex_jupiter_quote) are unaffected.';
+/** True for the gated/challenged responses that mean "upstream refused us", not "we sent a bad request". */
+function isOpenoceanGated(message) {
+    return /HTTP 40[13]\b|Just a moment|cf-mitigated|No API key found|Unauthorized/i.test(message);
+}
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -275,8 +293,20 @@ export async function handleDexTool(name, args) {
                 account,
                 gasPrice: String(resolvedGasPrice),
             });
-            const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            const apiKey = openoceanApiKey();
+            const url = `${apiKey ? OPENOCEAN_PRO_BASE : OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
+            let res;
+            try {
+                res = await httpJson(url, apiKey ? { headers: { apikey: apiKey } } : {});
+            }
+            catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                // Distinguish "OpenOcean refused us" from "our request was wrong" — only the
+                // former is the known degraded state, and it must not read as a plugin bug.
+                if (isOpenoceanGated(msg))
+                    throw new Error(`${msg}\n\n${OPENOCEAN_DEGRADED_HINT}`);
+                throw e;
+            }
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {
