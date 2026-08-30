@@ -37,9 +37,57 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// Keyed tier. Same v4 paths and same response shape as the public host, but
+// authenticated with an `apikey` header instead of being Cloudflare-gated.
+const OPENOCEAN_PRO_BASE = 'https://open-api-pro.openocean.finance/v4';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
+
+// open-api.openocean.finance put its /quote and /swap paths behind a Cloudflare
+// managed challenge in 2026-08: they answer 403 `cf-mitigated: challenge` with a
+// "Just a moment..." interstitial from every datacenter IP, on every chain. The
+// host itself is fine — /gasPrice, /dexList and /tokenList on the same v4 base
+// still return 200 JSON — and open-api-pro serves the same paths behind a key,
+// so this is access gating rather than an endpoint move. Fail with a message
+// that explains the degraded state instead of surfacing a wall of Cloudflare HTML.
+const OPENOCEAN_DEGRADED_HINT =
+  'OpenOcean public quote/swap endpoints are Cloudflare-challenged (403 "Just a moment..."). ' +
+  'EVM swap quotes via OpenOcean are DEGRADED until OpenOcean restores unauthenticated access. ' +
+  'Options: set OPENOCEAN_API_KEY (https://open-api-pro.openocean.finance) to route through the ' +
+  'keyed host, or use chaingpt_dex_1inch_quote (ONEINCH_API_KEY) / chaingpt_dex_cow_create_order instead.';
+
+function openOceanKey(): string | null {
+  return process.env.OPENOCEAN_API_KEY?.trim() || null;
+}
+
+/** Detects the Cloudflare interstitial that the public host now serves on /quote and /swap. */
+function isOpenOceanChallenge(msg: string): boolean {
+  return /HTTP 403/.test(msg) && /Just a moment|cf-mitigated|challenges\.cloudflare\.com/i.test(msg);
+}
+
+/**
+ * Fetch an OpenOcean v4 path, preferring the keyed host when OPENOCEAN_API_KEY
+ * is set. Both hosts return the identical `{ code, data }` envelope, so callers
+ * parse one shape either way.
+ */
+async function openOceanGet<T = any>(chain: string, path: string, query: string): Promise<T> {
+  const key = openOceanKey();
+  const base = key ? OPENOCEAN_PRO_BASE : OPENOCEAN_BASE;
+  try {
+    return await httpJson<T>(`${base}/${chain}/${path}?${query}`, {
+      headers: key ? { apikey: key } : undefined,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Lead with the hint: the raw message is ~400 chars of Cloudflare interstitial
+    // HTML, which buries the explanation in any truncated view of the error.
+    if (!key && isOpenOceanChallenge(msg)) {
+      throw new Error(`${OPENOCEAN_DEGRADED_HINT}\n\nUpstream: ${msg.split(' — ')[0]}`);
+    }
+    throw e;
+  }
+}
 
 const EVM_NETWORKS = Object.keys(OPENOCEAN_CHAIN);
 
@@ -292,8 +340,7 @@ export async function handleDexTool(
         account,
         gasPrice: String(resolvedGasPrice),
       });
-      const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await openOceanGet<any>(ooChain, path, params.toString());
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
