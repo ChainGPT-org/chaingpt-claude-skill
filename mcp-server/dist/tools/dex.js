@@ -33,6 +33,21 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// Since ~2026-08 Cloudflare challenges OpenOcean's pricing paths (/quote, /swap,
+// /swap_quote, and the v3 equivalents): they answer any non-browser client with
+// HTTP 403 + `cf-mitigated: challenge` and a "Just a moment..." interstitial.
+// The rest of the v4 API (/gasPrice, /tokenList, /dexList, /reverseQuote) still
+// serves JSON. /reverseQuote answers the same in→out params with the same payload
+// shape as /quote (inToken/outToken/inAmount/outAmount/estimatedGas/dexes/price_impact),
+// so it is a drop-in read-only fallback. It carries no `to`/`data`, so it can NOT
+// stand in for /swap — build_swap_tx stays on /swap and degrades loudly instead.
+const OPENOCEAN_QUOTE_PATHS = ['quote', 'reverseQuote'];
+const CF_CHALLENGE_RE = /HTTP 403|cf-mitigated|Just a moment/i;
+const OPENOCEAN_DEGRADED_HINT = 'OpenOcean pricing endpoints are behind a Cloudflare challenge (HTTP 403 "Just a moment..." ' +
+    'for non-browser clients). EVM swap pricing is DEGRADED until OpenOcean restores open access. ' +
+    'Options: use chaingpt_dex_1inch_quote or chaingpt_dex_cow_create_order for EVM routing, ' +
+    'or an OpenOcean API key on https://open-api-pro.openocean.finance (which answers 401 ' +
+    '"No API key found in request" rather than challenging).';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -204,6 +219,25 @@ function formatLargeFloat(n, decimals = 6) {
         return `${(n / 1e3).toFixed(2)}K`;
     return n.toFixed(decimals);
 }
+/**
+ * Call OpenOcean, trying each path in order and returning the first JSON answer.
+ * Mirrors the Drift host-fallback helper: try every known route before failing,
+ * and fail with a message that explains the degraded state instead of surfacing
+ * a bare Cloudflare interstitial.
+ */
+async function openOceanFetch(ooChain, paths, params) {
+    let lastErr;
+    for (const path of paths) {
+        try {
+            return await httpJson(`${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`);
+        }
+        catch (e) {
+            lastErr = e;
+        }
+    }
+    const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new Error(CF_CHALLENGE_RE.test(msg) ? `${msg}\n\n${OPENOCEAN_DEGRADED_HINT}` : msg);
+}
 export async function handleDexTool(name, args) {
     if (!args) {
         return { content: [{ type: 'text', text: 'No arguments provided.' }] };
@@ -275,8 +309,7 @@ export async function handleDexTool(name, args) {
                 account,
                 gasPrice: String(resolvedGasPrice),
             });
-            const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            const res = await openOceanFetch(ooChain, path === 'swap' ? ['swap'] : OPENOCEAN_QUOTE_PATHS, params);
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {

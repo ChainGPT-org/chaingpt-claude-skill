@@ -185,6 +185,11 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean's /quote path went behind a Cloudflare challenge in 2026-08
+    // (403 "Just a moment..."); the handler falls back to /reverseQuote, which
+    // still serves the same payload. If that gets challenged too, keep the case
+    // visible as WARN rather than dropping the coverage — same treatment as Drift.
+    degradedOk: /DEGRADED|Just a moment|cf-mitigated|403/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
