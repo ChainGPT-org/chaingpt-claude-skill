@@ -145,6 +145,11 @@ contract Hello { string public greeting = "hi"; }`,
         }),
         expect: /Swap quote|expected|USDC/i,
         expectData: /Out \(expected\):\s+[\d.]+/,
+        // open-api.openocean.finance has been behind a Cloudflare managed challenge
+        // since ~2026-09 (403 "Just a moment..." on every path, API root included).
+        // Same treatment as Drift below: stay visible as WARN, flip back to a hard
+        // assert the day unauthenticated access returns.
+        degradedOk: /DEGRADED|Just a moment|cf-mitigated|Cloudflare|403/i,
     },
     {
         name: 'dex_build_swap_tx (mainnet refusal without ack)',
