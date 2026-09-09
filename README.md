@@ -6,7 +6,7 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-One install gives Claude Code 154 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Daily live‑API smoke CI.
+One install gives Claude Code 154 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + prompt‑injection‑resistant policy gate**. Custody‑free. 45+ audited Solidity patterns. 10 project templates. Manual live-API smoke checks.
 
 [![npm version](https://img.shields.io/badge/version-1.22.2-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -23,24 +23,30 @@ One install gives Claude Code 154 MCP tools across **ChainGPT AI products** (cha
 
 ---
 
-## ⚡ Install (2 commands)
+## ⚡ Install from a reviewed checkout
 
-In the Claude Code prompt, paste these two lines:
+Requires **Node.js 22.14+**, npm, Git, and [Claude Code](https://code.claude.com/docs/en/overview).
+Use a fresh checkout and review its revision and lockfile before installing:
 
-```text
-/plugin marketplace add ChainGPT-org/chaingpt-claude-skill
-/plugin install chaingpt@chaingpt-claude-skill
+```bash
+git clone https://github.com/ChainGPT-org/chaingpt-claude-skill.git
+cd chaingpt-claude-skill
+git log -1 --oneline
+# Review the checkout before continuing. Keep API keys and wallet secrets unset.
+npm ci --prefix mcp-server --omit=dev --ignore-scripts
+claude --plugin-dir "$PWD"
 ```
 
-Then **fully restart Claude Code** (quit and relaunch) — or run `/reload-plugins --force`. The plugin ships an MCP server, so a plain `/reload-plugins` won't load it. First launch installs dependencies once (~30–60s). Verify with `/mcp` — you'll see `chaingpt` **connected**.
+Verify `chaingpt` in `/mcp`. Supply optional credentials only after installation,
+as described in [Step 5](#step-5--set-your-api-key-optional-but-recommended).
+MCP startup never downloads packages or runs install scripts. Missing dependencies
+block startup. After changing revisions, review the new lockfile and repeat `npm ci`
+before launching Claude. Do not reuse dependency caches from an untrusted install.
 
-That's it. Optional API key (only for the ChainGPT chat / NFT / audit / news tools — everything on-chain works without it) and the guided walkthrough are in the [full Quickstart](#-quickstart).
-
-> **Don't have Claude Code yet?** Install it first, then run the two commands above.
-> ```bash
-> curl -fsSL https://claude.ai/install.sh | bash   # macOS / Linux
-> ```
-> Windows: download from <https://code.claude.com/download>. More detail in [Step 1](#-quickstart).
+The marketplace copy does not include installed dependencies. Use the prepared
+local checkout above for this release; the former automatic first-launch install
+has been removed. Claude Code's [`--plugin-dir` option](https://code.claude.com/docs/en/plugins)
+loads this exact local directory for the session.
 
 <br/>
 
@@ -92,7 +98,7 @@ That last refusal is the product: the policy file lives outside the model's reac
 
 ## ⚡ Quickstart — full step‑by‑step
 
-This walkthrough takes you from zero to a running dashboard. Estimated time: **5 minutes** (most of it Claude Code's first‑run download).
+This walkthrough takes you from zero to a running dashboard. Install the reviewed dependencies before providing credentials.
 
 ### Step 1 — Install Claude Code
 
@@ -117,54 +123,34 @@ claude --version
 
 You also need an Anthropic account / Claude subscription — the installer walks you through `claude login` on first run.
 
-### Step 2 — Add the ChainGPT marketplace
+### Step 2 — Clone and review
 
-Adding a marketplace just tells Claude Code *"this GitHub repo is a place I can install plugins from."* It does **not** install anything yet.
+Clone the repository into a new directory using the commands in [Install](#-install-from-a-reviewed-checkout).
+Check the commit and review `mcp-server/package.json` and `mcp-server/package-lock.json`.
 
-Open Claude Code (`claude` in your terminal). Inside the prompt, paste:
+### Step 3 — Prepare dependencies
 
-```
-/plugin marketplace add ChainGPT-org/chaingpt-claude-skill
-```
+From the repository root, with API keys and wallet secrets unset:
 
-You'll see: `✓ Successfully added marketplace: chaingpt-claude-skill`.
-
-Behind the scenes Claude Code:
-
-1. Reads `.claude-plugin/marketplace.json` from the repo root.
-2. Clones the repo to `~/.claude/plugins/marketplaces/chaingpt-claude-skill/`.
-3. Caches the plugin listing.
-
-> [!NOTE]
-> The reason `/plugin install <owner/repo>` (single‑step) **does not work** here is that GitHub's `<owner/repo>` shorthand resolves only against Anthropic's curated public marketplace, and this plugin isn't (yet) listed there. The two‑step custom‑marketplace flow works today with no approval required.
-
-### Step 3 — Install the `chaingpt` plugin
-
-Type in the Claude Code prompt:
-
-```
-/plugin
+```bash
+npm ci --prefix mcp-server --omit=dev --ignore-scripts
 ```
 
-A picker opens listing available marketplaces and their plugins. Pick **chaingpt-claude-skill** → **chaingpt** → press Enter to install.
+This installs the locked production dependencies without package lifecycle scripts.
+The reviewed `mcp-server/dist/` is included. To rebuild it yourself, install development
+dependencies with `npm ci --prefix mcp-server --ignore-scripts`, then run
+`npm run build --prefix mcp-server`.
 
-You'll see: `✓ Installed chaingpt. Run /reload-plugins to apply.`
+### Step 4 — Load the prepared plugin
 
-> [!TIP]
-> Shortcut if you don't want to use the picker: `/plugin install chaingpt@chaingpt-claude-skill` (one shot, no picker).
+From the repository root:
 
-### Step 4 — Load the plugin
-
-Same Claude Code session:
-
-```
-/reload-plugins
+```bash
+claude --plugin-dir "$PWD"
 ```
 
-This re‑scans installed plugins, spawns the ChainGPT MCP server over stdio, and registers all 24 sub‑skills + 154 MCP tools.
-
-> [!IMPORTANT]
-> Because this plugin ships an **MCP server**, `/reload-plugins` may warn that it can't apply the MCP change in‑place and skip it — in which case the plugin won't appear in `/plugin` or `/mcp`. If that happens, run `/reload-plugins --force`, **or just quit Claude Code (`/quit` or Cmd+Q) and relaunch**. A full restart is the most reliable way to load the plugin and its MCP server, since plugins are loaded at startup. After a fresh install the MCP server also runs a one‑time `npm install` on first launch (~30–60s) before it shows `connected`.
+Keep this option when starting future sessions. Verify the server through `/mcp`.
+If startup reports missing dependencies, repeat Step 3 in this same checkout.
 
 ### Step 5 — Set your API key (optional but recommended)
 
@@ -273,8 +259,8 @@ Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.
 
 | Symptom | Fix |
 |---|---|
-| `Marketplace 'ChainGPT-org/chaingpt-claude-skill' not found` | You skipped Step 2. Run `/plugin marketplace add ChainGPT-org/chaingpt-claude-skill` first. |
-| `/plugin install` ran but the plugin / `chaingpt` server doesn't show up in `/plugin` or `/mcp` | `/reload-plugins` skipped the MCP change in‑place. Run `/reload-plugins --force`, or **fully quit Claude Code and relaunch** — plugins + MCP servers load at startup. (Reinstalling in the same session won't take effect until then.) |
+| Startup blocked: dependencies are not installed | Run Step 3 in the reviewed local checkout, then launch with `claude --plugin-dir` pointing to that directory. |
+| Marketplace install does not connect the MCP server | Use the prepared local checkout in Steps 2–4; marketplace copies do not contain dependencies. |
 | `Unknown command: /chaingpt:dashboard` | The plugin isn't installed or wasn't loaded. Repeat Steps 3 + 4 (use `/reload-plugins --force` or restart). |
 | Dashboard URL prints but browser shows "can't connect" | The dashboard server exited (the demo-test process might have ended). Re-run `/chaingpt:dashboard` to boot it again. |
 | Dashboard login says "Invalid token" | Tokens rotate every time the dashboard starts. Use the **most recent** token printed by the most recent `/chaingpt:dashboard` call. |
@@ -283,29 +269,7 @@ Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.
 | `chaingpt_agent_wallet_init` errors with passphrase complaint | The `CHAINGPT_AGENT_WALLET_PASSPHRASE` env var must be set in the same shell that launched Claude Code, with ≥16 chars. Quit Claude Code, `export …`, relaunch. |
 | Solana DeFi tools (Marginfi deposit/withdraw, Jupiter, Drift) are slow or time out / `429` | The default public Solana RPC rate‑limits the heavy DeFi SDK fetches. Set `SOLANA_RPC_URL` to a real endpoint (Helius / Triton / QuickNode free tier) before launching Claude Code — see Step 5. |
 
-<details>
-<summary><b>Alternative install: git clone (for forking, pinning, or contributing)</b></summary>
 
-If you'd rather pin a specific commit or work from a fork:
-
-```bash
-# User-level (recommended — applies to every project)
-git clone https://github.com/ChainGPT-org/chaingpt-claude-skill ~/.claude/plugins/chaingpt
-
-# Or project-level
-git clone https://github.com/ChainGPT-org/chaingpt-claude-skill .claude/plugins/chaingpt
-```
-
-Build the MCP server:
-
-```bash
-cd ~/.claude/plugins/chaingpt/mcp-server
-npm install && npm run build
-```
-
-The plugin's `.claude-plugin/plugin.json` and `.mcp.json` are picked up automatically. `/reload-plugins` in any Claude Code session, then proceed from Step 5.
-
-</details>
 
 <details>
 <summary><b>Alternative install: MCP server only (skip the skills layer)</b></summary>
@@ -317,7 +281,7 @@ If you want only the MCP tools — no auto-loaded skills or reference docs — a
   "mcpServers": {
     "chaingpt": {
       "command": "node",
-      "args": ["/absolute/path/to/chaingpt-claude-skill/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/chaingpt-claude-skill/mcp-server/launch.mjs"],
       "env": { "CHAINGPT_API_KEY": "your-key-here" }
     }
   }
@@ -777,7 +741,7 @@ Claude: → chaingpt_generate_contract(...)
 | **1 credit** | $0.01 USD |
 | **Pay with $CGPT** | 15% bonus credits |
 | **Mock server** | Free, unlimited (`http://localhost:3001`) |
-| **Live‑smoke CI daily run** | Free (uses public endpoints; ChainGPT‑side calls use a smoke key) |
+| **Manual live-smoke run** | Free (uses public endpoints; ChainGPT‑side calls use a smoke key) |
 | **Web3 AI Grant** | Up to **$1,000,000** for projects built on ChainGPT — [grant page](https://www.chaingpt.org/web3-ai-grant) |
 | **Pad Innovation Grant** | Up to **$25,000** for hackathon / pilot projects — [grant page](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk/chaingpt-pad-innovation-grant-program) |
 
@@ -792,8 +756,8 @@ Per‑product credit costs are in [reference/pricing.md](reference/pricing.md) a
 The mock server is a full drop‑in replacement for the ChainGPT API — realistic responses, simulated latency, credit tracking — so you can build, iterate, and run CI/CD pipelines without touching your API quota.
 
 ```bash
-cd .claude/skills/chaingpt/mock-server
-npm install && npm run dev
+cd mock-server  # from the reviewed repository checkout
+npm ci --ignore-scripts && npm run dev
 # → http://localhost:3001
 ```
 
@@ -818,7 +782,7 @@ The orchestrator runs **six layers** — see [`TESTING.md`](TESTING.md) for the 
 | `examples` (`node --check` + `python3 -m ast`) | every file | none |
 | `smoke` (live mainnet APIs) | 39 | yes |
 
-CI runs the first four on every push and PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Smoke runs daily plus on‑demand and opens a labeled GitHub issue on scheduled‑run failure.
+CI runs the first four on every push and PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Live smoke is manual, uses public endpoints with a fixture key, and cannot write to the repository or open issues. Autonomous self-heal is disabled.
 
 **The contract: every PR that adds a tool or behavior must add tests in the same PR.** See [`TESTING.md`](TESTING.md#adding-tests-for-a-new-capability).
 
@@ -842,7 +806,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **On‑chain caps (ERC‑4337 session keys)** | Yes — designed so the chain enforces per‑token caps at validation _(beta: addresses verified on Base Sepolia; full live proof pending)_ | No | No | No | No |
 | **Scheduled execution safety** | Crash‑safe execution journal (re‑runs can't double‑buy) | No | No | No | No |
 | **Shipped agents** | 3 (researcher / auditor / trader) with tuned guardrails | No | No | No | No |
-| **Test harness** | 6 layers + daily live smoke + self‑healing CI (drift auto‑PRs) | Per‑plugin | Examples only | Snap testing | None |
+| **Test harness** | 6 layers + manual live smoke + human-reviewed repairs | Per‑plugin | Examples only | Snap testing | None |
 | **License** | MIT | MIT | Apache‑2 | MIT | Various |
 
 **Where this wins:** breadth (154 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.

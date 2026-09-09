@@ -50,23 +50,23 @@ const {
 // ─── Mock all ChainGPT SDK modules before imports ─────────────────
 
 vi.mock('@chaingpt/generalchat', () => ({
-  GeneralChat: vi.fn().mockImplementation(() => mockChatInstance),
+  GeneralChat: vi.fn().mockImplementation(function () { return mockChatInstance; }),
 }));
 
 vi.mock('@chaingpt/nft', () => ({
-  Nft: vi.fn().mockImplementation(() => mockNftInstance),
+  Nft: vi.fn().mockImplementation(function () { return mockNftInstance; }),
 }));
 
 vi.mock('@chaingpt/smartcontractauditor', () => ({
-  SmartContractAuditor: vi.fn().mockImplementation(() => mockAuditorInstance),
+  SmartContractAuditor: vi.fn().mockImplementation(function () { return mockAuditorInstance; }),
 }));
 
 vi.mock('@chaingpt/smartcontractgenerator', () => ({
-  SmartContractGenerator: vi.fn().mockImplementation(() => mockGeneratorInstance),
+  SmartContractGenerator: vi.fn().mockImplementation(function () { return mockGeneratorInstance; }),
 }));
 
 vi.mock('@chaingpt/ainews', () => ({
-  AINews: vi.fn().mockImplementation(() => mockNewsInstance),
+  AINews: vi.fn().mockImplementation(function () { return mockNewsInstance; }),
 }));
 
 // Set env before importing handlers

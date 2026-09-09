@@ -29,7 +29,7 @@ Keep PRs focused. One logical change per PR is preferred over large multi-topic 
 ### JavaScript / TypeScript Examples
 
 - Use **TypeScript** conventions (even in `.js` files): `const`/`let` over `var`, arrow functions, async/await.
-- Target **Node.js 18+** and **ES Modules** (`import`/`export`).
+- Target **Node.js 22.14+** and **ES Modules** (`import`/`export`).
 - Use `process.env.CHAINGPT_API_KEY` for API keys (never hardcode).
 - Include error handling with try/catch.
 - Add a comment header explaining what the example demonstrates.

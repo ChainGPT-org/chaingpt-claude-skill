@@ -90,12 +90,14 @@ layer_typecheck() {
   if [[ -d mcp-server/node_modules ]]; then
     (cd mcp-server && node node_modules/typescript/bin/tsc --noEmit) || ok=1
   else
-    echo "${YELLOW}skip mcp-server typecheck (run 'cd mcp-server && npm ci' first)${RESET}"
+    echo "${YELLOW}FAIL mcp-server typecheck (run 'cd mcp-server && npm ci --ignore-scripts' first)${RESET}"
+    ok=1
   fi
   if [[ -d mock-server/node_modules ]]; then
     (cd mock-server && node node_modules/typescript/bin/tsc --noEmit) || ok=1
   else
-    echo "${YELLOW}skip mock-server typecheck (run 'cd mock-server && npm ci' first)${RESET}"
+    echo "${YELLOW}FAIL mock-server typecheck (run 'cd mock-server && npm ci --ignore-scripts' first)${RESET}"
+    ok=1
   fi
   return $ok
 }
@@ -103,8 +105,8 @@ layer_typecheck() {
 # ── Layer 3: mcp-server vitest ────────────────────────────────────
 layer_mcp_test() {
   if [[ ! -d mcp-server/node_modules ]]; then
-    echo "Installing mcp-server deps..."
-    (cd mcp-server && npm ci) || return 1
+    echo "Missing mcp-server dependencies: run npm ci --prefix mcp-server --ignore-scripts first."
+    return 1
   fi
   (cd mcp-server && npm test)
 }
@@ -112,8 +114,8 @@ layer_mcp_test() {
 # ── Layer 4: mock-server vitest ───────────────────────────────────
 layer_mock_test() {
   if [[ ! -d mock-server/node_modules ]]; then
-    echo "Installing mock-server deps..."
-    (cd mock-server && npm ci) || return 1
+    echo "Missing mock-server dependencies: run npm ci --prefix mock-server --ignore-scripts first."
+    return 1
   fi
   (cd mock-server && npm test)
 }
@@ -136,7 +138,7 @@ layer_examples() {
   fi
   # Go: prefer `go vet` (catches more than `gofmt -l`) when the toolchain is present.
   if command -v go >/dev/null 2>&1 && [[ -d examples/go ]]; then
-    if (cd examples/go && go vet ./... 2>&1); then
+    if (cd examples/go && GOPROXY=off GOSUMDB=off go vet ./... 2>&1); then
       echo "  ${GREEN}ok${RESET} examples/go (go vet)"
     else
       echo "  ${RED}FAIL${RESET} examples/go (go vet)"; fail=1
@@ -146,7 +148,7 @@ layer_examples() {
   fi
   # Rust: `cargo check` is the cheapest type-check that doesn't link.
   if command -v cargo >/dev/null 2>&1 && [[ -d examples/rust ]]; then
-    if (cd examples/rust && cargo check --offline 2>/dev/null || cargo check 2>&1); then
+    if (cd examples/rust && cargo check --offline 2>&1); then
       echo "  ${GREEN}ok${RESET} examples/rust (cargo check)"
     else
       echo "  ${RED}FAIL${RESET} examples/rust (cargo check)"; fail=1
@@ -160,8 +162,8 @@ layer_examples() {
 # ── Layer 6: solidity pattern compilation ────────────────────────
 layer_patterns() {
   if [[ ! -d mcp-server/node_modules ]]; then
-    echo "Installing mcp-server deps..."
-    (cd mcp-server && npm ci) || return 1
+    echo "Missing mcp-server dependencies: run npm ci --prefix mcp-server --ignore-scripts first."
+    return 1
   fi
   node "$REPO_ROOT/scripts/check-patterns.mjs"
 }

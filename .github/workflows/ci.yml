@@ -18,16 +18,16 @@ jobs:
     name: TypeScript (tsc --noEmit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       - name: Install mcp-server deps
-        run: cd mcp-server && npm ci
+        run: cd mcp-server && npm ci --ignore-scripts
       - name: Type-check
         run: cd mcp-server && node node_modules/typescript/bin/tsc --noEmit
 
@@ -35,37 +35,37 @@ jobs:
     name: vitest (mcp-server)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       - name: Install and test mcp-server
-        run: cd mcp-server && npm ci && npm test
+        run: cd mcp-server && npm ci --ignore-scripts && npm test
 
   test-mock:
     name: vitest (mock-server)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mock-server/package-lock.json
       - name: Install and test mock-server
-        run: cd mock-server && npm ci && npm test
+        run: cd mock-server && npm ci --ignore-scripts && npm test
 
   validate:
     name: validate.sh (file/frontmatter/version checks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: Run validate.sh
@@ -75,16 +75,16 @@ jobs:
     name: solc compile patterns/*.md
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       - name: Install mcp-server deps (solc + @openzeppelin/*)
-        run: cd mcp-server && npm ci
+        run: cd mcp-server && npm ci --ignore-scripts
       - name: Compile every Solidity block under patterns/
         run: node scripts/check-patterns.mjs
 
@@ -92,12 +92,12 @@ jobs:
     name: committed dist/ is current
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       # The plugin ships mcp-server/dist/ prebuilt (Claude Code runs no build on
@@ -105,23 +105,28 @@ jobs:
       # otherwise users would silently run a stale server.
       - name: Rebuild and diff committed dist/
         run: |
-          cd mcp-server && npm ci && npm run build
+          cd mcp-server && npm ci --ignore-scripts
+          rm -rf dist
+          npm run build
           git diff --exit-code -- dist \
             || { echo "::error::mcp-server/dist is stale — run 'npm run build' in mcp-server and commit the result"; exit 1; }
+          test -z "$(git ls-files --others --exclude-standard -- dist)"
 
   boot-smoke:
     name: MCP server boot smoke (tools/list)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
       - name: Build mcp-server
-        run: cd mcp-server && npm ci && npm run build
+        run: cd mcp-server && npm ci --ignore-scripts && npm run build
+      - name: Test fail-closed launcher
+        run: node --test scripts/launcher.test.mjs
       - name: Spawn server and assert tools/list response
         run: node scripts/mcp-boot-smoke.mjs
