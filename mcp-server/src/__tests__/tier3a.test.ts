@@ -116,6 +116,70 @@ describe('Tier-3a quote handlers', () => {
     expect(text).toContain('UniswapV3');
   });
 
+  it('chaingpt_dex_quote falls back to /reverseQuote when /quote is Cloudflare-challenged', async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('/quote?')) {
+        // What OpenOcean's edge returns for non-browser clients since 2026-08.
+        return new Response('<!DOCTYPE html><html><head><title>Just a moment...</title>', {
+          status: 403,
+          statusText: 'Forbidden',
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          code: 200,
+          data: {
+            inToken: { symbol: 'ETH', decimals: 18, address: '0xeee' },
+            outToken: { symbol: 'USDC', decimals: 6, address: '0x833' },
+            inAmount: '10000000000000000',
+            outAmount: '24448281',
+            estimatedGas: '129956',
+            dexes: [{ dexCode: 'Aerodrome' }],
+            price_impact: '-0.04%',
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+    const res = await handleDexTool('chaingpt_dex_quote', {
+      network: 'base',
+      inToken: '0x0000000000000000000000000000000000000000',
+      outToken: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+      amountIn: '0.01',
+      gasPriceGwei: 1,
+    });
+    const text = res.content[0].text;
+    expect(calls.some((u) => u.includes('/base/reverseQuote?'))).toBe(true);
+    expect(text).toContain('Swap quote');
+    expect(text).toContain('24.448281 USDC');
+    expect(text).toContain('Aerodrome');
+  });
+
+  it('chaingpt_dex_build_swap_tx does not fall back to /reverseQuote (no tx payload there)', async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      calls.push(String(input));
+      return new Response('<!DOCTYPE html><html><head><title>Just a moment...</title>', {
+        status: 403,
+        statusText: 'Forbidden',
+      });
+    });
+    await expect(
+      handleDexTool('chaingpt_dex_build_swap_tx', {
+        network: 'base',
+        inToken: '0x0000000000000000000000000000000000000000',
+        outToken: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+        amountIn: '0.01',
+        gasPriceGwei: 1,
+        acknowledgeMainnet: true,
+      })
+    ).rejects.toThrow(/DEGRADED/);
+    expect(calls.every((u) => !u.includes('reverseQuote'))).toBe(true);
+  });
+
   it('chaingpt_dex_jupiter_quote surfaces input + output mints', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
