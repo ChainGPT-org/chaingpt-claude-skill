@@ -33,6 +33,26 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// OpenOcean put the free-tier *pricing* routes behind a Cloudflare interactive
+// challenge in ~2026-08: /quote and /swap answer 403 "Just a moment..." with
+// `cf-mitigated: challenge` on every request, while metadata routes on the very
+// same host (/gasPrice, /tokenList, /dexList) still return 200 JSON. The paid
+// host (open-api-pro.openocean.finance) answers 401 "No API key found in
+// request" for the identical path, so the route and response shape are
+// unchanged — this is gating, not drift. Surface that state explicitly instead
+// of handing the caller a truncated Cloudflare HTML page.
+const OPENOCEAN_DEGRADED_HINT = 'OpenOcean free-tier pricing routes (/quote, /swap) are currently behind a Cloudflare challenge ' +
+    'and return 403 to server-side callers. EVM quotes via OpenOcean are DEGRADED until OpenOcean ' +
+    'restores public access. Options: use chaingpt_dex_1inch_quote / chaingpt_dex_1inch_swap_tx with ' +
+    'ONEINCH_API_KEY (free tier at https://1inch.dev), or chaingpt_dex_cow_create_order on supported ' +
+    'chains. Solana routing is unaffected (chaingpt_dex_jupiter_quote).';
+// A Cloudflare challenge surfaces as 403 + an HTML body; rate-limit/edge-outage
+// variants come back as 429/503. Treat all three as "gated upstream" so the
+// caller gets the hint rather than a raw HTML dump.
+function isOpenOceanGated(err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /HTTP (403|429|503)\b/.test(msg) || /Just a moment|cf-mitigated|cloudflare/i.test(msg);
+}
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -276,7 +296,17 @@ export async function handleDexTool(name, args) {
                 gasPrice: String(resolvedGasPrice),
             });
             const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            let res;
+            try {
+                res = await httpJson(url);
+            }
+            catch (err) {
+                if (isOpenOceanGated(err)) {
+                    const upstream = err instanceof Error ? err.message : String(err);
+                    throw new Error(`${OPENOCEAN_DEGRADED_HINT}\n\nUpstream: ${upstream}`);
+                }
+                throw err;
+            }
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {

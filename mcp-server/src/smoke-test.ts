@@ -185,6 +185,12 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean's free-tier /quote + /swap routes have been Cloudflare-challenged
+    // (403 "Just a moment...", cf-mitigated: challenge) since ~2026-08, while
+    // /gasPrice + /tokenList on the same host still return 200 and the paid host
+    // 401s on the same path — i.e. gated, not moved. degradedOk keeps the case
+    // visible as WARN so it flips back to PASS the moment access is restored.
+    degradedOk: /DEGRADED|Just a moment|cf-mitigated|403/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
