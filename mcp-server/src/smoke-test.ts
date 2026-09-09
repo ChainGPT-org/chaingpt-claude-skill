@@ -174,6 +174,12 @@ contract Hello { string public greeting = "hi"; }`,
   },
 
   // ─── Tier 3a: DEX (quote only — no signing) ──────────────────────
+  // OpenOcean put its public /quote and /swap paths behind a Cloudflare managed
+  // challenge in 2026-08 (403 `cf-mitigated: challenge` from every datacenter IP,
+  // every chain) while /gasPrice + /dexList on the same v4 host still serve JSON.
+  // Same treatment as the Drift cases: degradedOk keeps this visible as WARN
+  // without failing the run, and it flips back to a hard assert the day OpenOcean
+  // reopens the endpoint (or when OPENOCEAN_API_KEY is set for the keyed host).
   {
     name: 'dex_quote (ETH→USDC on base)',
     fn: () =>
@@ -185,6 +191,7 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    degradedOk: /DEGRADED|Cloudflare-challenged|Just a moment|cf-mitigated/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
