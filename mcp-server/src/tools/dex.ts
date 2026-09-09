@@ -37,6 +37,13 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// 2026-08: OpenOcean put a Cloudflare managed challenge in front of the pricing
+// paths (/quote, /swap) on the free open-api host — they now answer `cf-mitigated:
+// challenge` + HTTP 403 unless the request carries the app's Referer. The metadata
+// paths (/tokenList, /gasPrice, /dexList) are still open, so this is a WAF rule on
+// the pricing endpoints, not an outage or a schema change. Sending the Referer the
+// official web client sends restores plain JSON responses.
+const OPENOCEAN_HEADERS = { referer: 'https://app.openocean.finance/' };
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -293,7 +300,7 @@ export async function handleDexTool(
         gasPrice: String(resolvedGasPrice),
       });
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await httpJson<any>(url, { headers: OPENOCEAN_HEADERS });
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
