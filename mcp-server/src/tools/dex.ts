@@ -37,6 +37,19 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// Since ~2026-08 OpenOcean fronts the pricing paths (/quote, /swap) with a Cloudflare
+// managed challenge: a request without a Referer from their own dapp origin gets
+// `HTTP 403` + `cf-mitigated: challenge` and an interstitial HTML body. The metadata
+// paths (/gasPrice, /tokenList, /dexList) are unaffected, and the response schema is
+// unchanged — this is an access-policy change, not schema drift. Sending the dapp
+// Referer (what their own frontend sends) restores 200s.
+const OPENOCEAN_HEADERS = { referer: 'https://app.openocean.finance/' };
+// Surfaced instead of a raw HTML dump if Cloudflare tightens the rule further.
+const OPENOCEAN_DEGRADED_HINT =
+  'OpenOcean public pricing endpoints are behind a Cloudflare challenge (HTTP 403, cf-mitigated: challenge). ' +
+  'EVM swap quotes are DEGRADED until OpenOcean relaxes it. ' +
+  'Options: use chaingpt_dex_1inch_quote (set ONEINCH_API_KEY), chaingpt_dex_cow_create_order, ' +
+  'or an OpenOcean pro key at https://open-api-pro.openocean.finance.';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -293,7 +306,7 @@ export async function handleDexTool(
         gasPrice: String(resolvedGasPrice),
       });
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await httpJson<any>(url, { headers: OPENOCEAN_HEADERS });
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
@@ -521,6 +534,9 @@ export async function handleDexTool(
     return { content: [{ type: 'text', text: `Unknown DEX tool: ${name}` }] };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`ChainGPT DEX error: ${message}`);
+    // A Cloudflare challenge on OpenOcean is an upstream gate, not a bug in our
+    // request — append the hint so the caller gets an actionable next step.
+    const gated = /openocean/i.test(message) && /\b403\b|Just a moment/i.test(message);
+    throw new Error(`ChainGPT DEX error: ${message}${gated ? `\n\n${OPENOCEAN_DEGRADED_HINT}` : ''}`);
   }
 }
