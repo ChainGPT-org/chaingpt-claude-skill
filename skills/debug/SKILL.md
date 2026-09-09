@@ -25,11 +25,15 @@ If the developer only provides a vague description, ask:
 Before diagnosing the specific error, verify the developer's environment:
 
 ```bash
-# Check API key is set
-echo $CHAINGPT_API_KEY | head -c 10
+# Check presence only; never print any part of the key
+if [ -n "${CHAINGPT_API_KEY:+set}" ]; then
+  printf '%s\n' 'CHAINGPT_API_KEY is set'
+else
+  printf '%s\n' 'CHAINGPT_API_KEY is not set'
+fi
 ```
 
-If the key is not set, that is likely the root cause. Instruct:
+Do not print key values or prefixes, ask the developer to paste a key, or enable shell tracing/verbose HTTP output for authenticated requests. If the key is not set, that is likely the root cause. Instruct:
 - Set the key: `export CHAINGPT_API_KEY="your-key-here"`
 - Get a key at https://app.chaingpt.org/apidashboard
 
@@ -88,7 +92,7 @@ curl -X POST "https://api.chaingpt.org/chat/stream" \
 1. **Missing Authorization header** — Must be: `Authorization: Bearer <key>`
 2. **Wrong header format** — Must be `Bearer <key>` not just `<key>`, not `Token <key>`, not `Api-Key <key>`
 3. **Key expired or revoked** — Regenerate at https://app.chaingpt.org/apidashboard
-4. **Extra whitespace or newline in key** — Check for trailing newline: `echo -n $CHAINGPT_API_KEY | wc -c`
+4. **Extra whitespace or newline in key** — Have the developer check the value locally in their secret manager and correct it without copying any part of the key into tool output or the conversation.
 5. **Key from wrong environment** — Ensure you are not using a different account's key
 
 **Quick test:**

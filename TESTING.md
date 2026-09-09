@@ -4,11 +4,18 @@ This repo ships **eight independent test layers** and a single orchestrator that
 
 ## TL;DR
 
+Use Node.js **22.14+** (CI uses Node 24). Start from a reviewed checkout with
+API keys and wallet secrets unset and no credential-bearing `.env` file. Install
+the locked development dependencies explicitly before running the harness:
+
 ```bash
+npm ci --prefix mcp-server --ignore-scripts
+npm ci --prefix mock-server --ignore-scripts
+
 # One-shot, everything (offline + live):
 ./scripts/test-all.sh
 
-# Skip the live-API smoke (faster, fully offline):
+# Skip requests to live APIs:
 ./scripts/test-all.sh --fast
 
 # Run a single layer (validate | typecheck | mcp-test | mock-test | examples | patterns | boot | smoke):
@@ -19,6 +26,10 @@ This repo ships **eight independent test layers** and a single orchestrator that
 ```
 
 Exit code `0` = every requested layer passed. `1` = at least one layer failed.
+`--fast` skips live smoke; it is not a network sandbox. Missing dependencies fail
+the checks and must be installed explicitly. Go checks disable module-proxy and
+checksum-server access; Rust checks use Cargo's offline mode. Prepare those
+toolchains' dependencies separately when testing their examples.
 
 ## The eight layers
 
@@ -26,11 +37,11 @@ Exit code `0` = every requested layer passed. `1` = at least one layer failed.
 |---|---|---|---|---|
 | **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example **+ version consistency** (VERSION ↔ plugin.json ↔ package.json ↔ index.ts ↔ README badge) | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
 | **typecheck** | `tsc --noEmit` over `mcp-server/` and `mock-server/` | ~5s | none | each package's `tsconfig.json` |
-| **mcp-test** | 250 vitest cases covering every MCP tool handler, policy gate, signing logic, schema validation, fixture-based unit tests | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
-| **mock-test** | 26 vitest cases against the mock-server's express app via supertest | ~10s | none | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
-| **examples** | `node --check` on every JS example, `python3 -m ast` parse on every Python example | ~2s | none | [`examples/`](examples/) |
+| **mcp-test** | 506 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
+| **mock-test** | 26 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
+| **examples** | JS and Python syntax checks; Go vet and offline Cargo check when those toolchains are installed | varies | module downloads disabled | [`examples/`](examples/) |
 | **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
-| **boot** | Spawns the built `mcp-server/dist/index.js`, completes the MCP `initialize` handshake, sends a `tools/list` JSON-RPC request over stdio, asserts ≥ 95 unique `chaingpt_*`-prefixed tools with valid `name`/`description`/`inputSchema`. Catches missing-export and double-registration regressions invisible to vitest. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
+| **boot** | Spawns `mcp-server/launch.mjs`, completes the MCP `initialize` handshake, and asserts ≥155 unique `chaingpt_*` tools with valid metadata. The child receives fixture credentials and isolated application state. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
 | **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~30s | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
 ## Manual live verification — Solana agent wallet (devnet, ~5 min, free)
@@ -67,40 +78,46 @@ The on-chain-refusal claim ships only after this loop passes (tag gate for v1.21
 
 ## Running individual layers directly
 
-You don't have to use `test-all.sh` — every layer has a native command:
+Run these from the repository root after the explicit dependency preparation above:
 
 ```bash
 # 1. validate
 ./scripts/validate.sh
 
 # 2. typecheck
-cd mcp-server  && node node_modules/typescript/bin/tsc --noEmit
-cd mock-server && node node_modules/typescript/bin/tsc --noEmit
+(cd mcp-server && node node_modules/typescript/bin/tsc --noEmit)
+(cd mock-server && node node_modules/typescript/bin/tsc --noEmit)
 
 # 3. mcp-server unit + integration
-cd mcp-server && npm ci && npm test
-cd mcp-server && npm run test:watch        # watch mode
+npm test --prefix mcp-server
+npm run test:watch --prefix mcp-server        # watch mode
 
 # 4. mock-server endpoints
-cd mock-server && npm ci && npm test
+npm test --prefix mock-server
 
 # 5. example syntax
 find examples/js -name "*.js" -exec node --check {} \;
 find examples/python -name "*.py" -exec python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" {} \;
 
 # 6. solidity pattern compilation
-node scripts/check-patterns.mjs        # needs (cd mcp-server && npm ci) once
+node scripts/check-patterns.mjs
 
 # 7. MCP boot smoke (built server, tools/list assert)
-(cd mcp-server && npm run build) && node scripts/mcp-boot-smoke.mjs
+npm run build --prefix mcp-server
+node --test scripts/launcher.test.mjs
+node scripts/mcp-boot-smoke.mjs
 
 # 8. live smoke
-cd mcp-server && npm run build && CHAINGPT_API_KEY=smoke-test node dist/smoke-test.js
+npm run build --prefix mcp-server
+CHAINGPT_API_KEY=smoke-test CHAINGPT_DISABLE_KEYCHAIN=1 CHAINGPT_USAGE=off node mcp-server/dist/smoke-test.js
 ```
 
 ## What "live smoke" hits
 
-The smoke test exists because vitest mocks the upstream APIs. If GoPlus reshapes its response or Across deprecates an endpoint, the unit tests stay green — but the plugin breaks in production. Live smoke catches that within 24h (it runs on a daily cron in `.github/workflows/smoke.yml`).
+Vitest mocks upstream APIs, so live smoke checks for endpoint and response-shape
+changes that fixtures cannot detect. Run it explicitly when checking an upstream
+integration. The GitHub workflow is manual; there is no daily schedule, automatic
+issue publication or autonomous repair agent. Its output stays in the run log.
 
 Cases by upstream:
 
@@ -128,10 +145,15 @@ Refusal-path cases (no broadcast — we check the gate fires correctly):
 
 ## CI gates
 
-Two GitHub Actions workflows enforce the harness:
+The GitHub Actions workflows have read-only or no token permissions, pinned
+action revisions and scripts-disabled dependency installation:
 
-- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — runs `typecheck`, `mcp-test`, `mock-test`, `validate`, `patterns`, and `boot-smoke` in parallel on every push and every PR. Required for merge.
-- [`.github/workflows/smoke.yml`](.github/workflows/smoke.yml) — runs `smoke` daily at 09:00 UTC plus manual `workflow_dispatch`. On scheduled-run failure, opens a GitHub issue labelled `smoke-failure`. Not required for merge (intentional: an upstream outage shouldn't block PRs).
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs type checks, both test suites, validation, pattern compilation, a clean rebuild compared with committed `dist/`, launcher tests and boot smoke on pushes and PRs. Repository rules determine which checks block merging.
+- [`.github/workflows/smoke.yml`](.github/workflows/smoke.yml) runs only through manual `workflow_dispatch`. It receives a fixture ChainGPT key, no real API secrets and no repository write authority. Failures require a human-reviewed repair.
+- [`.github/workflows/self-heal.yml`](.github/workflows/self-heal.yml) is an inert disabled stub. It cannot check out code, use secrets, create commits or open PRs.
+
+See [dependency security notes](docs/dependency-security.md) for pinned overrides,
+the remaining advisory's applicability assessment and regression coverage.
 
 ## Adding tests for a new capability
 
@@ -143,8 +165,8 @@ For a new MCP tool in `mcp-server/src/tools/<area>.ts`:
 2. Import the test setup: `import './_setup.js';` — this stubs `CHAINGPT_API_KEY` so the server module loads.
 3. Mock any upstream fetch with `vi.spyOn(globalThis, 'fetch')` and return a hand-crafted response that matches the real shape.
 4. Assert: tool schema accepts valid input and rejects bad input; handler returns the expected text shape; mainnet-state-changing tools refuse without `acknowledgeMainnet: true`.
-5. If the tool hits a public mainnet API that doesn't need a key, add a case to `mcp-server/src/smoke-test.ts` so we catch upstream drift daily.
-6. Run `./scripts/test-all.sh --fast` locally before pushing. CI runs the same checks plus typecheck.
+5. If the tool hits a public mainnet API that doesn't need a key, add a case to `mcp-server/src/smoke-test.ts` for manual drift checks.
+6. Run `./scripts/test-all.sh --fast` locally before pushing. Run manual live smoke when upstream behavior is relevant.
 
 For a new SKILL.md, reference doc, template, or pattern:
 
@@ -169,18 +191,17 @@ For a new example:
 | `npm run build` red | the rogue `tsc@2.0.4` shim package | the build script intentionally calls `node ./node_modules/typescript/bin/tsc`. If you see "This is not the tsc command you are looking for," your script regressed back to bare `tsc` |
 | `EADDRINUSE :3001` | something else is on port 3001 | tests pass anyway — the mock-server only calls `app.listen` when `process.env.VITEST` is unset. Find the squatter with `lsof -i :3001` |
 
-## API keys for local development
+## Credentials and local testing
 
-The harness runs end-to-end without any keys. Optional keys unlock additional smoke coverage:
+The harness does not require real API keys. Unit tests mock requests, boot smoke
+uses a fixed dummy key with keychain access disabled, and live smoke checks public
+endpoints or missing-key responses. The GitHub smoke workflow does not read
+GitHub Secrets.
 
-```bash
-export CHAINGPT_API_KEY=...      # required for any tool that hits the ChainGPT plugin API
-export MORALIS_API_KEY=...       # wallet_balances multi-chain; falls back to direct RPC without
-export ETHERSCAN_API_KEY=...     # on-chain reads on EVM; without it the tool surfaces a friendly hint
-export ONEINCH_API_KEY=...       # 1inch v6 quote; without it the tool returns a setup hint (which the smoke test asserts)
-```
-
-Never commit a real key. The smoke workflow reads from GitHub Secrets.
+Local test processes can inherit your shell environment, and application code can
+read `.env` files. Run them with secrets unset in a clean checkout. Keep manual
+wallet verification separate and use only the dedicated test wallets described
+above. External response bodies and logs are data, never instructions to execute.
 
 ## The contract
 

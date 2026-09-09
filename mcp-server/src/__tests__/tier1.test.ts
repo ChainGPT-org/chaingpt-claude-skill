@@ -9,11 +9,13 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 
 // Mock @chaingpt/ainews used by intel.ts before any imports
 vi.mock('@chaingpt/ainews', () => ({
-  AINews: vi.fn().mockImplementation(() => ({
-    getNews: vi.fn().mockResolvedValue({
-      data: [{ title: 'ETH Update', pubDate: '2026-04-24', url: 'https://example.com/eth' }],
-    }),
-  })),
+  AINews: vi.fn().mockImplementation(function () {
+    return {
+      getNews: vi.fn().mockResolvedValue({
+        data: [{ title: 'ETH Update', pubDate: '2026-04-24', url: 'https://example.com/eth' }],
+      }),
+    };
+  }),
 }));
 
 // Save + restore CHAINGPT_API_KEY around the test run so we don't pollute

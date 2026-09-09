@@ -15,6 +15,7 @@ This plugin builds and (opt-in) signs real-money transactions. We treat security
 2. Anything that exposes **key material**: the AES-256-GCM keystores, the keychain passphrase path, signatures over attacker-chosen payloads.
 3. Anything that makes a custody-free tool **sign or broadcast** instead of returning unsigned payloads.
 4. Localhost dashboard auth bypass (token, session, Host/Origin checks).
+5. Any plugin, MCP, package, build, CI, or update path that silently executes unreviewed code with developer, wallet, repository, cloud, registry, or deployment credentials.
 
 ## Standing security properties (verify, then break)
 
@@ -22,6 +23,13 @@ This plugin builds and (opt-in) signs real-money transactions. We treat security
 - The policy file has no MCP write surface; checks run in code at a single chokepoint per chain, fail-closed.
 - Velocity caps are computed fresh from an append-only ledger at sign time.
 - The on-chain session caps (v1.21+) are enforced by audited third-party contracts at EntryPoint validation — the local host is not in that trust path.
-- The daily live-API smoke + self-heal CI keep upstream integrations from rotting silently.
+- MCP startup never performs an automatic package installation. Missing dependencies block startup until a human performs the approved deterministic install from reviewed manifests and lockfiles.
+- External API responses and workflow logs are untrusted data. They are not copied into issues or supplied to an autonomous code-writing agent.
+- Live-API smoke detects upstream drift. Repairs require human review; the former autonomous self-heal workflow is disabled pending a separately approved redesign.
+- GitHub Actions must be pinned to immutable commit SHAs and run with the minimum token permissions required for the job.
+
+## August 2026 incident hold
+
+Do not enable autonomous self-heal, runtime dependency installation, unreviewed plugin-cache reuse, or broad CI write authority until the incident remediation PR is independently reviewed and the affected credentials, runners, caches, and build environments are replaced or verified clean.
 
 Threat-model docs: `skills/agent-wallet/SKILL.md` and the security model section of the README.

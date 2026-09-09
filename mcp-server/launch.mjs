@@ -1,41 +1,36 @@
 #!/usr/bin/env node
 /**
- * Zero-dependency launcher for the ChainGPT MCP server.
+ * Fail-closed launcher for the ChainGPT MCP server.
  *
- * Claude Code copies plugin files into its cache AS-IS and does NOT run
- * `npm install` or any build step (see plugins-reference docs). The runtime
- * dependencies (solc, @solana/web3.js, viem, …) can't be bundled into a single
- * file (solc loads its compiler blob via runtime require), so on first launch —
- * or after a plugin update wipes the cache — we install them once, then start
- * the real server. Subsequent launches skip straight to the import.
- *
- * ponytail: one-time runtime `npm install`. The cleaner long-term fix is to
- * publish @chaingpt/mcp-server to npm and run it via `npx`; do that if the
- * first-launch install latency becomes a problem.
+ * The plugin cache is a high-trust execution context: Claude Code starts this
+ * file automatically, and the resulting Node process can access the user's
+ * environment and any credentials intentionally exposed to the MCP server.
+ * Package installation must therefore be an explicit, separately reviewed
+ * administrator/developer action. This launcher never invokes npm, npx, pnpm,
+ * yarn, bun, a shell, or another package manager.
  */
-import { existsSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// Presence of the MCP SDK is our proxy for "deps are installed".
-const sdkInstalled = existsSync(join(here, 'node_modules', '@modelcontextprotocol', 'sdk'));
+const manifest = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
+const missing = Object.keys(manifest.dependencies ?? {}).filter(name =>
+  !existsSync(join(here, 'node_modules', name, 'package.json')));
+if (!existsSync(join(here, 'dist', 'index.js'))) missing.push('dist/index.js');
 
-if (!sdkInstalled) {
-  // NEVER write to stdout — it is the MCP JSON-RPC channel. Send our own
-  // progress and npm's entire output to stderr (fd 2).
-  process.stderr.write('[chaingpt-mcp] first launch: installing dependencies (one-time, ~30-60s)…\n');
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  try {
-    execFileSync(npm, ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], {
-      cwd: here,
-      stdio: ['ignore', 2, 2],
-    });
-  } catch (err) {
-    process.stderr.write(`[chaingpt-mcp] dependency install failed: ${err?.message ?? err}\n`);
-    process.exit(1);
-  }
+if (missing.length > 0) {
+  const lines = [
+    '[chaingpt-mcp] startup blocked: reviewed runtime dependencies are not installed.',
+    '[chaingpt-mcp] automatic package installation is disabled by security policy.',
+    `[chaingpt-mcp] plugin directory: ${here}`,
+    `[chaingpt-mcp] missing: ${missing.join(', ')}`,
+    '[chaingpt-mcp] follow the reviewed local-checkout installation steps in README.md.',
+    '[chaingpt-mcp] install with npm ci --omit=dev --ignore-scripts before supplying credentials.',
+    '[chaingpt-mcp] do not bypass this check with copied or previously cached node_modules.',
+  ];
+  process.stderr.write(`${lines.join('\n')}\n`);
+  process.exit(78);
 }
 
 await import('./dist/index.js');

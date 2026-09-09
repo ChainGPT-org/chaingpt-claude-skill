@@ -2,7 +2,7 @@
 /**
  * mcp-boot-smoke.mjs — boot smoke test for the built chaingpt-mcp server.
  *
- * Spawns `mcp-server/dist/index.js`, completes the MCP initialize handshake,
+ * Spawns `mcp-server/launch.mjs`, completes the MCP initialize handshake,
  * sends a tools/list request over JSON-RPC/stdio, and asserts the response
  * contains at least MIN_EXPECTED_TOOLS unique tool names.
  *
@@ -17,8 +17,8 @@
  *   2  invalid usage
  *
  * Env:
- *   CHAINGPT_MCP_BIN     path to the built server entrypoint (default: ../mcp-server/dist/index.js)
- *   MIN_EXPECTED_TOOLS   minimum acceptable tool count (default: 95)
+ *   CHAINGPT_MCP_BIN     path to the built server entrypoint (default: ../mcp-server/launch.mjs)
+ *   MIN_EXPECTED_TOOLS   minimum acceptable tool count (default: 155)
  *   BOOT_SMOKE_TIMEOUT_MS  per-step timeout (default: 8000)
  */
 
@@ -33,8 +33,8 @@ const __dirname = dirname(__filename);
 
 const BIN = process.env.CHAINGPT_MCP_BIN
   ? resolve(process.env.CHAINGPT_MCP_BIN)
-  : resolve(__dirname, '..', 'mcp-server', 'dist', 'index.js');
-const MIN_EXPECTED_TOOLS = Number(process.env.MIN_EXPECTED_TOOLS ?? 95);
+  : resolve(__dirname, '..', 'mcp-server', 'launch.mjs');
+const MIN_EXPECTED_TOOLS = Number(process.env.MIN_EXPECTED_TOOLS ?? 155);
 const STEP_TIMEOUT_MS = Number(process.env.BOOT_SMOKE_TIMEOUT_MS ?? 8000);
 
 if (!existsSync(BIN)) {
@@ -43,18 +43,24 @@ if (!existsSync(BIN)) {
   process.exit(1);
 }
 
-// Redirect HOME to a fresh temp dir so the agent-wallet keystore loader
-// (which reads from $HOME/.chaingpt-mcp/agent-wallet/) cannot see real state
-// when this script runs on a developer machine that already has an init'd wallet.
-const SMOKE_HOME = mkdtempSync(join(tmpdir(), 'chaingpt-mcp-boot-smoke-'));
-
-// Spawn the server with a dummy CHAINGPT_API_KEY (server refuses to start without one).
+// Exercise the production launcher with only fixture credentials and isolated
+// application state. Never forward the caller's secrets or keychain access.
+const SMOKE_STATE = mkdtempSync(join(tmpdir(), 'chaingpt-mcp-boot-smoke-'));
 const child = spawn(process.execPath, [BIN], {
+  cwd: SMOKE_STATE,
   env: {
-    ...process.env,
-    HOME: SMOKE_HOME,
-    USERPROFILE: SMOKE_HOME, // Windows fallback for the same purpose
-    CHAINGPT_API_KEY: process.env.CHAINGPT_API_KEY ?? 'boot-smoke-not-a-real-key',
+    PATH: process.env.PATH,
+    ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}),
+    CHAINGPT_API_KEY: 'boot-smoke-not-a-real-key',
+    CHAINGPT_DISABLE_KEYCHAIN: '1',
+    CHAINGPT_USAGE: 'off',
+    CHAINGPT_KEYSTORE_FILE: join(SMOKE_STATE, 'keystore.json'),
+    CHAINGPT_SOLANA_KEYSTORE_FILE: join(SMOKE_STATE, 'solana-keystore.json'),
+    CHAINGPT_AGENT_POLICY_FILE: join(SMOKE_STATE, 'policy.json'),
+    CHAINGPT_CUSTOM_CHAINS_FILE: join(SMOKE_STATE, 'chains.json'),
+    CHAINGPT_TRACKED_TOKENS_FILE: join(SMOKE_STATE, 'tokens.json'),
+    CHAINGPT_ACTIVITY_FILE: join(SMOKE_STATE, 'activity.json'),
+    CHAINGPT_SESSIONS_FILE: join(SMOKE_STATE, 'sessions.json'),
   },
   stdio: ['pipe', 'pipe', 'pipe'],
 });
@@ -173,7 +179,7 @@ async function main() {
 }
 
 function cleanup() {
-  try { rmSync(SMOKE_HOME, { recursive: true, force: true }); } catch {}
+  try { rmSync(SMOKE_STATE, { recursive: true, force: true }); } catch {}
 }
 
 main()

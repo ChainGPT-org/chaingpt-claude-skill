@@ -4,61 +4,40 @@ An MCP (Model Context Protocol) server that exposes all ChainGPT Web3 AI APIs as
 
 ## Prerequisites
 
-- Node.js 18+
-- A ChainGPT API key ([get one here](https://app.chaingpt.org))
+- Node.js 22.14+
+- An optional ChainGPT API key ([get one here](https://app.chaingpt.org))
 - API credits loaded in your account
 
 ## Installation
 
-### Option A: Install globally from npm
+Use the [reviewed local-checkout installation](../README.md#-install-from-a-reviewed-checkout).
+In `mcp-server/`, with credentials unset:
 
 ```bash
-npm install -g @chaingpt/mcp-server
+npm ci --omit=dev --ignore-scripts
 ```
 
-### Option B: Clone and build locally
-
-```bash
-cd mcp-server
-npm install
-npm run build
-```
+Startup never invokes a package manager. Do not copy `node_modules` from an old
+or untrusted installation. After reviewing an update, rerun `npm ci` before use.
+The launcher checks for missing dependencies and the built server and fails closed.
 
 ## Configuration
 
-### Claude Desktop / Claude Code
-
-Add to your Claude MCP configuration (`claude_desktop_config.json` or project `.mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "chaingpt": {
-      "command": "npx",
-      "args": ["@chaingpt/mcp-server"],
-      "env": {
-        "CHAINGPT_API_KEY": "your-key-here"
-      }
-    }
-  }
-}
-```
-
-### Local build
+For the MCP server alone, configure your client to run the prepared local launcher:
 
 ```json
 {
   "mcpServers": {
     "chaingpt": {
       "command": "node",
-      "args": ["/path/to/mcp-server/dist/index.js"],
-      "env": {
-        "CHAINGPT_API_KEY": "your-key-here"
-      }
+      "args": ["/absolute/path/chaingpt-claude-skill/mcp-server/launch.mjs"]
     }
   }
 }
 ```
+
+Provide `CHAINGPT_API_KEY` through your client's environment after installation
+if you use ChainGPT product tools. Keep secrets out of committed configuration.
 
 ## Available Tools
 
@@ -134,7 +113,7 @@ Once configured, just talk to Claude naturally:
 ## Development
 
 ```bash
-npm install
+npm ci --ignore-scripts
 npm run dev    # Run with ts-node
 npm run build  # Compile TypeScript
 npm start      # Run compiled version

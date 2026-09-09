@@ -54,7 +54,7 @@ try {
   solc = require(SOLC_PATH);
 } catch (err) {
   console.error(`[check-patterns] FAIL: could not load solc from ${SOLC_PATH}`);
-  console.error('[check-patterns] Run: (cd mcp-server && npm ci)');
+  console.error('[check-patterns] After reviewing the lockfile, run: npm ci --prefix mcp-server --ignore-scripts');
   console.error('[check-patterns] Or point PATTERNS_SOLC at a solc-js install.');
   console.error('[check-patterns] Error:', err.message);
   process.exit(2);
