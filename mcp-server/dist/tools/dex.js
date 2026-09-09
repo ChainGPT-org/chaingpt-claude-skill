@@ -36,6 +36,36 @@ const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
+// Since ~2026-08 OpenOcean fronts the /quote and /swap paths with a Cloudflare
+// interactive challenge (HTTP 403 + `cf-mitigated: challenge` + a "Just a moment..."
+// HTML body) for non-browser clients. The URL and response schema are unchanged —
+// sibling paths on the same host (/gasPrice, /tokenList, /dexList) still return 200 —
+// so this is access gating, not drift. Surface it as DEGRADED with working
+// alternatives instead of dumping challenge HTML at the caller.
+const OPENOCEAN_DEGRADED_HINT = 'OpenOcean has put its /quote and /swap endpoints behind a Cloudflare browser challenge ' +
+    '(403 "Just a moment..."), so EVM aggregator quotes are DEGRADED until OpenOcean allows ' +
+    'API clients again. Alternatives: chaingpt_dex_1inch_quote (set ONEINCH_API_KEY) for EVM ' +
+    'quotes, chaingpt_dex_cow_create_order for gasless EVM swaps, or chaingpt_dex_jupiter_quote ' +
+    'on Solana.';
+/** True when a response body/error is a Cloudflare bot-challenge page rather than API JSON. */
+function isCloudflareChallenge(msg) {
+    return /Just a moment|cf-mitigated|challenges\.cloudflare\.com|Attention Required/i.test(msg);
+}
+async function openoceanGet(url) {
+    try {
+        return await httpJson(url);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (isCloudflareChallenge(msg) || /HTTP 403/.test(msg)) {
+            // Drop the challenge HTML and the long query string so the hint stays
+            // readable — the status and the path are the only diagnostic bits.
+            const status = msg.match(/HTTP \d{3}[^—]*?for \S+?(?=\?|\s|$)/)?.[0] ?? msg.split('—')[0].trim();
+            throw new Error(`${status.trim()} — Cloudflare challenge\n\n${OPENOCEAN_DEGRADED_HINT}`);
+        }
+        throw e;
+    }
+}
 const EVM_NETWORKS = Object.keys(OPENOCEAN_CHAIN);
 // OpenOcean's "native" token sentinel is 0xEee...EeEEEe. Some EVM aggregators
 // use 0x000...0000. We accept both as input and translate to OO's sentinel.
@@ -276,7 +306,7 @@ export async function handleDexTool(name, args) {
                 gasPrice: String(resolvedGasPrice),
             });
             const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-            const res = await httpJson(url);
+            const res = await openoceanGet(url);
             const data = res?.data ?? res;
             if (!data || res?.code && res.code !== 200) {
                 return {
