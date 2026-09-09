@@ -37,6 +37,47 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+// OpenOcean Pro plane — same v4 paths, but key-gated instead of Cloudflare-gated.
+const OPENOCEAN_PRO_BASE = 'https://open-api-pro.openocean.finance/v4';
+
+// Since ~2026-08 OpenOcean put a Cloudflare "managed challenge" in front of the
+// public pricing routes: /v4/{chain}/quote and /v4/{chain}/swap answer 403 with a
+// "Just a moment..." interstitial for every non-browser client, while the metadata
+// routes (/gasPrice, /dexList, /tokenList) still return normal JSON. The response
+// envelope is unchanged — this is an access gate, not a schema change, so the
+// parser below stays as-is and we only explain the degraded state.
+const OPENOCEAN_DEGRADED_HINT =
+  'OpenOcean public pricing routes (/quote, /swap) are behind a Cloudflare challenge and return 403 ' +
+  'to API clients; its metadata routes still work. EVM swap quotes are DEGRADED until OpenOcean ' +
+  'restores public access. Options: set OPENOCEAN_API_KEY to use the Pro plane ' +
+  '(https://open-api-pro.openocean.finance, see https://docs.openocean.finance/dev/apis-for-partners), ' +
+  'set OPENOCEAN_API_BASE to your own proxy, or use chaingpt_dex_jupiter_quote for Solana routes.';
+
+/**
+ * Fetch an OpenOcean v4 path, preferring the Pro plane when a key is configured.
+ * Failures on the Cloudflare-gated public plane are rethrown with the degraded
+ * hint appended rather than surfacing a raw page of challenge HTML.
+ */
+async function openOceanGet<T = any>(path: string): Promise<T> {
+  const apiKey = process.env.OPENOCEAN_API_KEY;
+  const override = process.env.OPENOCEAN_API_BASE?.replace(/\/$/, '');
+  const base = override ?? (apiKey ? OPENOCEAN_PRO_BASE : OPENOCEAN_BASE);
+  // The Pro plane authenticates via an `apikey` header (verified live: any other
+  // header name still reports "No API key found in request").
+  const headers = apiKey ? { apikey: apiKey } : undefined;
+  try {
+    return await httpJson<T>(`${base}${path}`, headers ? { headers } : {});
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/HTTP 403|Just a moment|cf-chl|challenge-platform/i.test(msg)) {
+      // Collapse the multi-KB challenge page down to the salient line.
+      throw new Error(
+        `OpenOcean request blocked (HTTP 403 Cloudflare challenge) for ${path}\n\n${OPENOCEAN_DEGRADED_HINT}`
+      );
+    }
+    throw e;
+  }
+}
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -292,8 +333,7 @@ export async function handleDexTool(
         account,
         gasPrice: String(resolvedGasPrice),
       });
-      const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await openOceanGet<any>(`/${ooChain}/${path}?${params.toString()}`);
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
