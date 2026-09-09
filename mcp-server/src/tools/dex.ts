@@ -37,6 +37,21 @@ const OPENOCEAN_CHAIN: Record<string, string> = {
 };
 
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
+
+// open-api.openocean.finance started answering every request from datacenter IPs
+// with a Cloudflare managed challenge ("Just a moment...", HTTP 403,
+// `cf-mitigated: challenge`) around 2026-09. The API did not change shape — the
+// host is gated, including its root — so surface the degraded state instead of a
+// wall of challenge HTML. Keyed access (open-api-pro.openocean.finance) still
+// reaches the app layer and is unaffected.
+const OPENOCEAN_DEGRADED_HINT =
+  'OpenOcean public API is currently gated by a Cloudflare bot challenge (HTTP 403 ' +
+  '"Just a moment..." on every path, including the API root). EVM swap quotes are ' +
+  'DEGRADED until OpenOcean restores unauthenticated access. ' +
+  'Options: retry from a residential IP, use chaingpt_dex_1inch_quote for EVM quotes, ' +
+  'or see https://docs.openocean.finance/dev/openocean-api-3.0 for keyed access.';
+
+
 // Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
 // The old domain no longer resolves. Use the new endpoint.
 const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
@@ -51,6 +66,24 @@ function normalizeTokenAddress(addr: string): string {
   const lower = addr.toLowerCase();
   if (lower === '0x0000000000000000000000000000000000000000') return NATIVE_ADDR;
   return lower;
+}
+
+/** True when an upstream error is the Cloudflare challenge rather than a real API error. */
+function isChallengeGated(msg: string): boolean {
+  return /HTTP 403|Just a moment|cf-mitigated|Cloudflare|Attention Required/i.test(msg);
+}
+
+/** httpJson for OpenOcean that rewrites bot-challenge 403s into a degraded-state error. */
+async function openOceanJson<T>(url: string): Promise<T> {
+  try {
+    return await httpJson<T>(url);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (isChallengeGated(msg)) {
+      throw new Error(`${msg.slice(0, 200)}\n\n${OPENOCEAN_DEGRADED_HINT}`);
+    }
+    throw e;
+  }
 }
 
 // ─── ERC-20 ABI fragments for approval helper ──────────────────────
@@ -293,7 +326,7 @@ export async function handleDexTool(
         gasPrice: String(resolvedGasPrice),
       });
       const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
-      const res = await httpJson<any>(url);
+      const res = await openOceanJson<any>(url);
       const data = res?.data ?? res;
       if (!data || res?.code && res.code !== 200) {
         return {
