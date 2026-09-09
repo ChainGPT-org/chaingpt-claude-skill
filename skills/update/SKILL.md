@@ -8,34 +8,46 @@ disable-model-invocation: true
 
 When the user invokes this skill, follow these steps in order:
 
-## Step 1: Check Current Version
+## Step 1: Check the Prepared Local Checkout
 
-Read the file `VERSION` in the skill root directory to determine the currently installed version:
+Use the prepared local checkout described in the root README. Do not update a marketplace cache or replace files in a running plugin session. Have the user stop that session before applying changes, or prepare a separate checkout for the next session.
+
+From the checkout root, read the installed version and check for local changes:
 
 ```
 cat VERSION
+git status --short
 ```
 
-Report the current version to the user.
+Report the current version. If there are local changes, stop the update and let the user preserve them; do not stash, reset, overwrite, or merge them automatically.
 
 ## Step 2: Check for Updates
 
-Fetch the latest changes from the remote repository, then compare against the local HEAD:
+Verify that `origin` is the intended ChainGPT repository. Fetch updates without applying them, then record the full commit SHA from the fetched `origin/main`:
 
 ```bash
-git fetch origin
+git -c core.hooksPath=/dev/null fetch origin main
+CHAINGPT_REVIEWED_COMMIT="$(git rev-parse --verify origin/main)"
+printf '%s\n' "$CHAINGPT_REVIEWED_COMMIT"
+git log --oneline "HEAD..$CHAINGPT_REVIEWED_COMMIT"
+git diff --stat HEAD "$CHAINGPT_REVIEWED_COMMIT"
 ```
+
+Retain that exact SHA throughout review and application. If a later command runs in a fresh shell, set `CHAINGPT_REVIEWED_COMMIT` to the recorded literal SHA, never to a freshly resolved remote ref.
+
+- If `HEAD` equals the recorded SHA, report that no update is available.
+- If the histories diverge or the local checkout is ahead, stop and report the difference. Do not reset or create a merge commit.
+- Otherwise, proceed to review the fetched commit before changing the checkout or installing dependencies.
+
+## Step 3: Review the Exact Update
+
+Inspect the full diff against the recorded SHA. Pay particular attention to dependency manifests and lockfiles, `mcp-server/dist/`, the launcher, hooks, `.mcp.json`, plugin metadata, scripts and skills:
 
 ```bash
-git log HEAD..origin/main --oneline
+git diff HEAD "$CHAINGPT_REVIEWED_COMMIT"
 ```
 
-- If the `log` command returns **no output**, tell the user: "You are on the latest version (vX.X.X). No updates available."
-- If the `log` command returns **one or more commits**, proceed to Step 3.
-
-## Step 3: Show Changelog
-
-Display the list of new commits to the user in a readable format. Categorize changes where possible:
+Check the candidate revision's security and build results. Do not execute downloaded hooks, build scripts or dependency lifecycle scripts during review. Explain material changes and unresolved findings before asking to apply the exact recorded SHA. Categorize changes where useful:
 
 - **New Endpoints** — Any new API routes or SDK methods added
 - **SDK Updates** — Version bumps, new packages, breaking changes
@@ -43,27 +55,33 @@ Display the list of new commits to the user in a readable format. Categorize cha
 - **Bug Fixes** — Corrections to docs, examples, or the MCP server
 - **Other** — Anything that doesn't fit the above
 
-Ask the user: "Would you like to apply these updates?"
+Include the full SHA in the approval request. If the remote advances afterward, apply only the approved SHA; review any newer commit separately.
 
 ## Step 4: Apply Update
 
-If the user confirms, pull the latest changes:
+After the user approves the recorded SHA and the plugin session is stopped, recheck that the checkout has no local changes and fast-forward to that exact commit:
 
 ```bash
-git pull origin main
+git status --short
+git -c core.hooksPath=/dev/null merge --ff-only "$CHAINGPT_REVIEWED_COMMIT"
+git rev-parse HEAD
 ```
 
-Report the result. If the pull succeeds, read the updated `VERSION` file and confirm the new version.
+If the status is not clean or fast-forward fails, stop; do not force it. Verify that `HEAD` equals the approved SHA, then read `VERSION` and report the applied revision. Do not use `git pull` to resolve a potentially changed remote after review.
 
 ## Step 5: Post-Update
 
-After a successful update, check if the MCP server directory exists. If it does, remind the user:
+With API keys and wallet secrets unset, prepare the reviewed lockfile's production dependencies from the checkout root:
 
-> The MCP server may need to be rebuilt. Run:
-> ```bash
-> cd mcp-server && npm install && npm run build
-> ```
-> Then restart Claude Code for the MCP server changes to take effect.
+```bash
+npm ci --prefix mcp-server --omit=dev --ignore-scripts
+```
+
+Do not reuse dependency caches from an untrusted installation. If lockfile installation fails, stop and report it; do not fall back to `npm install`, remove the lockfile, or enable lifecycle scripts.
+
+The reviewed `mcp-server/dist/` is included, so normal plugin use does not require a build. If the user explicitly needs a local rebuild, install the locked development dependencies with `npm ci --prefix mcp-server --ignore-scripts`, then run the reviewed `npm run build --prefix mcp-server` command.
+
+After preparation succeeds, start a new Claude Code session using `claude --plugin-dir "$PWD"` from this checkout. Runtime startup does not install dependencies.
 
 ---
 
