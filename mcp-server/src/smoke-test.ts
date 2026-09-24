@@ -340,12 +340,19 @@ contract Hello { string public greeting = "hi"; }`,
     expect: /Pendle active markets/i,
     expectData: /TVL: \$\d[\s\S]*Fixed APY \(buy PT\):\s+\d/,
   },
+  // blue-api.morpho.org answers 200 with the schema below when reached
+  // directly, but some CI egress paths get a 403 HTML block page instead
+  // (same page drift.trade returns from those runners). This is a network
+  // gate, not upstream drift, so the asserts stay live and only a genuine
+  // `HTTP <status>` transport error degrades to WARN. Anchored on the
+  // httpJson error prefix so digits inside TVL/APY output can't match.
   {
     name: 'defi_morpho_markets (ethereum)',
     fn: () =>
       handleYieldTool('chaingpt_defi_morpho_markets', { network: 'ethereum', limit: 3 }),
     expect: /Morpho Blue markets/i,
     expectData: /Supply APY: \d[\s\S]*Supply TVL: \$\d/,
+    degradedOk: /HTTP (403|429|5\d\d)\b/i,
   },
   {
     name: 'defi_morpho_vaults (ethereum USDC)',
@@ -353,6 +360,7 @@ contract Hello { string public greeting = "hi"; }`,
       handleYieldTool('chaingpt_defi_morpho_vaults', { network: 'ethereum', asset: 'USDC', limit: 3 }),
     expect: /MetaMorpho vaults/i,
     expectData: /Net APY: \d[\s\S]*TVL: \$\d/,
+    degradedOk: /HTTP (403|429|5\d\d)\b/i,
   },
 
   // ─── Tier 6.4: Drift ─────────────────────────────────────────────
