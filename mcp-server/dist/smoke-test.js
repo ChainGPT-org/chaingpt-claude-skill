@@ -145,6 +145,12 @@ contract Hello { string public greeting = "hi"; }`,
         }),
         expect: /Swap quote|expected|USDC/i,
         expectData: /Out \(expected\):\s+[\d.]+/,
+        // OpenOcean gated its quote/swap routes behind a Cloudflare bot challenge
+        // (403 "Just a moment...") for server-side clients around 2026-08 — only
+        // requests bearing its own dapp Referer get through. The response shape is
+        // unchanged, so there is nothing to reparse; degradedOk keeps the case
+        // visible as WARN and flips it back to a hard assert the day access returns.
+        degradedOk: /DEGRADED|Just a moment|cf-mitigated|403/i,
     },
     {
         name: 'dex_build_swap_tx (mainnet refusal without ack)',
