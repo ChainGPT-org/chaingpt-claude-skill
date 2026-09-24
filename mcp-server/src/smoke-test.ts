@@ -185,6 +185,14 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     expect: /Swap quote|expected|USDC/i,
     expectData: /Out \(expected\):\s+[\d.]+/,
+    // OpenOcean's keyless v4 endpoint throttles by delay, not by HTTP 429: on a
+    // bad spell every response is still 200 with the same shape, but latency
+    // runs past 20s (see the note on openOceanJson in tools/dex.ts). The tool
+    // now retries with a 15s-then-25s budget, which covers the tail we measured
+    // — but no client-side budget can guarantee a tarpitting upstream answers.
+    // This pattern matches ONLY the retry-exhausted message, so a genuine
+    // dex_quote regression (bad parse, moved endpoint, 4xx) still fails hard.
+    degradedOk: /did not respond in time|rate-limiting by delay/i,
   },
   {
     name: 'dex_build_swap_tx (mainnet refusal without ack)',
