@@ -30,7 +30,8 @@ export function isTrustedTronHost(network = 'mainnet') {
     if (!override)
         return true;
     try {
-        return TRUSTED_TRON_HOSTS.includes(new URL(override).hostname);
+        const url = new URL(override);
+        return url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') && url.hostname === new URL(HOSTS[network]).hostname && (url.pathname === '/' || url.pathname === '');
     }
     catch {
         return false;

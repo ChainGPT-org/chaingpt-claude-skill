@@ -1,3 +1,4 @@
+import { findTemplate } from '../lib/agent-policy-templates.js';
 /**
  * Agent wallet tests — keystore round-trip + policy gate + tool surface.
  *
@@ -155,20 +156,18 @@ describe('Policy gate', () => {
     data: '0x',
   };
 
-  it('first-run default is balanced (killSwitch off) but still refuses an un-allowlisted destination', () => {
+  it('first-run default refuses every send until explicitly enabled', () => {
     const policy = loadPolicy();
-    // New balanced default: killSwitch OFF so a funded agent can act on day one,
-    // but the destination allowlist (DEX routers + Aave + Lido) still gates sends.
-    expect(policy.killSwitch).toBe(false);
-    const decision = checkPolicy(intent, policy); // intent.to = 0x1111… (not a router)
-    expect(decision.allowed).toBe(false);
-    expect(decision.reason).toMatch(/allowlist|allowed/i);
+    expect(policy.killSwitch).toBe(true);
+    expect(policy.solana?.enabled).toBe(false);
+    expect(policy.tron?.enabled).toBe(false);
+    expect(checkPolicy(intent, policy).allowed).toBe(false);
   });
 
   const NO_SPEND = { totalWei: 0n, txCount: 0, ok: true };
 
-  it('balanced default ALLOWS a send to an allowlisted router within the cap', () => {
-    const policy = loadPolicy();
+  it('explicit balanced preset allows a policy-compliant intent', () => {
+    const policy = findTemplate('balanced-defi')!.policy;
     const ok = checkPolicy(
       { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
       policy,
@@ -178,7 +177,7 @@ describe('Policy gate', () => {
   });
 
   it('refuses when maxTxGas is set but no gasLimit was provided (auto-estimation would bypass the cap)', () => {
-    const policy = loadPolicy(); // balanced default sets maxTxGas
+    const policy = findTemplate('balanced-defi')!.policy; // balanced default sets maxTxGas
     const d = checkPolicy(
       { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test' },
       policy,
@@ -189,7 +188,7 @@ describe('Policy gate', () => {
   });
 
   it('velocity cap: refuses when 24h spend + this tx would exceed maxDailySpendWei', () => {
-    const policy = loadPolicy(); // balanced default: maxDailySpendWei = 0.3 ETH
+    const policy = findTemplate('balanced-defi')!.policy; // balanced default: maxDailySpendWei = 0.3 ETH
     const d = checkPolicy(
       { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
       policy,
@@ -200,7 +199,7 @@ describe('Policy gate', () => {
   });
 
   it('velocity cap: refuses when the 24h tx count is exhausted', () => {
-    const policy = loadPolicy(); // balanced default: maxDailyTxCount = 20
+    const policy = findTemplate('balanced-defi')!.policy; // balanced default: maxDailyTxCount = 20
     const d = checkPolicy(
       { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n },
       policy,
@@ -211,7 +210,7 @@ describe('Policy gate', () => {
   });
 
   it('velocity cap: fails CLOSED when spend stats are missing or the ledger is unreadable', () => {
-    const policy = loadPolicy();
+    const policy = findTemplate('balanced-defi')!.policy;
     const intent2 = { chainId: 8453, to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', value: 10n ** 16n, data: '0x', memo: 'test', gas: 100_000n };
     const noStats = checkPolicy(intent2, policy);
     expect(noStats.allowed).toBe(false);
@@ -406,7 +405,7 @@ describe('sign_and_send end-to-end gate', () => {
     expect(r.content[0].text).toContain('not initialized');
   });
 
-  it('balanced default refuses a send to a non-allowlisted address', async () => {
+  it('first-run policy refuses signing before network access', async () => {
     await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
     // New default has killSwitch OFF but an allowlist of DEX/lending routers.
     // 0x1111… is not in it, so the send is still refused — by the allowlist gate.
@@ -416,7 +415,7 @@ describe('sign_and_send end-to-end gate', () => {
       valueWei: '100',
     });
     expect(r.content[0].text).toContain('Policy refused');
-    expect(r.content[0].text).toMatch(/allowlist|allowed/i);
+    expect(r.content[0].text).toMatch(/kill switch/i);
   });
 
   it('engaging the kill switch refuses everything regardless of allowlist', async () => {
@@ -457,7 +456,7 @@ describe('sign_and_send end-to-end gate', () => {
     const t = r.content[0].text;
     expect(t).toContain('Agent wallet status');
     expect(t).toContain('Policy digest');
-    expect(t).toMatch(/Kill switch:\s+off/i); // balanced default has killSwitch off
+    expect(t).toMatch(/Kill switch:\s+ON/i); // balanced default has killSwitch off
     expect(t).toContain('Passphrase env:  set');
   });
 });

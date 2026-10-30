@@ -28,8 +28,8 @@ export const POLICY_TEMPLATES = [
     {
         id: 'balanced-defi',
         emoji: '⚖️',
-        name: 'Balanced DeFi (recommended)',
-        description: 'The default. killSwitch OFF. Major DEX aggregators (OpenOcean + 1inch) + Aave V3 + Lido across Ethereum / Base / Arbitrum / Optimism / Polygon. 0.1 native per tx, memo required, scam blocklist. Safe starting point for most people.',
+        name: 'Bounded transfers (configure assets)',
+        description: 'Optional admin preset, not the first-run default. killSwitch OFF. Major DEX aggregators (OpenOcean + 1inch) + Aave V3 + Lido across Ethereum / Base / Arbitrum / Optimism / Polygon. 0.1 native per tx, memo required, scam blocklist. Opaque protocol calls require external signing. Configure assetLimits before token transfers.',
         policy: {
             version: 1,
             killSwitch: false,

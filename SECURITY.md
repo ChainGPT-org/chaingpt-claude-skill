@@ -17,16 +17,28 @@ This plugin builds and (opt-in) signs real-money transactions. We treat security
 4. Localhost dashboard auth bypass (token, session, Host/Origin checks).
 5. Any plugin, MCP, package, build, CI, or update path that silently executes unreviewed code with developer, wallet, repository, cloud, registry, or deployment credentials.
 
-## Standing security properties (verify, then break)
+## Signing boundaries
 
-- Every state-changing tool returns UNSIGNED transactions unless the user opted into the agent wallet.
-- The policy file has no MCP write surface; checks run in code at a single chokepoint per chain, fail-closed.
-- Velocity caps are computed fresh from an append-only ledger at sign time.
-- The on-chain session caps (v1.21+) are enforced by audited third-party contracts at EntryPoint validation — the local host is not in that trust path.
-- MCP startup never performs an automatic package installation. Missing dependencies block startup until a human performs the approved deterministic install from reviewed manifests and lockfiles.
-- External API responses and workflow logs are untrusted data. They are not copied into issues or supplied to an autonomous code-writing agent.
-- Live-API smoke detects upstream drift. Repairs require human review; the former autonomous self-heal workflow is disabled pending a separately approved redesign.
-- GitHub Actions must be pinned to immutable commit SHAs and run with the minimum token permissions required for the job.
+See [wallet safety and migration](docs/wallet-safety.md) for the current API, native/token fee
+budgets, durable reservations, stable operation IDs, supported transfer adapters and crash recovery.
+First-run signing is disabled. Policy loads use strict validation. Pending/uncertain transactions
+retain their budget; confirmed reservations use a rolling 24h window. Opaque protocol operations
+require external signing in restricted mode. Unrestricted mode is an explicit opt-out from caps.
+
+The local policy assumes callers cannot edit signer state, execute host commands, retrieve keychain
+secrets or administer the dashboard. No MCP editing tool does not imply OS isolation. Host access
+requires a separate signer security boundary. Dashboard admin tokens are privileged tool outputs.
+
+Confirmation hooks cover agent signers, signed submissions and x402 settlement. Keep them enabled;
+non-Claude hosts need equivalent human approval. Malformed hook input denies execution.
+Audit-before-deploy, token-risk and health checks are workflow instructions; the unsigned deployment
+builder does not bind a verified audit receipt to bytecode. ERC-4337 on-chain caps remain beta until
+live grant/over-cap/expiry/revoke acceptance is published. Compilation is not a security audit.
+
+Startup never installs dependencies. CI actions stay pinned with minimal permissions. External data
+is untrusted and cannot authorize privileged autonomous repairs. Usage counters remain local;
+API tools transmit the requested data to their upstream providers. See [privacy](README.md#privacy-and-upstream-data)
+and the [ChainGPT Privacy Policy](https://www.chaingpt.org/privacy-policy).
 
 ## August 2026 incident hold
 

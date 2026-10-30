@@ -1,7 +1,10 @@
+import { finalizedUserOperationReceipt } from '../lib/signing-finality.js';
+import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
+import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import { decodeAbiParameters } from 'viem';
 import { readKeystoreFile, loadAccount } from '../lib/agent-keystore.js';
 import { loadPolicy, policyPath, checkPolicy, checkErc4337Gate, } from '../lib/agent-policy.js';
-import { logActivity, spendStats } from '../lib/agent-activity.js';
+import { logActivity, spendStats, activityPath } from '../lib/agent-activity.js';
 import { encodeSingleExecute, encodeGetNonce, nexusNonceKey, readAccountId, classifyAccountId, } from '../lib/erc7579.js';
 import { SMART_SESSIONS_ADDRESS, encodeUseSignature, MOCK_ECDSA_SIG } from '../lib/smart-sessions.js';
 import { ENTRY_POINT_V07, normalizeUserOp, computeUserOpHash, userOpToBundlerJson, bundlerRpc, } from '../lib/erc4337.js';
@@ -33,6 +36,7 @@ export const agentWallet4337Tools = [
         inputSchema: {
             type: 'object',
             properties: {
+                operationId: { type: 'string', description: 'Stable unique id for ONE logical action. Reuse on retries; never generate a replacement after an uncertain send.' },
                 chain: { type: 'string', description: 'EVM chain slug.' },
                 account: { type: 'string', description: "The user's smart account (userOp sender)." },
                 permissionId: { type: 'string', description: 'The granted session (bytes32 from build_grant).' },
@@ -44,7 +48,7 @@ export const agentWallet4337Tools = [
                 gasLimitMultiplierPct: { type: 'number', description: 'Headroom on bundler gas estimates. Default 120 (=+20%).', default: 120 },
                 waitForReceipt: { type: 'boolean', description: 'Poll for the userOp receipt. Default true.', default: true },
             },
-            required: ['chain', 'account', 'permissionId', 'target', 'bundlerUrl'],
+            required: ['operationId', 'chain', 'account', 'permissionId', 'target', 'bundlerUrl'],
         },
     },
 ];
@@ -65,7 +69,7 @@ function refusalBlock(reason, digest) {
             }],
     };
 }
-export async function handleAgentWallet4337Tool(name, args) {
+async function handleAgentWallet4337ToolUnlocked(name, args) {
     args = args ?? {};
     try {
         if (name !== 'chaingpt_agent_wallet_4337_sign_and_send') {
@@ -91,6 +95,22 @@ export async function handleAgentWallet4337Tool(name, args) {
         const gate = checkErc4337Gate({ account, bundlerUrl }, policy);
         if (!gate.allowed)
             return refusalBlock(gate.reason, gate.policyDigest);
+        const operationId = args.operationId;
+        const fingerprint = operationFingerprint({ chain: args.chain, account, bundlerUrl, permissionId, target, valueWei: valueWei.toString(), data, memo });
+        const existing = findOperation(activityPath(), operationId, fingerprint);
+        if (existing) {
+            if (existing.hash && existing.state !== 'confirmed') {
+                try {
+                    const receipt = await bundlerRpc({ url: bundlerUrl, method: 'eth_getUserOperationReceipt', params: [existing.hash] });
+                    if (await finalizedUserOperationReceipt(rpcEndpointsWithCustom(String(args.chain)), existing.hash, ENTRY_POINT_V07, receipt)) {
+                        saveReservation(activityPath(), { ...existing, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
+                        return { content: [{ type: 'text', text: replayMessage({ ...existing, state: 'confirmed' }) }] };
+                    }
+                }
+                catch { /* Preserve uncertain outcomes. */ }
+            }
+            return { content: [{ type: 'text', text: replayMessage(existing) }] };
+        }
         // 2. Account kind — v1 signs only for Nexus 1.x
         const chain = resolveChainWithCustom(String(args.chain));
         if (!chain?.chainId) {
@@ -168,15 +188,27 @@ export async function handleAgentWallet4337Tool(name, args) {
             gas: BigInt(baseOp.callGasLimit),
             memo,
         };
-        const decision = checkPolicy(intent, policy, spendStats(24, 'evm'));
+        const targetCode = data === '0x' ? await jsonRpcFallback(rpcs, 'eth_getCode', [target, 'latest']) : undefined;
+        const currentPolicy = loadPolicy();
+        if (currentPolicy.unrestricted !== true && targetCode && targetCode !== '0x')
+            throw new Error('Restricted signing refuses opaque contract fallback calls.');
+        const currentGate = checkErc4337Gate({ account, bundlerUrl }, currentPolicy);
+        if (!currentGate.allowed)
+            return refusalBlock(currentGate.reason, currentGate.policyDigest);
+        const assets = evmAssetSpends(chain.slug, target, data, valueWei, currentPolicy);
+        checkAssetLimits(chain.slug, assets, currentPolicy, activityPath());
+        const maxCost = valueWei + (BigInt(baseOp.callGasLimit) + BigInt(baseOp.verificationGasLimit) + BigInt(baseOp.preVerificationGas)) * maxFeePerGas;
+        const decision = checkPolicy({ ...intent, value: maxCost }, currentPolicy, spendStats(24, 'evm'));
         if (!decision.allowed)
             return refusalBlock(decision.reason, decision.policyDigest);
         // 6. Sign the real userOpHash with the agent's session key
         const userOp = normalizeUserOp(baseOp);
         const userOpHash = computeUserOpHash({ userOp, entryPoint: ENTRY_POINT_V07, chainId: chain.chainId });
+        const reservation = reserveOperation(activityPath(), { network: chain.slug, policyDigest: decision.policyDigest, operationId, fingerprint, chainClass: 'evm', valueWei: maxCost.toString(), assets });
         const agent = loadAccount();
         const sig = await agent.sign({ hash: userOpHash });
         userOp.signature = encodeUseSignature(permissionId, sig);
+        saveReservation(activityPath(), { ...reservation, state: 'prepared', hash: userOpHash, signedBytes: JSON.stringify(userOpToBundlerJson(userOp)) });
         // 7. Submit — the chain's validation is the authoritative fence
         let submittedHash;
         try {
@@ -198,6 +230,9 @@ export async function handleAgentWallet4337Tool(name, args) {
                     }],
             };
         }
+        if (submittedHash.toLowerCase() !== userOpHash.toLowerCase())
+            throw new Error('Bundler returned a different userOpHash; reservation retained.');
+        saveReservation(activityPath(), { ...reservation, state: 'broadcast', hash: submittedHash });
         // 8. Optional receipt poll
         let txHash = '';
         if (args.waitForReceipt !== false) {
@@ -206,6 +241,8 @@ export async function handleAgentWallet4337Tool(name, args) {
                     const r = await bundlerRpc({ url: bundlerUrl, method: 'eth_getUserOperationReceipt', params: [submittedHash] });
                     if (r?.receipt?.transactionHash) {
                         txHash = r.receipt.transactionHash;
+                        if (await finalizedUserOperationReceipt(rpcs, submittedHash, ENTRY_POINT_V07, r))
+                            saveReservation(activityPath(), { ...reservation, ts: new Date().toISOString(), state: 'confirmed', hash: submittedHash });
                         if (r.success === false) {
                             return { content: [{ type: 'text', text: `userOp ${submittedHash} was included in ${txHash} but the inner call REVERTED. Inspect the tx on the explorer.` }] };
                         }
@@ -219,6 +256,7 @@ export async function handleAgentWallet4337Tool(name, args) {
         // 9. Journal (EVM class — counts in the standard velocity window)
         try {
             logActivity({
+                operationId,
                 ts: new Date().toISOString(),
                 chain: chain.slug,
                 chainId: chain.chainId,
@@ -243,7 +281,7 @@ export async function handleAgentWallet4337Tool(name, args) {
                         `Session:       ${permissionId}`,
                         `Memo:          ${memo ?? '(none)'}`,
                         ``,
-                        `Both fences held: local policy gate AND the on-chain session caps.`,
+                        `Local policy passed; inspect the chain receipt. On-chain session-cap support remains beta pending the published live acceptance loop.`,
                     ].join('\n'),
                 }],
         };
@@ -252,4 +290,9 @@ export async function handleAgentWallet4337Tool(name, args) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`ChainGPT Agent Wallet (4337) error: ${message}`);
     }
+}
+export async function handleAgentWallet4337Tool(name, args) {
+    if (!name.endsWith('sign_and_send'))
+        return handleAgentWallet4337ToolUnlocked(name, args);
+    return withSigningLock(activityPath(), () => handleAgentWallet4337ToolUnlocked(name, args));
 }

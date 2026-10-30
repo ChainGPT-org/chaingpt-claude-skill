@@ -96,7 +96,7 @@ Every PR must leave `./scripts/test-all.sh` green. One command runs every layer:
 ./scripts/test-all.sh --fast    # skip live smoke (~20s, fully offline)
 ```
 
-The harness covers six layers — `validate`, `typecheck`, `mcp-test`, `mock-test`, `examples`, `smoke`. See [`TESTING.md`](TESTING.md) for the full reference: what each layer covers, how to run them individually, and the failure-mode cheat-sheet.
+The harness covers eight layers — `validate`, `typecheck`, `mcp-test`, `mock-test`, `examples`, `patterns`, `boot`, `smoke`. See [`TESTING.md`](TESTING.md) for the full reference: what each layer covers, how to run them individually, and the failure-mode cheat-sheet.
 
 **If you add a tool, handler, or behavior, you must add tests in the same PR.** The pattern is documented in [`TESTING.md#adding-tests-for-a-new-capability`](TESTING.md#adding-tests-for-a-new-capability). A PR that adds a capability without tests will be asked to add them before merge — no exceptions.
 
@@ -111,9 +111,9 @@ For markdown-only changes (reference docs, templates, patterns, SKILLs):
 
 ```
 chaingpt-claude-skill/
-  SKILL.md              # Main skill definition (< 500 lines)
+  skills/chaingpt/SKILL.md # Main skill definition (< 500 lines)
   README.md             # Public readme
-  plugin.json           # Claude plugin manifest
+  .claude-plugin/plugin.json # Claude plugin manifest
   VERSION               # Semantic version
   reference/            # API/SDK reference docs
   templates/            # Project scaffolding templates

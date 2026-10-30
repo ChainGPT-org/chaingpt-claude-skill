@@ -10,7 +10,7 @@
     "build": "node ./node_modules/typescript/bin/tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=2",
     "test:watch": "vitest"
   },
   "dependencies": {

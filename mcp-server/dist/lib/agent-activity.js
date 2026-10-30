@@ -1,3 +1,4 @@
+import { readReservations } from './signing-journal.js';
 /**
  * Activity log for agent-initiated transactions.
  *
@@ -39,13 +40,24 @@ function entryClass(e) {
 }
 export function spendStats(windowHours = 24, chainClass = 'all') {
     const path = activityPath();
-    if (!existsSync(path))
-        return { totalWei: 0n, txCount: 0, ok: true };
     try {
         const cutoff = Date.now() - windowHours * 3_600_000;
+        const reservations = readReservations(path);
+        const hashKey = (kind, hash) => `${kind}:${kind === 'solana' ? hash : hash.toLowerCase()}`;
+        const hashes = new Set(reservations.flatMap(r => r.hash ? [hashKey(r.chainClass, r.hash)] : []));
+        const operations = new Set(reservations.map(r => r.operationId));
         let totalWei = 0n;
         let txCount = 0;
-        for (const l of readFileSync(path, 'utf8').split('\n')) {
+        for (const r of reservations) {
+            if (chainClass !== 'all' && r.chainClass !== chainClass)
+                continue;
+            // Pending/uncertain transactions never age out: their eventual execution is unknown.
+            if (r.state === 'confirmed' && Date.parse(r.ts) < cutoff)
+                continue;
+            totalWei += BigInt(r.valueWei);
+            txCount++;
+        }
+        for (const l of (existsSync(path) ? readFileSync(path, 'utf8') : '').split('\n')) {
             if (!l.trim())
                 continue;
             let e;
@@ -53,10 +65,16 @@ export function spendStats(windowHours = 24, chainClass = 'all') {
                 e = JSON.parse(l);
             }
             catch {
-                continue;
+                throw new Error('Malformed activity ledger');
             }
+            if (typeof e.hash !== 'string' || !/^\d+$/.test(e.valueWei))
+                throw new Error('Malformed activity entry');
+            if ((e.operationId && operations.has(e.operationId)) || hashes.has(hashKey(entryClass(e), e.hash)))
+                continue;
             const t = Date.parse(e?.ts ?? '');
-            if (!isFinite(t) || t < cutoff)
+            if (!isFinite(t))
+                throw new Error('Invalid ledger timestamp');
+            if (t < cutoff)
                 continue;
             if (chainClass !== 'all' && entryClass(e) !== chainClass)
                 continue;

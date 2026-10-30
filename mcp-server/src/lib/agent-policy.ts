@@ -1,3 +1,4 @@
+import type { AssetLimit } from './asset-policy.js';
 /**
  * Policy file for the agent wallet.
  *
@@ -43,6 +44,8 @@ export interface Erc4337Policy {
 }
 
 export interface SolanaPolicy {
+  /** Administrator-verified full genesis hashes, keyed by mainnet/devnet/testnet. Required by the signer. */
+  genesisHashes?: Partial<Record<'mainnet' | 'devnet' | 'testnet', string>>;
   /** Master opt-in. Missing/false ⇒ every Solana signing op refused (fail closed). */
   enabled: boolean;
   /**
@@ -87,6 +90,8 @@ export interface TronPolicy {
 }
 
 export interface AgentPolicy {
+  /** Exact base-unit token caps. Unknown assets and recipients are refused. */
+  assetLimits?: AssetLimit[];
   version: 1;
   /** Master kill switch. If true, every signing operation refuses. Wins over `unrestricted`. */
   killSwitch: boolean;
@@ -205,67 +210,8 @@ const _LIDO_STETH = '0xae7ab96520de3a18e5e111b5eaab095312d7fe84';
 // it, the small per-tx cap keeps blast radius low even if they never tighten.
 // Corrupt/missing files still fall back to FAIL_CLOSED_POLICY above.
 const DEFAULT_POLICY: AgentPolicy = {
-  version: 1,
-  killSwitch: false,
-  allowedChains: [1, 8453, 42161, 10, 137],
-  allowedToAddresses: [
-    _OPENOCEAN_V4,
-    _ONEINCH_V6,
-    _AAVE_V3_POOL_ETH,
-    _AAVE_V3_POOL_BASE,
-    _LIDO_STETH,
-  ],
-  blockedToAddresses: [
-    '0x0000000000000000000000000000000000000000',
-    '0x000000000000000000000000000000000000dead',
-  ],
-  maxTxValueWei: '100000000000000000', // 0.1 ETH — conservative starter cap
-  maxTxGas: '1500000',
-  maxDailySpendWei: '300000000000000000', // 0.3 ETH per rolling 24h — anti-drain velocity cap
-  maxDailyTxCount: 20,
-  blockedSelectors: [],
-  requireMemo: true,
-  solana: {
-    enabled: true,
-    allowedPrograms: [
-      '11111111111111111111111111111111',              // System
-      'ComputeBudget111111111111111111111111111111',   // ComputeBudget
-      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',   // SPL Token
-      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',   // Token-2022
-      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',  // Associated Token
-      'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',   // Jupiter v6
-      'MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA',   // Marginfi v2
-      'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD',   // Kamino kLend
-    ],
-    maxTxLamports: '100000000',          // 0.1 SOL — mirrors the 0.1-native EVM cap
-    maxDailySpendLamports: '300000000',  // 0.3 SOL per rolling 24h
-    maxDailyTxCount: 20,
-    requireMemo: true,
-  },
-  tron: {
-    enabled: true,
-    allowedContracts: [
-      'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', // USDT
-      'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR', // WTRX
-      'TCFNp179Lg46D16zKoumd4Poa2WFFdtqYj', // SunSwap Smart Exchange Router
-      'TGjYzgCyPobsNS9n6WcbdLVR9dH7mWqFx7', // JustLend Unitroller
-      'TXJgMdjVX5dKiQaUi9QobwNxtSQaFqccvd', // jUSDT
-      'TE2RzoSV3wFK99w6J9UnnZ4vLfXYoxvRwP', // jTRX
-    ],
-    maxTxSun: '100000000',          // 100 TRX per tx (call_value / native amount)
-    maxDailySpendSun: '300000000',  // 300 TRX per rolling 24h
-    maxDailyTxCount: 20,
-    maxFeeLimitSun: '150000000',    // 150 TRX energy cap per contract call (anti energy-drain)
-    requireMemo: true,
-  },
-  erc4337: { enabled: false }, // third-party-account surface: opt-in only, even in the balanced default
-  notes:
-    'Balanced DeFi default (killSwitch OFF). The agent may interact with major DEX aggregators ' +
-    '(OpenOcean, 1inch) + Aave V3 + Lido on Ethereum / Base / Arbitrum / Optimism / Polygon, capped at ' +
-    '0.1 native per tx AND 0.3 native + 20 txs per rolling 24h, memo required. Tighten or widen via the ' +
-    'dashboard templates or by editing this file. ' +
-    'Engage the kill switch any time to halt all signing. Corrupt/missing files fail closed (refuse all).',
-  updatedAt: new Date(0).toISOString(),
+  ...FAIL_CLOSED_POLICY,
+  notes: 'Signing disabled on first run. An administrator must explicitly configure and enable each chain and asset.',
 };
 
 export function loadPolicy(): AgentPolicy {
@@ -281,12 +227,9 @@ export function loadPolicy(): AgentPolicy {
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw) as AgentPolicy;
-    // Defensive: ensure version + killSwitch exist. A file missing killSwitch
-    // is treated as corrupt → fail closed (NOT the balanced default).
-    if (typeof parsed.killSwitch !== 'boolean') {
-      return { ...FAIL_CLOSED_POLICY, notes: 'Policy file missing killSwitch — falling back to fail-closed (refuse all).' };
-    }
-    return parsed;
+    const validation = validatePolicyInput(parsed, false);
+    if (!validation.ok || !validation.policy) return { ...FAIL_CLOSED_POLICY, notes: `Invalid policy: ${validation.error}` };
+    return validation.policy;
   } catch (e: any) {
     return { ...FAIL_CLOSED_POLICY, notes: `Policy file unparseable: ${e?.message ?? e}. Falling back to fail-closed (refuse all).` };
   }
@@ -349,7 +292,7 @@ export function checkPolicy(
   // Unrestricted "yolo" mode: admin has explicitly opted into no policy checks.
   // Kill switch still wins (already returned above) so the panic button stays
   // functional. Everything else is bypassed.
-  if (policy.unrestricted) {
+  if (policy.unrestricted === true) {
     return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks)', policyDigest: digest };
   }
 
@@ -508,7 +451,7 @@ export function checkSolanaPolicy(
     };
   }
 
-  if (policy.unrestricted) {
+  if (policy.unrestricted === true) {
     return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks; solana.enabled was still required)', policyDigest: digest };
   }
 
@@ -635,7 +578,7 @@ export function checkTronPolicy(
     };
   }
 
-  if (policy.unrestricted) {
+  if (policy.unrestricted === true) {
     return { allowed: true, reason: 'OK (unrestricted mode — admin opted out of all per-tx checks; tron.enabled was still required)', policyDigest: digest };
   }
 
@@ -744,7 +687,7 @@ export function checkErc4337Gate(
       policyDigest: digest,
     };
   }
-  if (policy.unrestricted) {
+  if (policy.unrestricted === true) {
     return { allowed: true, reason: 'OK (unrestricted mode — erc4337.enabled was still required)', policyDigest: digest };
   }
 
@@ -788,6 +731,7 @@ export function checkErc4337Gate(
 
 const ALLOWED_POLICY_FIELDS = new Set<keyof AgentPolicy>([
   'version',
+  'assetLimits',
   'killSwitch',
   'unrestricted',
   'allowedChains',
@@ -817,7 +761,7 @@ export interface ValidationResult {
 const HEX_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const HEX_SELECTOR_RE = /^0x[0-9a-fA-F]{8}$/;
 
-export function validatePolicyInput(input: unknown): ValidationResult {
+export function validatePolicyInput(input: unknown, stampUpdate = true): ValidationResult {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     return { ok: false, error: 'Policy must be a JSON object.' };
   }
@@ -912,11 +856,14 @@ export function validatePolicyInput(input: unknown): ValidationResult {
       return { ok: false, error: 'solana must be an object' };
     }
     const sol = o.solana as Record<string, unknown>;
-    const SOLANA_FIELDS = new Set(['enabled', 'allowedPrograms', 'blockedPrograms', 'maxTxLamports', 'maxDailySpendLamports', 'maxDailyTxCount', 'requireMemo']);
+    const SOLANA_FIELDS = new Set(['genesisHashes', 'enabled', 'allowedPrograms', 'blockedPrograms', 'maxTxLamports', 'maxDailySpendLamports', 'maxDailyTxCount', 'requireMemo']);
     for (const k of Object.keys(sol)) {
       if (!SOLANA_FIELDS.has(k)) return { ok: false, error: `Unknown solana policy field: ${k}` };
     }
     if (typeof sol.enabled !== 'boolean') return { ok: false, error: 'solana.enabled must be true or false' };
+    if (sol.genesisHashes !== undefined) {
+      if (!sol.genesisHashes || typeof sol.genesisHashes !== 'object' || Array.isArray(sol.genesisHashes) || Object.entries(sol.genesisHashes).some(([k,v]) => !['mainnet','devnet','testnet'].includes(k) || typeof v !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v))) return { ok: false, error: 'solana.genesisHashes must contain verified base58 hashes for named clusters' };
+    }
     for (const listField of ['allowedPrograms', 'blockedPrograms'] as const) {
       const v = sol[listField];
       if (v !== undefined) {
@@ -980,7 +927,28 @@ export function validatePolicyInput(input: unknown): ValidationResult {
   }
   // updatedAt: we set this ourselves, so anything from input is overwritten
 
+  if (o.assetLimits !== undefined) {
+    if (!Array.isArray(o.assetLimits)) return { ok: false, error: 'assetLimits must be an array' };
+    const seen = new Set<string>();
+    for (const r of o.assetLimits) {
+      if (!r || typeof r !== 'object' || Object.keys(r).some(k => !['chain','asset','allowedRecipients','maxTxAmount','maxDailyAmount'].includes(k)) ||
+          typeof r.chain !== 'string' || !r.chain || typeof r.asset !== 'string' || !r.asset ||
+          !Array.isArray(r.allowedRecipients) || !r.allowedRecipients.length || r.allowedRecipients.some((a: unknown) => typeof a !== 'string' || !a) ||
+          !/^[0-9]+$/.test(r.maxTxAmount) || typeof r.maxTxAmount !== 'string' || !/^[0-9]+$/.test(r.maxDailyAmount) || typeof r.maxDailyAmount !== 'string') return { ok: false, error: 'Invalid assetLimits rule (explicit chain, asset, recipients and non-negative base-unit limits required)' };
+      const key = `${r.chain}:${r.asset}`;
+      if (seen.has(key)) return { ok: false, error: 'Duplicate assetLimits rule' };
+      seen.add(key);
+    }
+  }
+  // Every monetary limit is a canonical non-negative decimal string.
+  for (const obj of [o, o.solana, o.tron]) {
+    if (!obj || typeof obj !== 'object') continue;
+    for (const [key, value] of Object.entries(obj)) {
+      if (/^max/.test(key) && typeof value === 'string' && !/^(0|[1-9][0-9]*)$/.test(value)) return { ok: false, error: `${key} must be a non-negative decimal integer` };
+    }
+  }
   const policy: AgentPolicy = {
+    assetLimits: o.assetLimits as AssetLimit[] | undefined,
     version: 1,
     killSwitch: o.killSwitch,
     unrestricted: o.unrestricted as boolean | undefined,
@@ -997,7 +965,7 @@ export function validatePolicyInput(input: unknown): ValidationResult {
     tron: o.tron as TronPolicy | undefined,
     erc4337: o.erc4337 as Erc4337Policy | undefined,
     notes: o.notes as string | undefined,
-    updatedAt: new Date().toISOString(),
+    updatedAt: stampUpdate ? new Date().toISOString() : (typeof o.updatedAt === 'string' ? o.updatedAt : undefined),
   };
   // Drop undefined keys for clean serialization
   for (const k of Object.keys(policy)) {

@@ -1,8 +1,11 @@
+import { finalizedEvmReceipt } from '../lib/signing-finality.js';
+import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
+import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { createWalletClient, http as viemHttp } from 'viem';
+import { createWalletClient, createPublicClient, http as viemHttp, keccak256 } from 'viem';
 import QRCode from 'qrcode';
 import { CHAINS } from '../lib/chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
@@ -109,11 +112,12 @@ export const agentWalletTools = [
         name: 'chaingpt_agent_wallet_sign_and_send',
         description: 'Sign and broadcast an EVM transaction from the agent\'s wallet. Every call: loads the policy file ' +
             'fresh, runs checkPolicy(), and refuses if any rule fails (kill switch, chain whitelist, address ' +
-            'whitelist, value cap, function-selector blocklist, memo requirement). This is the only tool that ' +
-            'can move the agent\'s funds. 0 ChainGPT credits.',
+            'whitelist, value/fee cap, asset/recipient budgets, selector blocklist and memo requirement). This ' +
+            'is one of the guarded agent signers. Restricted mode accepts canonical transfers and bounded approvals; opaque protocol calls use external signing. 0 credits.',
         inputSchema: {
             type: 'object',
             properties: {
+                operationId: { type: 'string', description: 'Stable unique id for ONE logical action. Reuse on retries; never generate a replacement after an uncertain send.' },
                 chain: { type: 'string', enum: SUPPORTED_CHAINS, description: 'EVM chain slug.' },
                 to: { type: 'string', description: 'Destination address (0x…).' },
                 valueWei: { type: 'string', description: 'Native-coin value in wei (string to preserve precision). Default "0".', default: '0' },
@@ -121,14 +125,14 @@ export const agentWalletTools = [
                 gasLimit: { type: 'string', description: 'Gas limit (units). REQUIRED when the policy sets maxTxGas (the gate refuses auto-estimation so the cap cannot be bypassed); otherwise optional, defaulting to eth_estimateGas + 20% headroom.' },
                 memo: { type: 'string', description: 'Audit-trail memo. Required if policy.requireMemo=true.' },
             },
-            required: ['chain', 'to'],
+            required: ['operationId', 'chain', 'to'],
         },
     },
     {
         name: 'chaingpt_agent_wallet_serve_ui',
-        description: 'Start a local HTML dashboard on a localhost port. Read-only view: address, multi-chain balances, ' +
-            'current policy + digest, policy file path. Admin opens the URL in a browser to monitor the agent ' +
-            'without going through the LLM. Returns the URL. 0 ChainGPT credits.',
+        description: 'Start a privileged localhost ADMIN dashboard: address, multi-chain balances, policy editing and kill switch. ' +
+            'It returns a privileged admin token; keep this tool and its browser context outside untrusted agent authority. ' +
+            'Returns the URL. 0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1140,7 +1144,7 @@ ${o.flashBlock}
 <script>${DASHBOARD_JS}</script>
 </body></html>`;
 }
-export async function handleAgentWalletTool(name, args) {
+async function handleAgentWalletToolUnlocked(name, args) {
     args ??= {};
     try {
         // ── init ────────────────────────────────────────────────────────
@@ -1170,9 +1174,9 @@ export async function handleAgentWalletTool(name, args) {
                             ``,
                             `IMPORTANT:`,
                             `  1. Back up the keystore file. If the disk dies, you need both the file AND the passphrase.`,
-                            `  2. The default policy at ${policyPath()} is "Balanced DeFi" (killSwitch OFF) — the agent`,
-                            `     can swap on OpenOcean/1inch, lend on Aave, stake on Lido up to 0.1 native per tx.`,
-                            `     Open the dashboard or edit the policy file to tighten/widen before funding.`,
+                            `  2. The first-run policy at ${policyPath()} has signing DISABLED. An administrator`,
+                            `     must configure native/token limits and explicitly enable signing.`,
+                            `     Review docs/wallet-safety.md before enabling or funding.`,
                             ``,
                             `Next: chaingpt_agent_wallet_policy to see the current rules, or open the admin UI to edit them.`,
                         ].join('\n'),
@@ -1343,6 +1347,21 @@ export async function handleAgentWalletTool(name, args) {
                 gas: gasLimitStr ? BigInt(gasLimitStr) : undefined,
                 memo,
             };
+            if (typeof args.operationId === 'string') {
+                const prior = findOperation(activityPath(), args.operationId, operationFingerprint({ chain: chain.chainId, to: to.toLowerCase(), value: valueWei.toString(), data, gas: gasLimitStr, memo }));
+                if (prior) {
+                    if (prior.hash && prior.state !== 'confirmed') {
+                        try {
+                            if (await finalizedEvmReceipt(rpcEndpointsWithCustom(chainSlug), prior.hash)) {
+                                saveReservation(activityPath(), { ...prior, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
+                                return { content: [{ type: 'text', text: replayMessage({ ...prior, state: 'confirmed' }) }] };
+                            }
+                        }
+                        catch { /* Preserve uncertain outcomes. */ }
+                    }
+                    return { content: [{ type: 'text', text: replayMessage(prior) }] };
+                }
+            }
             const policy = loadPolicy();
             // Velocity caps need the rolling 24h window from the activity ledger.
             // checkPolicy fails closed if a cap is set and these stats are absent/unreadable.
@@ -1364,56 +1383,62 @@ export async function handleAgentWalletTool(name, args) {
                         }],
                 };
             }
-            // Decrypt the key, sign, send. The plaintext key never leaves this scope.
-            let account;
-            try {
-                account = loadAccount();
-            }
-            catch (e) {
-                return { content: [{ type: 'text', text: `Keystore load failed: ${e?.message ?? e}` }] };
-            }
+            const operationId = args.operationId;
+            const fingerprint = operationFingerprint({ chain: chain.chainId, to: to.toLowerCase(), value: valueWei.toString(), data, gas: gasLimitStr, memo });
+            const existing = findOperation(activityPath(), operationId, fingerprint);
+            if (existing)
+                return { content: [{ type: 'text', text: replayMessage(existing) }] };
+            let assets = evmAssetSpends(chain.slug, to, data, valueWei, policy);
+            checkAssetLimits(chain.slug, assets, policy, activityPath());
+            const account = loadAccount();
             const endpoints = rpcEndpointsWithCustom(chainSlug);
-            if (endpoints.length === 0) {
-                return { content: [{ type: 'text', text: `No RPC endpoints configured for ${chainSlug}` }] };
+            if (!endpoints.length)
+                throw new Error('No RPC endpoints configured.');
+            const chainConfig = {
+                id: chain.chainId, name: chain.name,
+                nativeCurrency: { name: chain.native, symbol: chain.native, decimals: 18 },
+                rpcUrls: { default: { http: endpoints } },
+            };
+            const wallet = createWalletClient({ account, chain: chainConfig, transport: viemHttp(endpoints[0]) });
+            // Prepare ONCE: fixes nonce, fees and gas before signing or any broadcast.
+            const prepared = await wallet.prepareTransactionRequest({ chain: chainConfig, account, to: to, value: valueWei, data: data, gas: intent.gas });
+            const maxFee = prepared.maxFeePerGas ?? prepared.gasPrice;
+            if (prepared.gas === undefined || maxFee === undefined)
+                throw new Error('Could not bound transaction fees.');
+            const cost = valueWei + prepared.gas * maxFee;
+            const code = (data === '0x' || data === '') ? await createPublicClient({ chain: chainConfig, transport: viemHttp(endpoints[0]) }).getBytecode({ address: to }) : undefined;
+            const currentPolicy = loadPolicy();
+            assets = evmAssetSpends(chain.slug, to, data, valueWei, currentPolicy);
+            if (currentPolicy.unrestricted !== true && code && code !== '0x')
+                throw new Error('Restricted signing refuses opaque contract fallback calls.');
+            const finalDecision = checkPolicy({ ...intent, gas: prepared.gas, value: cost }, currentPolicy, spendStats(24, 'evm'));
+            if (!finalDecision.allowed)
+                throw new Error(finalDecision.reason);
+            checkAssetLimits(chain.slug, assets, currentPolicy, activityPath());
+            const reservation = reserveOperation(activityPath(), { network: chain.slug, policyDigest: finalDecision.policyDigest, operationId, fingerprint, chainClass: 'evm', valueWei: cost.toString(), assets });
+            const raw = await wallet.signTransaction(prepared);
+            const hash = keccak256(raw);
+            // Persist signed bytes and hash BEFORE broadcasting. Persistence failure prevents send.
+            saveReservation(activityPath(), { ...reservation, state: 'prepared', hash, signedBytes: raw });
+            try {
+                await jsonRpcFallback(endpoints, 'eth_sendRawTransaction', [raw]);
             }
-            // Try each RPC endpoint in order — single RPC outage should NOT cause
-            // an avoidable failure when fallback URLs are configured.
-            let hash = null;
-            let lastError = null;
-            for (const rpc of endpoints) {
-                try {
-                    const wallet = createWalletClient({ account, transport: viemHttp(rpc) });
-                    hash = await wallet.sendTransaction({
-                        chain: {
-                            id: chain.chainId,
-                            name: chain.name,
-                            nativeCurrency: { name: chain.native, symbol: chain.native, decimals: 18 },
-                            rpcUrls: { default: { http: [rpc] } },
-                        },
-                        to: to,
-                        value: valueWei,
-                        data: data,
-                        gas: intent.gas,
-                        account,
-                    });
-                    break;
-                }
-                catch (e) {
-                    lastError = e;
-                }
+            catch {
+                return { content: [{ type: 'text', text: `Broadcast outcome uncertain for ${hash}. Reservation retained. Reuse operationId ${operationId}; do NOT create another action.` }] };
             }
-            if (!hash) {
-                const e = lastError;
-                return {
-                    content: [{
-                            type: 'text',
-                            text: `Broadcast failed across ${endpoints.length} RPC endpoint(s): ${e?.shortMessage ?? e?.message ?? String(e)}`,
-                        }],
-                };
+            saveReservation(activityPath(), { ...reservation, state: 'broadcast', hash, signedBytes: raw });
+            try {
+                const receipt = await createPublicClient({ chain: chainConfig, transport: viemHttp(endpoints[0]) }).waitForTransactionReceipt({ hash, confirmations: 2, timeout: 20000 });
+                if (await finalizedEvmReceipt(endpoints, hash))
+                    saveReservation(activityPath(), { ...reservation, state: 'confirmed', hash, ts: new Date().toISOString() });
+                if (receipt.status === 'reverted')
+                    return { content: [{ type: 'text', text: `Transaction ${hash} was included but reverted. Its fee reservation remains counted.` }] };
             }
+            catch { /* Pending reservations remain counted until independently reconciled. */ }
             // Log to activity feed for the dashboard
             try {
                 logActivity({
+                    operationId,
                     ts: new Date().toISOString(),
                     chain: chainSlug,
                     chainId: chain.chainId,
@@ -1422,7 +1447,7 @@ export async function handleAgentWalletTool(name, args) {
                     valueWei: valueWei.toString(),
                     hash,
                     memo,
-                    policyDigest: decision.policyDigest,
+                    policyDigest: finalDecision.policyDigest,
                 });
             }
             catch { /* best-effort */ }
@@ -1441,7 +1466,7 @@ export async function handleAgentWalletTool(name, args) {
                             `Memo:           ${memo ?? '(none)'}`,
                             `Explorer:       ${explorer}`,
                             ``,
-                            `Policy digest at sign time: ${decision.policyDigest}`,
+                            `Policy digest at sign time: ${finalDecision.policyDigest}`,
                         ].join('\n'),
                     }],
             };
@@ -1901,3 +1926,8 @@ export function _stopUiForTests() {
     }
 }
 export function _runningUiPort() { return runningPort; }
+export async function handleAgentWalletTool(name, args) {
+    if (!name.endsWith('sign_and_send'))
+        return handleAgentWalletToolUnlocked(name, args);
+    return withSigningLock(activityPath(), () => handleAgentWalletToolUnlocked(name, args));
+}

@@ -63,7 +63,10 @@ jobs:
 
   validate:
     name: validate.sh (file/frontmatter/version checks)
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -127,6 +130,6 @@ jobs:
       - name: Build mcp-server
         run: cd mcp-server && npm ci --ignore-scripts && npm run build
       - name: Test fail-closed launcher
-        run: node --test scripts/launcher.test.mjs
+        run: node --test scripts/launcher.test.mjs scripts/mainnet-guard.test.mjs
       - name: Spawn server and assert tools/list response
         run: node scripts/mcp-boot-smoke.mjs

@@ -1,3 +1,5 @@
+import { privateKeyToAccount } from 'viem/accounts';
+import { decodeBase64Header } from '../lib/x402.js';
 import { describe, it, expect } from 'vitest';
 import './_setup.js';
 import { x402Tools, handleX402Tool } from '../tools/x402.js';
@@ -59,11 +61,19 @@ describe('x402 — tool surface + EIP-712 builder', () => {
   });
 
   it('build_payment returns unsigned typed data, and a header once signed', async () => {
-    const argsBase = { from: '0x2211d1D0020DAEA8039E46Cf1367962070d77DA9', network: 'base', symbol: 'USDC', payTo: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', amount: '0.01' };
+    const account = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
+    const argsBase = { from: account.address, network: 'base', symbol: 'USDC', payTo: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', amount: '0.01' };
     const unsigned = await handleX402Tool('chaingpt_x402_build_payment', argsBase);
     expect(unsigned.content[0].text).toMatch(/UNSIGNED EIP-712/);
     expect(unsigned.content[0].text).toMatch(/EIP-712 digest/);
-    const signed = await handleX402Tool('chaingpt_x402_build_payment', { ...argsBase, signature: '0x' + 'ab'.repeat(65) });
+    const authorization = JSON.parse(unsigned.content[0].text.split('--- Authorization (pass unchanged with the signature) ---\n')[1].split('\n')[0]);
+    const built = buildTransferWithAuthorizationTypedData({ token: X402_TOKENS['base:USDC'], chainId: 8453, from: account.address, to: argsBase.payTo, value: authorization.value, nonce: authorization.nonce, validAfter: Number(authorization.validAfter), validBefore: Number(authorization.validBefore) });
+    const signature = await account.signTypedData(built.typedData);
+    const signed = await handleX402Tool('chaingpt_x402_build_payment', { ...argsBase, authorization, signature });
+    const header = signed.content[0].text.match(/X-PAYMENT: ([A-Za-z0-9+/=]+)/)?.[1];
+    expect((decodeBase64Header<any>(header!)).payload.authorization).toEqual(authorization);
+    const tampered = await handleX402Tool('chaingpt_x402_build_payment', { ...argsBase, authorization: { ...authorization, nonce: '0x' + '22'.repeat(32) }, signature });
+    expect(tampered.content[0].text).toMatch(/Signature does not match/);
     expect(signed.content[0].text).toMatch(/X-PAYMENT: [A-Za-z0-9+/=]+/);
   });
 

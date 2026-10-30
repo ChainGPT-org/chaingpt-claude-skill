@@ -1,3 +1,6 @@
+import { tronFeeReserve } from '../lib/tron-fee-budget.js';
+import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
+import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
   isKeystoreInitialized,
@@ -6,9 +9,10 @@ import {
   keystorePath,
 } from '../lib/agent-keystore.js';
 import { loadPolicy, policyPath, checkTronPolicy, type TronTxIntent } from '../lib/agent-policy.js';
-import { logActivity, spendStats } from '../lib/agent-activity.js';
+import { logActivity, spendStats, activityPath } from '../lib/agent-activity.js';
 import {
   type TronNetwork,
+  walletPost,
   isTronMainnet,
   isTrustedTronHost,
   getAccount,
@@ -61,10 +65,15 @@ export const agentWalletTronTools: Tool[] = [
   {
     name: 'chaingpt_agent_wallet_tron_sign_and_send',
     description:
-      'Build, sign, and broadcast a Tron transaction autonomously — gated by the deterministic `tron` policy chokepoint. Takes a structured intent (trx_transfer / trc20_transfer / contract_call), never raw bytes; the built tx is cross-checked (owner + destination + value + calldata) against the request before signing. The SUN caps (per-tx maxTxSun + rolling-24h maxDailySpendSun) meter NATIVE TRX value (call_value) — a TRC-20 transfer moves 0 native TRX, so token transfers are fenced by the destination (token-contract) allowlist + maxDailyTxCount + maxFeeLimitSun + the calldata cross-check, NOT by a token-amount cap. Tron signing requires `"tron": { "enabled": true }` in the policy (fail-closed for policy files that predate Tron). 0 ChainGPT credits.',
+      'Build, sign and broadcast a Tron transfer under strict admin policy and durable reservations. ' +
+      'Requires operationId (reuse on retries). Restricted mode permits TRX/TRC-20 transfers only, with ' +
+      'explicit asset and recipient budgets; opaque contract_call operations require external signing. ' +
+      'SUN limits include native value and fee reserves from current chain parameters. ' +
+      'Signing requires tron.enabled=true and a matching HTTPS TronGrid network. 0 credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
+        operationId: { type: 'string', description: 'Stable unique id for ONE logical action. Reuse on retries; never generate a replacement after an uncertain send.' },
         kind: { type: 'string', enum: ['trx_transfer', 'trc20_transfer', 'contract_call'], description: 'Intent type.' },
         to: { type: 'string', description: 'trx_transfer: recipient. trc20_transfer: token recipient.' },
         amount: { type: 'string', description: 'trx_transfer: TRX amount. trc20_transfer: token amount (human units).' },
@@ -77,7 +86,7 @@ export const agentWalletTronTools: Tool[] = [
         memo: { type: 'string', description: 'Audit-trail memo. Required if policy.tron.requireMemo=true.' },
         network: { type: 'string', enum: NETWORK_ENUM as unknown as string[], default: 'mainnet' },
       },
-      required: ['kind'],
+      required: ['operationId', 'kind'],
     },
   },
 ];
@@ -103,7 +112,7 @@ function text(s: string) {
   return { content: [{ type: 'text' as const, text: s }] };
 }
 
-export async function handleAgentWalletTronTool(
+async function handleAgentWalletTronToolUnlocked(
   name: string,
   args: Record<string, unknown> | undefined,
 ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
@@ -156,6 +165,22 @@ export async function handleAgentWalletTronTool(
         return text('⛔ Refused: autonomous Tron signing requires a first-party TronGrid host. TRON_RPC_URL points elsewhere; unset it or use a trongrid.io host for agent-wallet signing.');
       }
 
+      const operationId = a.operationId as string;
+      const fingerprint = operationFingerprint({ network, kind, to: a.to, amount: a.amount, token: a.token, contract: a.contract, functionSelector: a.functionSelector, parameter: a.parameter, callValueTrx: a.callValueTrx, feeLimitTrx: a.feeLimitTrx, memo });
+      const existing = findOperation(activityPath(), operationId, fingerprint);
+      if (existing) {
+        if (existing.hash && existing.state !== 'confirmed') {
+          try {
+            const receipt = await walletPost(network, '/walletsolidity/gettransactioninfobyid', { value: existing.hash });
+            if (receipt.id === existing.hash && Number.isSafeInteger(receipt.blockNumber) && receipt.blockNumber > 0) {
+              saveReservation(activityPath(), { ...existing, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
+              return text(replayMessage({ ...existing, state: 'confirmed' }));
+            }
+          } catch { /* Unavailable confirmation must retain the reservation. */ }
+        }
+        return text(replayMessage(existing));
+      }
+      if (kind === 'contract_call' && policy.unrestricted !== true) return text('Restricted Tron signing refuses opaque contract calls. Use the unsigned builder and external signing.');
       // 2. Resolve the operation + build the UNSIGNED tx (the node does the protobuf).
       let contract: string | null = null;
       let functionSelector = '';
@@ -239,7 +264,14 @@ export async function handleAgentWalletTronTool(
 
       // 4. The single policy decision point (fail-closed velocity semantics inside).
       const intent: TronTxIntent = { owner: agentTron, to: policyTo, valueSun: policyValueSun, feeLimitSun: contract ? feeLimitSun : 0n, memo };
-      const decision = checkTronPolicy(intent, policy, spendStats(24, 'tron'));
+      const assets = kind === 'trc20_transfer' ? [{ asset: `tron-${network}:${policyTo}`, recipient: String(a.to), amount: BigInt('0x' + parameter.slice(64)).toString() }] : [];
+      const currentPolicy = loadPolicy();
+      checkAssetLimits(`tron-${network}`, assets, currentPolicy, activityPath());
+      // Include maximum energy/bandwidth costs; reserve a native transfer's fee allowance.
+      const parameters = await walletPost(network, '/wallet/getchainparameters', {});
+      if (contract && BigInt(unsigned.raw_data.fee_limit ?? -1) !== feeLimitSun) throw new Error('Built transaction fee_limit differs from the requested limit.');
+      const costSun = policyValueSun + tronFeeReserve(unsigned.raw_data_hex, contract ? feeLimitSun : 0n, !contract, parameters);
+      const decision = checkTronPolicy({ ...intent, valueSun: costSun }, currentPolicy, spendStats(24, 'tron'));
       if (!decision.allowed) return refusalBlock(decision.reason, decision.policyDigest);
 
       // 5. Revert pre-check for contract calls (never broadcast a tx that would revert).
@@ -251,22 +283,32 @@ export async function handleAgentWalletTronTool(
       }
 
       // 6. Verify txID==SHA256(raw_data_hex) and sign (signUnsignedTx enforces it).
+      const signingPolicy = loadPolicy();
+      if (kind === 'contract_call' && signingPolicy.unrestricted !== true) throw new Error('Restricted Tron signing refuses opaque calls.');
+      const finalGate = checkTronPolicy({ ...intent, valueSun: costSun }, signingPolicy, spendStats(24, 'tron'));
+      if (!finalGate.allowed) throw new Error(finalGate.reason);
+      checkAssetLimits(`tron-${network}`, assets, signingPolicy, activityPath());
+      const reservation = reserveOperation(activityPath(), { network: network, policyDigest: finalGate.policyDigest, operationId, fingerprint, chainClass: 'tron', valueWei: costSun.toString(), assets });
       const account = loadAccount();
       if (deriveTronAddress(account) !== agentTron) {
         return text('⛔ Refused: decrypted key does not derive the recorded Tron address (keystore integrity).');
       }
       const signed = await signUnsignedTx(account, unsigned);
 
+      saveReservation(activityPath(), { ...reservation, state: 'prepared', hash: unsigned.txID, signedBytes: JSON.stringify(signed) });
       // 7. Broadcast.
       const result = await broadcastTransaction(network, signed);
       if (result.result !== true) {
         return text(`Broadcast rejected by the node: ${result.code ?? ''} ${decodeBroadcastMessage(result.message)}`.trim());
       }
       const txid = result.txid ?? unsigned.txID;
+      if (txid !== unsigned.txID) throw new Error('Node returned a different transaction id; reservation retained.');
+      saveReservation(activityPath(), { ...reservation, state: 'broadcast', hash: txid, signedBytes: JSON.stringify(signed) });
 
       // 8. Journal — feeds the SUN velocity caps (tron-class only).
       try {
         logActivity({
+          operationId,
           ts: new Date().toISOString(),
           chain: network === 'mainnet' ? 'tron' : `tron-${network}`,
           chainId: 0,
@@ -275,7 +317,7 @@ export async function handleAgentWalletTronTool(
           valueWei: policyValueSun.toString(),
           hash: txid,
           memo,
-          policyDigest: decision.policyDigest,
+          policyDigest: finalGate.policyDigest,
         });
       } catch { /* best-effort */ }
 
@@ -287,7 +329,7 @@ export async function handleAgentWalletTronTool(
         `Explorer:      https://tronscan.org/#/transaction/${txid.replace(/^0x/, '')}`,
         `Spend counted: ${formatUnits(policyValueSun, TRX_DECIMALS)} TRX (journaled to the velocity ledger)`,
         `Memo:          ${memo ?? '(none)'}`,
-        `Policy digest: ${decision.policyDigest}`,
+        `Policy digest: ${finalGate.policyDigest}`,
       ].join('\n'));
     }
 
@@ -296,4 +338,9 @@ export async function handleAgentWalletTronTool(
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`ChainGPT Agent Wallet (Tron) error: ${message}`);
   }
+}
+
+export async function handleAgentWalletTronTool(name: string, args: Record<string, unknown> | undefined) {
+  if (!name.endsWith('sign_and_send')) return handleAgentWalletTronToolUnlocked(name, args);
+  return withSigningLock(activityPath(), () => handleAgentWalletTronToolUnlocked(name, args));
 }

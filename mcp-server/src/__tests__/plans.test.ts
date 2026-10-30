@@ -126,17 +126,8 @@ describe('Plan persistence round-trip', () => {
     expect(gridList.content[0].text).not.toContain('• a');
   });
 
-  it('safeName sanitizes path-traversal attempts', async () => {
-    // Should not allow ../ to escape the dir
-    const r = await handlePlanTool('chaingpt_strategy_save_plan', {
-      name: '../../etc/passwd',
-      payload: { evil: true },
-    });
-    expect(r.content[0].text).toContain('Saved plan');
-    // Path traversal chars are replaced with underscores, so a file
-    // exists, but inside TMP_DIR — not escaping it.
-    const load = await handlePlanTool('chaingpt_strategy_load_plan', { name: '../../etc/passwd' });
-    expect(load.content[0].text).toContain('Plan: ../../etc/passwd');
+  it('rejects path traversal and name aliases rather than sharing safety state', async () => {
+    await expect(handlePlanTool('chaingpt_strategy_save_plan', { name: '../../etc/passwd', payload: {} })).rejects.toThrow(/Plan name/);
   });
 
   it('load returns friendly message for unknown plan', async () => {
@@ -168,7 +159,7 @@ describe('Plan persistence round-trip', () => {
       expect(t).toContain('Upcoming: 1');
     });
 
-    it('journal lifecycle: mark → idempotency refusal → overwrite → skip → completion', async () => {
+    it('journal lifecycle: mark → immutable-entry refusal → skip → completion', async () => {
       await handlePlanTool('chaingpt_strategy_save_plan', { name: 'sched2', payload, type: 'dca' });
 
       // mark step 1 → no longer due
@@ -179,12 +170,12 @@ describe('Plan persistence round-trip', () => {
       expect(r.content[0].text).not.toContain('• Step 1');
       expect(r.content[0].text).toContain('Executed: 1');
 
-      // idempotency: double-record refused, original preserved; overwrite allowed
+      // idempotency: double-record and overwrite refused; original preserved
       const again = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 1, txHash: '0xdef' });
       expect(again.content[0].text).toContain('ALREADY marked');
       expect(again.content[0].text).toContain('0xabc');
       const forced = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 1, txHash: '0xdef', overwrite: true });
-      expect(forced.content[0].text).toContain('Step 1 marked done');
+      expect(forced.content[0].text).toContain('ALREADY marked');
 
       // unknown step id
       const unknown = await handlePlanTool('chaingpt_strategy_mark_step', { name: 'sched2', stepId: 99 });
@@ -225,5 +216,30 @@ describe('Plan persistence round-trip', () => {
       expect(r.content[0].text).toContain('no schedulable steps');
       expect(r.content[0].text).toContain('payload.steps');
     });
+  });
+});
+
+describe('durable scheduled claims', () => {
+  beforeEach(() => rmSync(TMP_DIR, { recursive: true, force: true }));
+  it('claims once, preserves operation identity after a crash and refuses overwrite/delete', async () => {
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'claim-test', payload: { steps: [{ id: 1, atUnix: 1 }] } });
+    const first = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'claim-test', claim: true });
+    const operationId = first.content[0].text.match(/operationId=(plan:[a-f0-9]+)/)?.[1];
+    expect(operationId).toMatch(/^plan:/);
+    const second = await handlePlanTool('chaingpt_strategy_due_steps', { name: 'claim-test', claim: true });
+    expect(second.content[0].text).toContain('IN FLIGHT step 1');
+    expect(second.content[0].text).toContain(operationId!);
+    expect(second.content[0].text).not.toContain('Plan is COMPLETE');
+    await expect(handlePlanTool('chaingpt_strategy_save_plan', { name: 'claim-test', payload: {}, overwrite: true })).rejects.toThrow(/cannot be overwritten/);
+    const del = await handlePlanTool('chaingpt_strategy_delete_plan', { name: 'claim-test', confirm: true });
+    expect(del.content[0].text).toContain('in-flight claims');
+    await handlePlanTool('chaingpt_strategy_mark_step', { name: 'claim-test', stepId: 1, txHash: 'fixture-hash' });
+    expect((await handlePlanTool('chaingpt_strategy_due_steps', { name: 'claim-test' })).content[0].text).toContain('Plan is COMPLETE');
+  });
+  it('allows only one concurrent claim writer', async () => {
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'race', payload: { steps: [{ id: 1, atUnix: 1 }] } });
+    const results = await Promise.allSettled([1, 2].map(() => handlePlanTool('chaingpt_strategy_due_steps', { name: 'race', claim: true })));
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
   });
 });

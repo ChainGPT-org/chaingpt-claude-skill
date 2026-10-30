@@ -63,6 +63,10 @@ run_layer() {
     SKIP+=("$name (not selected)")
     return 0
   fi
+  if [[ "$name" == "smoke" && $FAST -eq 1 && -z "$ONLY" ]]; then
+    SKIP+=("smoke (--fast)")
+    return 0
+  fi
   echo
   echo "${BOLD}${BLUE}━━━ $name ━━━${RESET}"
   local start=$SECONDS
@@ -174,6 +178,7 @@ layer_boot() {
     echo "Building mcp-server first..."
     (cd mcp-server && npm run build) || return 1
   fi
+  node --test "$REPO_ROOT/scripts/launcher.test.mjs" "$REPO_ROOT/scripts/mainnet-guard.test.mjs" || return 1
   node "$REPO_ROOT/scripts/mcp-boot-smoke.mjs"
 }
 
