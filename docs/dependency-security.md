@@ -83,7 +83,7 @@ in either graph. The September review below is a historical snapshot.
 | MCP | `toml` → `5.0.1` | Fixes parser resource-consumption advisories. Both Anchor families retain CommonJS `parse`, including Buffer input. Large integers now follow TOML's signed 64-bit bounds; unsafe JavaScript integers need the explicit `bigint` option. |
 | MCP | `uuid@<11.1.1` → `11.1.1` | Patched release retaining CommonJS `v4` used by legacy SDKs. Newer ESM-only major versions are not interchangeable. |
 | MCP | `jayson` → `5.0.0` | Retains Solana's browser-client API and removes stream-json. TCP/TLS stream frames now require their configured delimiter. |
-| MCP / `jito-ts` only | `@solana/web3.js` → direct dependency pin (`1.99.0`) | Removes the legacy Solana private WebSocket imports. Jito/Pyth imports, HTTP RPC, WebSocket subscriptions, bundle serialization and tips have offline regression coverage. |
+| MCP / `jito-ts` only | `@solana/web3.js` → `1.91.9` | Uses the existing rpc-websockets 7.11.2 `.cjs` paths while preserving Jito's legacy simulation-error API. Jito/Pyth imports, HTTP RPC, WebSocket subscriptions, bundles, tips and simulation outcomes have offline regression coverage. |
 | Mock | `qs` → `6.16.1` | Fixes hostile comma-array coercion while retaining Express 4/body-parser query APIs. |
 
 The [October high-severity remediation](high-severity-dependencies.md) documents

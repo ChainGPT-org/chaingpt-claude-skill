@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createPublicKey, verify } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { AddressLookupTableAccount, Keypair, SystemInstruction, SystemProgram, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
@@ -10,6 +11,10 @@ const blockhash = '11111111111111111111111111111111';
 // Disposable local fixtures only; no funded accounts or external endpoints.
 const payer = Keypair.fromSeed(new Uint8Array(32).fill(1));
 const recipient = Keypair.fromSeed(new Uint8Array(32).fill(2)).publicKey;
+const payerVerificationKey = createPublicKey({
+  key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), payer.publicKey.toBuffer()]),
+  format: 'der', type: 'spki',
+});
 
 function transaction(format = 'v0') {
   const message = new TransactionMessage({
@@ -26,12 +31,15 @@ function transaction(format = 'v0') {
 }
 
 describe('Jito compatibility through the Pyth consumer path', () => {
-  it('imports both public SDKs and shares the reviewed Solana implementation', () => {
+  it('imports both public SDKs and confines the compatibility pins to Jito', () => {
     const jito = pythRequire('jito-ts');
     expect(jito.bundle.Bundle).toBeTypeOf('function');
     expect(jito.searcher.SearcherClient).toBeTypeOf('function');
     expect(require('@pythnetwork/solana-utils').sendTransactionsJito).toBeTypeOf('function');
-    expect(jitoRequire('@solana/web3.js').Connection).toBe(require('@solana/web3.js').Connection);
+    const solanaRequire = createRequire(jitoRequire.resolve('@solana/web3.js'));
+    expect(jitoRequire('@solana/web3.js/package.json').version).toBe('1.91.9');
+    expect(solanaRequire('rpc-websockets/package.json').version).toBe('7.11.2');
+    expect(require('@solana/web3.js/package.json').version).toBe('1.99.0');
   });
 
   it.each(['legacy', 'v0', 'v0-lookup'])('round-trips %s transaction packets without altering signed bytes', format => {
@@ -53,7 +61,7 @@ describe('Jito compatibility through the Pyth consumer path', () => {
     const message = TransactionMessage.decompile(tip.message);
     expect(message.recentBlockhash).toBe(blockhash);
     expect(SystemInstruction.decodeTransfer(message.instructions[0])).toEqual({ fromPubkey: payer.publicKey, toPubkey: recipient, lamports: 5000n });
-    expect(tip.signatures[0].some(byte => byte !== 0)).toBe(true);
+    expect(verify(null, tip.message.serialize(), payerVerificationKey, tip.signatures[0])).toBe(true);
   });
 
   it('preserves bundle size limits for transactions and tips', () => {
@@ -69,10 +77,14 @@ describe('Jito compatibility through the Pyth consumer path', () => {
     const { SearcherClient } = jitoRequire('./sdk/block-engine/searcher');
     const { SearcherServiceService } = jitoRequire('./gen/block-engine/searcher');
     const tx = transaction();
+    // Start unsigned so a no-op wallet cannot satisfy the helper's signing contract.
+    tx.signatures[0].fill(0);
     const send = vi.fn((request, callback) => {
       const codec = SearcherServiceService.sendBundle;
       const decoded = codec.requestDeserialize(codec.requestSerialize(request));
       expect(Buffer.from(decoded.bundle.packets[0].data)).toEqual(Buffer.from(tx.serialize()));
+      const submitted = VersionedTransaction.deserialize(decoded.bundle.packets[0].data);
+      expect(verify(null, submitted.message.serialize(), payerVerificationKey, submitted.signatures[0])).toBe(true);
       callback(null, { uuid: 'fixture-bundle-id' });
     });
     const wallet = { signTransaction: vi.fn(async (input: VersionedTransaction) => { input.sign([payer]); return input; }) };
@@ -97,6 +109,33 @@ describe('Jito compatibility through the Pyth consumer path', () => {
     const wallet = { signTransaction: vi.fn(async (tx: VersionedTransaction) => tx) };
     await expect(sendTransactionsJito([{ tx: transaction() }], new SearcherClient({ sendBundle: send }), wallet)).rejects.toThrow('fixture submission rejected');
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['success', 'error'])('preserves Jito bundle simulation responses (%s)', async outcome => {
+    const { JitoRpcConnection } = jitoRequire('./sdk/rpc/connection');
+    const { SendTransactionError } = jitoRequire('@solana/web3.js');
+    const tx = transaction();
+    const logs = ['fixture program: simulation rejected'];
+    const result = { context: { slot: 7 }, value: { summary: 'succeeded', transactionResults: [{ err: null, logs: [] }] } };
+    const fetch = vi.fn(async (_url: unknown, options: { body: string }) => {
+      const request = JSON.parse(options.body);
+      expect(request.method).toBe('simulateBundle');
+      expect(request.params).toEqual([{ encodedTransactions: [Buffer.from(tx.serialize()).toString('base64')] }, { transactionEncoding: 'base64' }]);
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, ...(outcome === 'success' ? { result } : { error: { code: -32002, message: 'fixture simulation rejected', data: { logs } } }) }), { headers: { 'content-type': 'application/json' } });
+    });
+    const connection = new JitoRpcConnection('http://127.0.0.1:8899', { fetch, httpAgent: false });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      if (outcome === 'success') {
+        expect(await connection.simulateBundle([tx])).toEqual(result);
+      } else {
+        const error = await connection.simulateBundle([tx]).then(() => undefined, (caught: unknown) => caught);
+        expect(error).toBeInstanceOf(SendTransactionError);
+        expect(error.message).toBe('failed to simulate bundle: fixture simulation rejected');
+        expect(error.logs).toEqual(logs);
+      }
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally { consoleError.mockRestore(); }
   });
 
   it('supports Solana WebSocket subscriptions through the same Jito dependency', async () => {
