@@ -27,9 +27,11 @@ npm ci --prefix mock-server --ignore-scripts
 
 Exit code `0` = every requested layer passed. `1` = at least one layer failed.
 `--fast` skips live smoke; it is not a network sandbox. Missing dependencies fail
-the checks and must be installed explicitly. Go checks disable module-proxy and
-checksum-server access; Rust checks use Cargo's offline mode. Prepare those
-toolchains' dependencies separately when testing their examples.
+the checks and must be installed explicitly. Go checks disable automatic toolchain downloads, module-proxy and
+checksum-server access; Rust checks use `cargo check --locked --offline` against
+the committed example lockfile. Prepare those toolchains explicitly and run
+`cargo fetch --locked --manifest-path examples/rust/Cargo.toml` before the offline
+checks. Example READMEs include formatting and test commands.
 
 ## The eight layers
 

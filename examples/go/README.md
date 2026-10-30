@@ -15,6 +15,18 @@ Override the endpoint for local testing against the mock server:
 CHAINGPT_API_KEY=anything CHAINGPT_API_BASE=http://localhost:3001/news/getNews go run main.go
 ```
 
+## Offline checks
+
+The module uses only the Go standard library. From `examples/go`, with Go installed, run:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go vet ./...
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
+gofmt -l main.go  # no output means formatting passes
+```
+
+No `go mod init` or module download is needed; `go.mod` is already committed.
+
 ## What it does
 
 Sends a POST with a `NewsRequest` JSON body (limit, sortBy, sortOrder, languages) and the API key in the `Authorization: Bearer` header. Decodes the response and prints the latest 5 items.

@@ -142,7 +142,7 @@ layer_examples() {
   fi
   # Go: prefer `go vet` (catches more than `gofmt -l`) when the toolchain is present.
   if command -v go >/dev/null 2>&1 && [[ -d examples/go ]]; then
-    if (cd examples/go && GOPROXY=off GOSUMDB=off go vet ./... 2>&1); then
+    if (cd examples/go && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go vet ./... 2>&1); then
       echo "  ${GREEN}ok${RESET} examples/go (go vet)"
     else
       echo "  ${RED}FAIL${RESET} examples/go (go vet)"; fail=1
@@ -152,7 +152,7 @@ layer_examples() {
   fi
   # Rust: `cargo check` is the cheapest type-check that doesn't link.
   if command -v cargo >/dev/null 2>&1 && [[ -d examples/rust ]]; then
-    if (cd examples/rust && cargo check --offline 2>&1); then
+    if (cd examples/rust && cargo check --locked --offline 2>&1); then
       echo "  ${GREEN}ok${RESET} examples/rust (cargo check)"
     else
       echo "  ${RED}FAIL${RESET} examples/rust (cargo check)"; fail=1

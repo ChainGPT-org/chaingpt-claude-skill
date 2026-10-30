@@ -28,6 +28,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Lock files (keep package.json, let users generate their own)
+# Use the committed npm package-lock.json files instead of alternate JS lockfiles
 yarn.lock
 pnpm-lock.yaml
+
+# Rust example build artifacts (Cargo.lock is committed)
+/examples/rust/target/
