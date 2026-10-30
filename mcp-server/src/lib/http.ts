@@ -16,9 +16,34 @@ export interface HttpOpts {
   timeoutMs?: number;
 }
 
+/** Keep authentication material out of diagnostics, including reflected/truncated bodies. */
+function requestDiagnostics(url: string, headers: HttpOpts['headers']): { url: string; authenticated: boolean } {
+  const credentialName = /^(?:api[-_]?key|key|access[-_]?token|token|secret|password|authorization|signature)$/i;
+  let authenticated = Object.keys(headers ?? {}).some(name => credentialName.test(name.replace(/^x-/i, '')));
+  try {
+    const safe = new URL(url);
+    if (safe.username || safe.password) {
+      authenticated = true;
+      safe.username = '[redacted]';
+      safe.password = '[redacted]';
+    }
+    for (const name of new Set(safe.searchParams.keys())) {
+      if (credentialName.test(name)) {
+        authenticated = true;
+        safe.searchParams.set(name, '[redacted]');
+      }
+    }
+    return { url: safe.toString(), authenticated };
+  } catch {
+    return { url: '[invalid URL]', authenticated: true };
+  }
+}
+
 export async function httpJson<T = unknown>(url: string, opts: HttpOpts = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const diagnostics = requestDiagnostics(url, opts.headers);
+  let failureStatus: number | undefined;
 
   try {
     const hasBody = opts.body !== undefined;
@@ -35,11 +60,18 @@ export async function httpJson<T = unknown>(url: string, opts: HttpOpts = {}): P
     });
 
     if (!res.ok) {
+      failureStatus = res.status;
+      if (diagnostics.authenticated) throw new Error('Authenticated HTTP failure');
       const text = await safeText(res);
       throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
     }
 
     return (await res.json()) as T;
+  } catch (error) {
+    if (!diagnostics.authenticated) throw error;
+    // Do not retain the original error/cause: fetch, parsers and servers can echo credentials.
+    const prefix = failureStatus === undefined ? 'Authenticated request failed' : `HTTP ${failureStatus}`;
+    throw new Error(`${prefix} for ${diagnostics.url} (authenticated response details omitted)`);
   } finally {
     clearTimeout(timeout);
   }

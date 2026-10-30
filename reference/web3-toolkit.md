@@ -29,7 +29,7 @@ Tools degrade gracefully when these are absent — set them for full functionali
 
 | Env var | Unlocks | Where to get |
 |---|---|---|
-| `MORALIS_API_KEY` | Multi-chain ERC-20 scan + DeFi positions + P&L | https://moralis.io (free 25k req/mo) |
+| `MORALIS_API_KEY` | Multi-chain ERC-20 scan + DeFi positions + P&L | [Moralis plans](https://docs.moralis.com/get-started/pricing) |
 | `ETHERSCAN_API_KEY` | Higher rate limit on all EVM chains via v2 | https://etherscan.io/myapikey (free 5 req/s) |
 
 Without `MORALIS_API_KEY`, wallet_balances returns native-coin only via public RPC.
@@ -159,7 +159,7 @@ This is the "one call covers it" research tool. Skill files (`chaingpt-research`
 | GoPlus | `api.gopluslabs.io/api/v1/...` | none |
 | Honeypot.is | `api.honeypot.is/v2/IsHoneypot` | none |
 | Etherscan v2 | `api.etherscan.io/v2/api?chainid={id}&...` | `ETHERSCAN_API_KEY` (free 5 req/s) |
-| Moralis | `deep-index.moralis.io/api/v2.2/...` | `X-API-Key: ${MORALIS_API_KEY}` (free 25k req/mo) |
+| Moralis | `deep-index.moralis.io/api/v2.2/...` | `X-API-Key: ${MORALIS_API_KEY}` (subject to the current account plan) |
 
 ## Common workflows
 
