@@ -73,6 +73,10 @@ advisories. The [moderate-severity follow-up](moderate-severity-dependencies.md)
 records their resolution and the compatibility limits. The September audit
 figures below are historical.
 
+The [low-severity verification](low-severity-dependencies.md) maps the remaining
+default-branch alerts to fixes already selected in those PRs and adds targeted
+Vite, gRPC and URI regressions without another dependency upgrade.
+
 Vitest is pinned to **4.1.12** in both projects for patched test tooling.
 Constructor mocks use function expressions, as required by [Vitest 4](https://v4.vitest.dev/guide/migration#spyon-and-fn-support-constructors).
 Review these overrides again when upgrading their parent SDKs; do not blindly
