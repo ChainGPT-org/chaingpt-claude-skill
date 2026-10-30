@@ -36,4 +36,32 @@ describe('authenticated Moralis responses', () => {
     expect(result.content[0].text).toContain('Partial total (returned tokens only): $1.00');
   });
 
+  it.each([false, '', ' ', [], [18]])('rejects nonnumeric token decimal values instead of coercing them: %j', async decimals => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ result: [{ token_address: wallet, symbol: 'BAD', balance: '123', decimals, usd_value: 123 }] }));
+    await expect(handleWalletTool('chaingpt_wallet_balances', { address: wallet, chains: ['ethereum'] })).rejects.toThrow('Invalid Moralis token decimals');
+  });
+
+  it('accepts explicit numeric-string zero decimals without changing token units', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ result: [{ token_address: wallet, symbol: 'ZERO', balance: '123', decimals: '0', usd_value: 123 }] }));
+    const result = await handleWalletTool('chaingpt_wallet_balances', { address: wallet, chains: ['ethereum'] });
+    expect(result.content[0].text).toMatch(/ZERO\s+123 \(\$123.00\)/);
+  });
+
+  it('renders each deposited and borrowed token from nested positions', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json([{ protocol_name: 'Aave', position: { label: 'Lending', balance_usd: 100, tokens: [
+      { token_type: 'supplied', symbol: 'USDC', balance_formatted: '123.45' },
+      { token_type: 'borrowed', symbol: 'WETH', balance_formatted: '0.001' }
+    ] } }]));
+    const result = await handleWalletTool('chaingpt_wallet_positions', { address: wallet });
+    expect(result.content[0].text).toContain('supplied: USDC 123.45');
+    expect(result.content[0].text).toContain('borrowed: WETH 0.001');
+  });
+
+  it('does not guess position token units when formatted balances are missing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json([{ protocol_name: 'Aave', position: { tokens: [{ token_type: 'supplied', symbol: 'USDC', balance: '123450000' }] } }]));
+    const result = await handleWalletTool('chaingpt_wallet_positions', { address: wallet });
+    expect(result.content[0].text).toContain('supplied: USDC n/a');
+    expect(result.content[0].text).not.toContain('123450000');
+  });
+
 });

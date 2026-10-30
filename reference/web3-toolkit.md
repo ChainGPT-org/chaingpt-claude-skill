@@ -41,14 +41,14 @@ Multi-chain native + ERC-20 balances for one wallet.
 
 ```jsonc
 {
-  "address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-  "chains": ["ethereum", "base", "arbitrum", "polygon", "bsc"],
+  "address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+  "chains": ["ethereum"],
   "includeNative": true,
   "minUsdValue": 1
 }
 ```
 
-Returns native + ERC-20 balances per chain, sorted by USD value descending. Filters out dust below `minUsdValue`. Total at the bottom.
+This example queries the public Uniswap V2 USDC/WETH pool on Ethereum. Very large wallets can exceed Moralis provider limits. Returns native + ERC-20 balances per chain, sorted by USD value descending, with dust filtered below `minUsdValue`. A nonempty continuation cursor marks the displayed page and total as partial.
 
 Direct API: `GET https://deep-index.moralis.io/api/v2.2/wallets/{addr}/tokens?chain={ethSlug}`.
 Native fallback: `eth_getBalance` via the chain's public RPC.

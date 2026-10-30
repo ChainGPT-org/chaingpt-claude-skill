@@ -9,10 +9,15 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const USER_AGENT = 'chaingpt-mcp/1.2 (+https://github.com/ChainGPT-org/chaingpt-claude-skill)';
 /** Keep authentication material out of diagnostics, including reflected/truncated bodies. */
 function requestDiagnostics(url, headers) {
-    const credentialName = /^(?:api[-_]?key|key|access[-_]?token|token|secret|password|authorization|signature)$/i;
+    const credentialName = /^(?:api[-_]?key|key|access[-_]?token|auth[-_]?token|token|secret|password|authorization|cookie|signature)$/i;
     let authenticated = Object.keys(headers ?? {}).some(name => credentialName.test(name.replace(/^x-/i, '')));
     try {
         const safe = new URL(url);
+        // Fragments are never sent over HTTP, but can hide a credential appended to an interpolated URL.
+        if (safe.hash) {
+            authenticated = true;
+            safe.hash = '';
+        }
         if (safe.username || safe.password) {
             authenticated = true;
             safe.username = '[redacted]';
@@ -50,8 +55,11 @@ export async function httpJson(url, opts = {}) {
         });
         if (!res.ok) {
             failureStatus = res.status;
-            if (diagnostics.authenticated)
+            if (diagnostics.authenticated) {
+                // Release the connection without retaining or exposing a reflected response body.
+                await res.body?.cancel().catch(() => undefined);
                 throw new Error('Authenticated HTTP failure');
+            }
             const text = await safeText(res);
             throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
         }

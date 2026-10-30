@@ -163,8 +163,10 @@ async function fetchNativeBalanceViaRpc(address: string, chainSlug: string): Pro
 }
 
 function formatTokenLine(t: MoralisTokenBalance): string {
-  const decimals = Number(t.decimals);
-  if (t.decimals === null || t.decimals === undefined || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error('Invalid Moralis token decimals.');
+  const rawDecimals: unknown = t.decimals;
+  const validType = typeof rawDecimals === 'number' || (typeof rawDecimals === 'string' && /^\d+$/.test(rawDecimals));
+  const decimals = Number(rawDecimals);
+  if (!validType || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error('Invalid Moralis token decimals.');
   const balance = BigInt(t.balance);
   const divisor = 10n ** BigInt(decimals);
   const whole = balance / divisor;
@@ -279,6 +281,13 @@ export async function handleWalletTool(
         const usd = p.position?.balance_usd ?? p.balance_usd ?? p.total_usd_value;
         const usdStr = usd !== undefined ? ` ($${Number(usd).toFixed(2)})` : '';
         lines.push(`  ${proto} — ${label}${usdStr}`);
+        for (const token of Array.isArray(p.position?.tokens) ? p.position.tokens : []) {
+          const tokenType = token.token_type ?? 'token';
+          const symbol = token.symbol ?? '?';
+          // This field has explicit human units; do not guess units from a raw balance.
+          const balance = token.balance_formatted ?? 'n/a';
+          lines.push(`    ${tokenType}: ${symbol} ${balance}`);
+        }
       }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }

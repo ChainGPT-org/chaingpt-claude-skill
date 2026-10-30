@@ -18,10 +18,15 @@ export interface HttpOpts {
 
 /** Keep authentication material out of diagnostics, including reflected/truncated bodies. */
 function requestDiagnostics(url: string, headers: HttpOpts['headers']): { url: string; authenticated: boolean } {
-  const credentialName = /^(?:api[-_]?key|key|access[-_]?token|token|secret|password|authorization|signature)$/i;
+  const credentialName = /^(?:api[-_]?key|key|access[-_]?token|auth[-_]?token|token|secret|password|authorization|cookie|signature)$/i;
   let authenticated = Object.keys(headers ?? {}).some(name => credentialName.test(name.replace(/^x-/i, '')));
   try {
     const safe = new URL(url);
+    // Fragments are never sent over HTTP, but can hide a credential appended to an interpolated URL.
+    if (safe.hash) {
+      authenticated = true;
+      safe.hash = '';
+    }
     if (safe.username || safe.password) {
       authenticated = true;
       safe.username = '[redacted]';
@@ -61,7 +66,11 @@ export async function httpJson<T = unknown>(url: string, opts: HttpOpts = {}): P
 
     if (!res.ok) {
       failureStatus = res.status;
-      if (diagnostics.authenticated) throw new Error('Authenticated HTTP failure');
+      if (diagnostics.authenticated) {
+        // Release the connection without retaining or exposing a reflected response body.
+        await res.body?.cancel().catch(() => undefined);
+        throw new Error('Authenticated HTTP failure');
+      }
       const text = await safeText(res);
       throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
     }

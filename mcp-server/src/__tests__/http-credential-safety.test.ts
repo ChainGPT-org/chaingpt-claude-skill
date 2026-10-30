@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { httpJson } from '../lib/http.js';
+import { handleRiskTool } from '../tools/risk.js';
 
 const secret = 'fixture-private-api-key-do-not-log';
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe('authenticated HTTP diagnostics', () => {
   it('sends the real Etherscan key but omits it and reflected bodies from errors', async () => {
@@ -16,7 +17,7 @@ describe('authenticated HTTP diagnostics', () => {
     expect(String(error)).not.toContain('invalid key');
   });
 
-  it.each(['Authorization', 'X-API-Key', 'api-key'])('omits credential-bearing response details for %s', async name => {
+  it.each(['Authorization', 'X-API-Key', 'api-key', 'Cookie'])('omits credential-bearing response details for %s', async name => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('prefix '.repeat(25) + secret.slice(0, 12), { status: 403 }));
     const error = await httpJson('https://api.example.test/read', { headers: { [name]: secret } }).catch(e => e);
     expect(String(error)).toContain('HTTP 403');
@@ -50,4 +51,39 @@ describe('authenticated HTTP diagnostics', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('<title>Just a moment...</title>', { status: 403 }));
     await expect(httpJson('https://open-api.openocean.finance/v4/base/quote')).rejects.toThrow('<title>Just a moment...</title>');
   });
+  it.each(['http', 'network'])('does not expose credentials placed after a URL fragment on %s failure', async failure => {
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    if (failure === 'http') fetch.mockResolvedValue(new Response('missing API key', { status: 401 }));
+    else fetch.mockRejectedValue(new Error(`request failed for #apikey=${secret}`));
+    const url = `https://api.etherscan.io/v2/api?module=contract&address=0x123#fragment&apikey=${secret}`;
+    const error = await httpJson(url).catch(e => e);
+    expect(fetch.mock.calls[0][0]).toBe(url);
+    expect(String(error)).not.toContain(secret);
+    expect(String(error)).not.toContain('#fragment');
+  });
+
+  it('cancels an authenticated rejected response body instead of leaving it unconsumed', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({ cancel });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 403 }));
+    await expect(httpJson('https://api.example.test/read', { headers: { 'x-api-key': secret } })).rejects.toThrow('HTTP 403');
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an Etherscan key private when a source-lookup address introduces a fragment', async () => {
+    vi.stubEnv('ETHERSCAN_API_KEY', secret);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('upstream rejection', { status: 403 }));
+    const error = await handleRiskTool('chaingpt_risk_contract_source', { chain: 'ethereum', address: '0x1111111111111111111111111111111111111111#fragment' }).catch(e => e);
+    expect(String(error)).toContain('HTTP 403');
+    expect(String(error)).not.toContain(secret);
+  });
+
+  it('protects auth_token query values and reflected response text', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(`rejected token ${secret}`, { status: 403 }));
+    const error = await httpJson(`https://api.example.test/read?auth_token=${secret}`).catch(e => e);
+    expect(String(error)).toContain('HTTP 403');
+    expect(String(error)).not.toContain(secret);
+    expect(String(error)).not.toContain('rejected token');
+  });
+
 });

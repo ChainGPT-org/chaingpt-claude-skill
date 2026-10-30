@@ -9,7 +9,7 @@
  * that don't require a wallet. Exits non-zero on any failure.
  */
 
-import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage } from './lib/smoke-assertions.js';
+import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage, positiveQuoteOutput } from './lib/smoke-assertions.js';
 import { handleResearchTool } from './tools/research.js';
 import { handleRiskTool } from './tools/risk.js';
 import { handleOnchainTool } from './tools/onchain.js';
@@ -327,7 +327,7 @@ contract Hello { string public greeting = "hi"; }`,
       }),
     requiresEnv: 'ONEINCH_API_KEY',
     expect: /1inch/i,
-    expectData: /Out.*\d/i,
+    expectData: positiveQuoteOutput,
     rejectData: /ONEINCH_API_KEY|error|failed/i,
   },
   {

@@ -7,7 +7,7 @@ import { handleOnchainTool } from './tools/onchain.js';
 import { handleAggregatorTool } from './tools/aggregators.js';
 import { handleWalletTool } from './tools/wallet.js';
 import { handleNewsTool } from './tools/news.js';
-import { smokeStatus, missingSmokeCredential, type SmokeExpectation } from './lib/smoke-assertions.js';
+import { smokeStatus, missingSmokeCredential, positiveQuoteOutput, type SmokeExpectation } from './lib/smoke-assertions.js';
 
 const wallet = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
 const usdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
@@ -26,7 +26,7 @@ const cases: AuthCase[] = [
     expect: /Last \d+ transactions/, rejectData: /ETHERSCAN_API_KEY/ },
   { provider: '1inch', name: 'USDC to WETH quote', requiresEnv: 'ONEINCH_API_KEY',
     run: () => handleAggregatorTool('chaingpt_dex_1inch_quote', { network: 'ethereum', inToken: usdc, outToken: weth, amountIn: '100', decimalsIn: 6 }),
-    expect: /1inch v6 quote/, expectData: /Out \(expected\):\s+[\d.]+/, rejectData: /ONEINCH_API_KEY|failed/i },
+    expect: /1inch v6 quote/, expectData: positiveQuoteOutput, rejectData: /ONEINCH_API_KEY|failed/i },
   { provider: 'moralis', name: 'authenticated token balances', requiresEnv: 'MORALIS_API_KEY',
     run: () => handleWalletTool('chaingpt_wallet_balances', { address: '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', chains: ['ethereum'], minUsdValue: 1 }),
     expect: /Ethereum — \$[\d.]+ across \d+ token/, expectData: /USDC[\s\S]*WETH|WETH[\s\S]*USDC/, rejectData: /MORALIS_API_KEY|n\/a/ },

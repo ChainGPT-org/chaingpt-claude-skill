@@ -62,6 +62,28 @@ bounded scratch storage and an HTTPS GET endpoint allowlist. Only public chain
 addresses were queried. Keys were not written into source, logs, screenshots,
 command arguments, plaintext credential files or saved browser logins.
 
+## PR review hardening
+
+Review added seventeen regressions covering URL fragments, rejected-response
+cleanup, token-decimal types, cookie/auth-token protection, positive quote
+outputs and position token details. Diagnostic URLs omit fragments, including
+when a source-lookup address introduces one. Rejected authenticated responses
+cancel their body without reading or exposing it. Cookie headers and
+`auth_token` query parameters receive protected diagnostics too. Token decimals
+accept numbers or explicit integer strings; booleans, arrays and blank strings
+cannot silently become zero or eighteen decimals.
+
+CLI tests compile current source into a disposable directory instead of trusting
+committed build output. Both smoke entry points reject zero/missing outputs for
+the fixed 1inch quote. DeFi positions include token type, symbol and the explicit
+`balance_formatted` field, using `n/a` when that field is missing; see
+[Moralis's response example](https://moralis.com/defi-protocol-data-exploring-the-easiest-way-to-get-a-wallets-defi-positions/).
+The wallet balance documentation uses the bounded public pool fixture.
+
+The five authenticated checks above remain the prior live receipt. Current
+review validation uses isolated fixtures and the public smoke suite; it does
+not claim fresh credentialed coverage for the two unavailable service keys.
+
 ## Reproduction
 
 Prepare dependencies and the offline test environment as described in
