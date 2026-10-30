@@ -1,7 +1,7 @@
 {
   "name": "@chaingpt/mock-server",
   "version": "1.0.0",
-  "description": "Mock server for ChainGPT APIs — develop and test without spending credits",
+  "description": "Mock server for ChainGPT APIs \u2014 develop and test without spending credits",
   "main": "dist/index.js",
   "bin": {
     "chaingpt-mock": "dist/index.js"
@@ -31,6 +31,9 @@
     "node": ">=22.14.0"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "body-parser@1": "1.20.9",
+    "qs": "6.16.0",
+    "source-map-js": "1.2.2",
+    "vite": "8.2.4"
   }
 }
