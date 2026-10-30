@@ -41,7 +41,7 @@ async function checkOutTokenSafe(chainId, outToken) {
 }
 
 // ─── 2. eth_gasPrice via public RPC ─────────────────────────────
-async function fetchGasGwei() {
+async function fetchGasWei() {
   const RPC = { ethereum: 'https://ethereum-rpc.publicnode.com', base: 'https://mainnet.base.org',
                 arbitrum: 'https://arb1.arbitrum.io/rpc', optimism: 'https://mainnet.optimism.io',
                 polygon: 'https://polygon-rpc.com', bsc: 'https://bsc-dataseed.binance.org' };
@@ -52,20 +52,28 @@ async function fetchGasGwei() {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }),
   });
   const j = await r.json();
-  return Number(BigInt(j.result) / 1_000_000_000n) || 1;
+  if (!r.ok || j.error || !/^0x[0-9a-f]+$/i.test(j.result)) throw new Error('Gas price RPC failed');
+  return BigInt(j.result).toString();
+}
+
+function nativeAmountRaw(amount) {
+  if (!/^\d+(?:\.\d{1,18})?$/.test(amount)) throw new Error('Invalid native amount');
+  const [whole, fraction = ''] = amount.split('.');
+  return (BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0'))).toString();
 }
 
 // ─── 3. OpenOcean quote ─────────────────────────────────────────
-async function quote(inToken, outToken, amountIn, gasPriceGwei) {
+async function quote(inToken, outToken, amountIn, gasPriceWei) {
   const url =
     `https://open-api.openocean.finance/v4/${OO[NETWORK]}/quote?` +
     new URLSearchParams({
       inTokenAddress: inToken,
       outTokenAddress: outToken,
-      amount: amountIn,
+      // This example quotes native ETH (18 decimals). Fetch decimals() for ERC-20 inputs.
+      amountDecimals: nativeAmountRaw(amountIn),
       slippage: '1', // 1%
       account: ACCOUNT,
-      gasPrice: String(gasPriceGwei),
+      gasPriceDecimals: String(gasPriceWei),
     });
   const r = await fetch(url);
   const j = await r.json();
@@ -75,16 +83,17 @@ async function quote(inToken, outToken, amountIn, gasPriceGwei) {
 }
 
 // ─── 4. OpenOcean swap (returns unsigned tx) ────────────────────
-async function swapTx(inToken, outToken, amountIn, gasPriceGwei) {
+async function swapTx(inToken, outToken, amountIn, gasPriceWei) {
   const url =
     `https://open-api.openocean.finance/v4/${OO[NETWORK]}/swap?` +
     new URLSearchParams({
       inTokenAddress: inToken,
       outTokenAddress: outToken,
-      amount: amountIn,
+      // This example quotes native ETH (18 decimals). Fetch decimals() for ERC-20 inputs.
+      amountDecimals: nativeAmountRaw(amountIn),
       slippage: '1',
       account: ACCOUNT,
-      gasPrice: String(gasPriceGwei),
+      gasPriceDecimals: String(gasPriceWei),
     });
   const r = await fetch(url);
   const j = await r.json();
@@ -95,9 +104,9 @@ async function swapTx(inToken, outToken, amountIn, gasPriceGwei) {
 try {
   console.log(`══ DEX swap pre-flight — ${AMOUNT} ETH → USDC on ${NETWORK} ══\n`);
   await checkOutTokenSafe(CHAIN_IDS[NETWORK], USDC);
-  const gasGwei = await fetchGasGwei();
-  console.log(`✓ Current gas: ${gasGwei} gwei`);
-  const q = await quote(NATIVE, USDC, AMOUNT, gasGwei);
+  const gasWei = await fetchGasWei();
+  console.log(`✓ Current gas: ${gasWei} wei`);
+  const q = await quote(NATIVE, USDC, AMOUNT, gasWei);
   const inSym = q.inToken?.symbol ?? 'ETH';
   const outSym = q.outToken?.symbol ?? 'USDC';
   // Use float division to preserve fractional digits — BigInt / BigInt
@@ -106,7 +115,7 @@ try {
   const outAmt = Number(q.outAmount) / 10 ** decimals;
   console.log(`✓ Quote: ${AMOUNT} ${inSym} → ~${outAmt} ${outSym}`);
   console.log(`  Route: ${(q.dexes ?? []).map((d) => d.dexCode ?? d).slice(0, 3).join(' → ')}`);
-  const tx = await swapTx(NATIVE, USDC, AMOUNT, gasGwei);
+  const tx = await swapTx(NATIVE, USDC, AMOUNT, gasWei);
   console.log('\n──── Unsigned swap transaction ────');
   console.log(JSON.stringify({
     chainId: CHAIN_IDS[NETWORK],

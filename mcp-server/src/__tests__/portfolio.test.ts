@@ -156,4 +156,26 @@ describe('Portfolio snapshot handler', () => {
     expect(t).toContain('Polymarket');
     expect(t).toContain('Morpho');
   });
+  it('uses the current Morpho user query on both chains', async () => {
+    const requests: any[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      requests.push(body);
+      // The live schema rejects the removed Market.uniqueKey field with HTTP 400.
+      if (/\buniqueKey\b/.test(body.query)) return new Response(JSON.stringify({ errors: [{ message: 'Cannot query field uniqueKey on Market' }] }), { status: 400 });
+      return new Response(JSON.stringify({ data: { userByAddress: { marketPositions: [], vaultPositions: [] } } }));
+    });
+    const r = await handlePortfolioTool('chaingpt_portfolio_snapshot', { evmAddress: '0x1111111111111111111111111111111111111111', venues: ['morpho'] });
+    expect(requests.map(r => r.variables.chainId)).toEqual([1, 8453]);
+    expect(r.content[0].text).toContain('Morpho Blue — no positions');
+    expect(r.content[0].text).not.toContain('Errored venues');
+  });
+
+  it.each([{ errors: [{ message: 'Schema changed' }] }, {}, { data: { userByAddress: {} } }, { data: { userByAddress: false } }, { data: { userByAddress: { marketPositions: [], vaultPositions: null } } }])('does not treat GraphQL errors or missing data as an empty portfolio: %j', async payload => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(payload)));
+    const r = await handlePortfolioTool('chaingpt_portfolio_snapshot', { evmAddress: '0x1111111111111111111111111111111111111111', venues: ['morpho'] });
+    expect(r.content[0].text).toContain('Errored venues: morpho');
+    expect(r.content[0].text).not.toContain('Morpho Blue — no positions');
+  });
+
 });

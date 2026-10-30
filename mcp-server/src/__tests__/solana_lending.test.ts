@@ -94,7 +94,7 @@ describe('Marginfi handlers', () => {
 describe('Kamino handlers', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('markets surfaces top by TVL with top assets', async () => {
+  it('markets surfaces USD metrics with asset symbols', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -120,7 +120,7 @@ describe('Kamino handlers', () => {
     expect(t).toContain('Kamino lending markets');
     expect(t).toContain('Main Market');
     expect(t).toContain('$850.00M');
-    expect(t).toContain('Top assets: USDC, SOL, jitoSOL');
+    expect(t).toContain('Assets (first 5): USDC, SOL, jitoSOL');
   });
 
   it('vaults surfaces strategies with APY + TVL', async () => {
@@ -150,7 +150,7 @@ describe('Kamino handlers', () => {
     expect(t).toContain('$45.00M');
   });
 
-  it('markets falls back gracefully when both endpoints fail', async () => {
+  it('markets surfaces an unavailable endpoint', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('NXDOMAIN'));
     const r = await handleSolanaLendingTool('chaingpt_defi_kamino_markets', {});
     expect(r.content[0].text).toContain('Kamino markets endpoint unreachable');
