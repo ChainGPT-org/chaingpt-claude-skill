@@ -57,6 +57,7 @@
   "overrides": {
     "axios@<1": "0.33.0",
     "bigint-buffer": "npm:@exodus/bigint-buffer@1.1.5-exodus.1",
+    "proxy-addr": "2.0.8",
     "tmp": "0.2.7",
     "toml": "4.2.0",
     "uuid@<11.1.1": "11.1.1"
