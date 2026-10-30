@@ -1,3 +1,7 @@
+import { base58Encode } from '../lib/tron-address.js';
+import { solanaAssetSpends } from '../lib/solana-asset-policy.js';
+import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
+import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { VersionedTransaction } from '@solana/web3.js';
 import {
@@ -15,8 +19,8 @@ import {
   checkSolanaPolicy,
   type SolanaTxIntent,
 } from '../lib/agent-policy.js';
-import { logActivity, spendStats } from '../lib/agent-activity.js';
-import { withRpcFallback, makeConnection, type SolanaNetwork } from '../lib/solana-sign.js';
+import { logActivity, spendStats, activityPath } from '../lib/agent-activity.js';
+import { withRpcFallback as unverifiedRpcFallback, type SolanaNetwork } from '../lib/solana-sign.js';
 
 /**
  * Agent wallet — Solana surface. The Ed25519 counterpart of the EVM
@@ -62,28 +66,39 @@ export const agentWalletSolanaTools: Tool[] = [
   {
     name: 'chaingpt_agent_wallet_solana_sign_and_send',
     description:
-      'Sign an UNSIGNED Solana VersionedTransaction (base64, from any chaingpt builder tool) with the ' +
+      'Sign an UNSIGNED Solana VersionedTransaction (base64, for a canonical direct transfer) with the ' +
       "agent's Ed25519 key and broadcast it — gated by the deterministic Solana policy chokepoint: " +
-      'program-id allowlist, simulated fee-payer lamport caps (fail-closed on simulation failure), ' +
+      'canonical direct-transfer validation, explicit asset/recipient limits, program-id allowlist, simulated fee-payer lamport caps (fail-closed on simulation failure), ' +
       'rolling-24h velocity caps, memo requirement, kill switch. The agent must be the sole signer and ' +
       'fee payer. No MCP tool can relax the policy. 0 ChainGPT credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
+        operationId: { type: 'string', description: 'Stable unique id for ONE logical action. Reuse on retries; never generate a replacement after an uncertain send.' },
         txBase64: { type: 'string', description: 'Unsigned VersionedTransaction, base64 (from a chaingpt builder tool).' },
         memo: { type: 'string', description: 'Audit-trail memo. Required if policy.solana.requireMemo=true.' },
         network: { type: 'string', enum: ['mainnet', 'devnet', 'testnet'], description: 'Default mainnet.', default: 'mainnet' },
-        waitForConfirmation: { type: 'boolean', description: 'Wait for confirmed commitment. Default true.', default: true },
+        waitForConfirmation: { type: 'boolean', description: 'Wait for finalized commitment. Default true.', default: true },
         skipPreflight: { type: 'boolean', description: 'Skip RPC preflight on send (the policy gate already simulated). Default false.', default: false },
       },
-      required: ['txBase64'],
+      required: ['operationId', 'txBase64'],
     },
   },
 ];
 
+// A custom RPC override must not turn a devnet request into a mainnet signature.
+async function withRpcFallback<T>(network: SolanaNetwork, fn: (conn: import('@solana/web3.js').Connection) => Promise<T>): Promise<T> {
+  const expected = loadPolicy().solana?.genesisHashes?.[network];
+  if (!expected) throw new Error(`Configure an independently verified solana.genesisHashes.${network} before signing.`);
+  return unverifiedRpcFallback(network, async conn => {
+    if (await conn.getGenesisHash() !== expected) throw new Error('Solana RPC cluster identity differs from the policy pin.');
+    return fn(conn);
+  });
+}
+
 const fmtSol = (lamports: bigint): string => (Number(lamports) / 1e9).toFixed(6);
 
-export async function handleAgentWalletSolanaTool(
+async function handleAgentWalletSolanaToolUnlocked(
   name: string,
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -121,7 +136,7 @@ export async function handleAgentWalletSolanaTool(
       let balanceLine = 'Balance:     (RPC unavailable)';
       try {
         const { PublicKey } = await import('@solana/web3.js');
-        const lamports = await withRpcFallback(network, (conn) => conn.getBalance(new PublicKey(file.address)));
+        const lamports = await unverifiedRpcFallback(network, (conn) => conn.getBalance(new PublicKey(file.address)));
         balanceLine = `Balance:     ${fmtSol(BigInt(lamports))} SOL (${network})`;
       } catch { /* surface the friendly placeholder */ }
       return {
@@ -195,6 +210,25 @@ export async function handleAgentWalletSolanaTool(
         return refusalBlock(decision.reason, decision.policyDigest);
       }
 
+      const operationId = args.operationId as string;
+      const fingerprint = operationFingerprint({ network, tx: String(args.txBase64), memo });
+      const existing = findOperation(activityPath(), operationId, fingerprint);
+      if (existing) {
+        if (existing.hash && existing.state !== 'confirmed') {
+          try {
+            const statuses = await withRpcFallback(network, conn => conn.getSignatureStatuses([existing.hash!], { searchTransactionHistory: true }));
+            const status = statuses.value[0];
+            if (status?.confirmationStatus === 'finalized') {
+              saveReservation(activityPath(), { ...existing, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
+              return { content: [{ type: 'text', text: replayMessage({ ...existing, state: 'confirmed' }) }] };
+            }
+          } catch { /* Preserve uncertain outcomes. */ }
+        }
+        return { content: [{ type: 'text', text: replayMessage(existing) }] };
+      }
+      let assets = solanaAssetSpends(tx, network, policy);
+      checkAssetLimits(`solana-${network}`, assets, policy, activityPath());
+
       // 4. Simulate — fee-payer lamport delta is the spend measure
       let sim: SolanaTxIntent['sim'] = { ok: false };
       try {
@@ -202,13 +236,13 @@ export async function handleAgentWalletSolanaTool(
           const pre = await conn.getBalance(msg.staticAccountKeys[0]);
           const s = await conn.simulateTransaction(tx, {
             sigVerify: false,
-            replaceRecentBlockhash: true,
+            replaceRecentBlockhash: false,
             accounts: { encoding: 'base64', addresses: [feePayer] },
           });
           return { pre, s };
         });
         const acct = result.s.value.accounts?.[0];
-        if (acct === null) {
+        if (!acct || !Number.isSafeInteger(acct.lamports) || acct.lamports < 0 || !Number.isSafeInteger(result.pre) || result.pre < 0) {
           // The fee payer vanished from the simulated post-state (e.g. drained
           // to zero). Distinct from "accounts missing": treat as simulation
           // unavailable so every lamport cap fails CLOSED instead of metering 0.
@@ -227,7 +261,21 @@ export async function handleAgentWalletSolanaTool(
       }
 
       // 5. The single policy decision point (fail-closed semantics inside)
-      const decision = checkSolanaPolicy({ programIds, feePayer, memo, sim }, policy, spendStats(24, 'solana'));
+      let observedFee = 0n;
+      if (sim.ok) {
+        const fee = await withRpcFallback(network, conn => conn.getFeeForMessage(msg, 'confirmed'));
+        if (!Number.isSafeInteger(fee.value) || fee.value === null || fee.value < 0) throw new Error('Could not bound Solana fees.');
+        observedFee = BigInt(fee.value);
+      }
+      const currentPolicy = loadPolicy();
+      assets = solanaAssetSpends(tx, network, currentPolicy);
+      if (sim.ok) {
+        const native = assets.filter(a => a.asset.endsWith(':SOL')).reduce((n, a) => n + BigInt(a.amount), 0n);
+        const minimum = native + observedFee;
+        if ((sim.lamportDelta ?? 0n) < minimum) sim.lamportDelta = minimum;
+      }
+      const decision = checkSolanaPolicy({ programIds, feePayer, memo, sim }, currentPolicy, spendStats(24, 'solana'));
+      checkAssetLimits(`solana-${network}`, assets, currentPolicy, activityPath());
       if (!decision.allowed) {
         return refusalBlock(decision.reason, decision.policyDigest);
       }
@@ -259,26 +307,28 @@ export async function handleAgentWalletSolanaTool(
       // new signature) and a confirmation timeout could double-spend. Retrying
       // sendRawTransaction with the SAME bytes is safe — validators dedupe by
       // signature. confirmTransaction is never retried by re-sending.
+      const reservation = reserveOperation(activityPath(), { network: network, policyDigest: decision.policyDigest, operationId, fingerprint, chainClass: 'solana', valueWei: (sim.lamportDelta ?? 0n).toString(), assets });
       const keypair = loadSolanaKeypair();
-      const { blockhash, lastValidBlockHeight } = await withRpcFallback(network, (conn) =>
-        conn.getLatestBlockhash('finalized')
-      );
-      tx.message.recentBlockhash = blockhash; // sole signer → safe to refresh
+      // Keep the exact message that was simulated; stale blockhashes fail safely.
       tx.sign([keypair]);
       const rawTx = tx.serialize();
-      const signature = await withRpcFallback(network, (conn) =>
-        conn.sendRawTransaction(rawTx, { skipPreflight })
-      );
+      const signature = base58Encode(tx.signatures[0]);
+      saveReservation(activityPath(), { ...reservation, state: 'prepared', hash: signature, signedBytes: Buffer.from(rawTx).toString('base64') });
+      const sentSignature = await withRpcFallback(network, (conn) => conn.sendRawTransaction(rawTx, { skipPreflight }));
+      if (sentSignature !== signature) throw new Error('RPC returned a different signature; reservation retained.');
+      saveReservation(activityPath(), { ...reservation, state: 'broadcast', hash: sentSignature, signedBytes: Buffer.from(rawTx).toString('base64') });
       if (waitForConfirmation) {
         try {
-          await makeConnection(network).confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+          const confirmation = await withRpcFallback(network, conn => conn.confirmTransaction(sentSignature, 'finalized'));
+          saveReservation(activityPath(), { ...reservation, ts: new Date().toISOString(), state: 'confirmed', hash: sentSignature });
+          if (confirmation.value.err) throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
         } catch (e: any) {
           // The tx was broadcast; only the confirmation poll failed. Surface
           // that honestly instead of retrying anything.
           return {
             content: [{
               type: 'text',
-              text: `Transaction SENT (signature ${signature}) but confirmation polling failed: ${e?.message ?? e}. Check https://solscan.io/tx/${signature} before doing anything else — do NOT re-send.`,
+              text: `Transaction SENT (signature ${sentSignature}) but confirmation polling failed: ${e?.message ?? e}. Check https://solscan.io/tx/${sentSignature} before doing anything else — do NOT re-send.`,
             }],
           };
         }
@@ -288,13 +338,14 @@ export async function handleAgentWalletSolanaTool(
       // 8. Journal — feeds the lamport velocity caps
       try {
         logActivity({
+          operationId,
           ts: new Date().toISOString(),
           chain: network === 'mainnet' ? 'solana' : `solana-${network}`,
           chainId: 0,
           from: agentAddress,
           to: programIds.join(','),
           valueWei: lamportDelta.toString(),
-          hash: signature,
+          hash: sentSignature,
           memo,
           policyDigest: decision.policyDigest,
         });
@@ -306,8 +357,8 @@ export async function handleAgentWalletSolanaTool(
           text: [
             `✓ Signed and ${waitForConfirmation ? 'confirmed' : 'sent'} on Solana ${network}.`,
             ``,
-            `Signature:      ${signature}`,
-            `Explorer:       https://solscan.io/tx/${signature}${network !== 'mainnet' ? `?cluster=${network}` : ''}`,
+            `Signature:      ${sentSignature}`,
+            `Explorer:       https://solscan.io/tx/${sentSignature}${network !== 'mainnet' ? `?cluster=${network}` : ''}`,
             `Simulated cost: ${fmtSol(lamportDelta)} SOL (fee-payer delta, journaled to the velocity ledger)`,
             `Programs:       ${programIds.join(', ')}`,
             `Memo:           ${memo ?? '(none)'}`,
@@ -340,4 +391,9 @@ function refusalBlock(reason: string, digest: string): { content: Array<{ type: 
       ].join('\n'),
     }],
   };
+}
+
+export async function handleAgentWalletSolanaTool(name: string, args: Record<string, unknown> | undefined) {
+  if (!name.endsWith('sign_and_send')) return handleAgentWalletSolanaToolUnlocked(name, args);
+  return withSigningLock(activityPath(), () => handleAgentWalletSolanaToolUnlocked(name, args));
 }

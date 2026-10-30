@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.23.0] - Unreleased
+### Security and compatibility
+- First-run signing is disabled. Strict policy validation rejects malformed booleans and limits.
+- Cross-process signing locks and durable budget reservations precede signatures. Uncertain operations remain reserved and cannot be signed twice under the same operationId.
+- Solana verifies RPC cluster genesis identity against administrator pins, preventing custom-URL cluster confusion.
+- EVM fallback reuses frozen signed bytes. Solana missing simulation state fails closed; confirmation timeouts preserve broadcast reservations.
+- Restricted signing permits canonical transfers and bounded ERC-20 approvals with explicit asset/recipient limits. Opaque protocol transactions require external signing.
+- Native budgets include fee reserves; Tron prices bandwidth and activation from current chain parameters.
+- Every signer requires operationId. Scheduled due_steps supports claim=true and immutable execution records.
+- Confirmation hook covers Tron, signed submissions and x402 settlement; malformed input denies.
+- x402 signature assembly preserves and verifies the original authorization; facilitator JSON is encoded once.
+- Clarified host-isolation assumptions, workflow-only audit checks, ERC-4337 beta status and privacy disclosures.
+- Fixed Bash pipefail/SIGPIPE frontmatter checks; added guard and catalog checks.
+
+Compatibility: existing policies must be reviewed for supported calls and assetLimits. Read docs/wallet-safety.md before enabling the updated signer. This entry does not claim a live-chain acceptance test or publish a release.
+
 ## [1.22.2] - 2026-06-29
 ### Fixed — duplicate hooks-file load error
 The plugin loaded with `Failed to load hooks … Duplicate hooks file detected:

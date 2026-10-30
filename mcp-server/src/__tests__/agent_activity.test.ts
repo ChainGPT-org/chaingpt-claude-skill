@@ -53,15 +53,12 @@ describe('spendStats', () => {
     expect(s.totalWei).toBe(1500n);
   });
 
-  it('skips malformed lines without losing the rest', () => {
+  it('fails closed when the safety ledger is malformed', () => {
     writeFileSync(
       process.env.CHAINGPT_ACTIVITY_FILE!,
       ['not-json', entry(-60_000, '42'), '{"ts":"garbage-date","valueWei":"7"}'].join('\n') + '\n'
     );
-    const s = spendStats(24);
-    expect(s.ok).toBe(true);
-    expect(s.txCount).toBe(1);
-    expect(s.totalWei).toBe(42n);
+    expect(spendStats(24).ok).toBe(false);
   });
 
   it('chain-class filter: wei and lamports never sum together', () => {

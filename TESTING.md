@@ -37,7 +37,7 @@ toolchains' dependencies separately when testing their examples.
 |---|---|---|---|---|
 | **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example **+ version consistency** (VERSION ↔ plugin.json ↔ package.json ↔ index.ts ↔ README badge) | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
 | **typecheck** | `tsc --noEmit` over `mcp-server/` and `mock-server/` | ~5s | none | each package's `tsconfig.json` |
-| **mcp-test** | 506 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
+| **mcp-test** | 529 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
 | **mock-test** | 26 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
 | **examples** | JS and Python syntax checks; Go vet and offline Cargo check when those toolchains are installed | varies | module downloads disabled | [`examples/`](examples/) |
 | **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
@@ -57,10 +57,11 @@ export CHAINGPT_ACTIVITY_FILE=/tmp/sol-test/activity.jsonl
 
 1. `chaingpt_agent_wallet_solana_init` → note the address.
 2. Airdrop 1 devnet SOL: `solana airdrop 1 <address> -u devnet` (or a web faucet).
-3. Policy: `{"version":1,"killSwitch":false,"solana":{"enabled":true,"allowedPrograms":["11111111111111111111111111111111"],"maxTxLamports":"10000000","requireMemo":true}}`
-4. `chaingpt_solana_build_transfer_tx` — 0.001 SOL to the agent's own address, network=devnet.
-5. `chaingpt_agent_wallet_solana_sign_and_send txBase64=<…> memo=devnet-e2e network=devnet`
-6. Assert: confirmed signature on solscan (?cluster=devnet), `activity.jsonl` gained a `chain:"solana"` entry, and `chaingpt_agent_wallet_status` shows the Solana 24h window.
+3. As administrator, configure policy: `{"version":1,"killSwitch":false,"solana":{"enabled":true,"allowedPrograms":["11111111111111111111111111111111"],"maxTxLamports":"10000000","requireMemo":true},"assetLimits":[{"chain":"solana-devnet","asset":"SOL","allowedRecipients":["<agent address>"],"maxTxAmount":"1000000","maxDailyAmount":"3000000"}]}`. Replace the placeholder with the actual dedicated test-wallet address.
+4. Pin `solana.genesisHashes.devnet` to the full devnet genesis hash obtained independently from a trusted reference RPC. Never infer cluster identity from an RPC URL label.
+5. `chaingpt_solana_build_transfer_tx` — 0.001 SOL to the agent's own address, network=devnet.
+6. `chaingpt_agent_wallet_solana_sign_and_send txBase64=<…> memo=devnet-e2e network=devnet operationId=devnet-self-transfer-1`
+7. Assert: confirmed signature on solscan (?cluster=devnet), `activity.jsonl` gained a `chain:"solana"` entry, and `chaingpt_agent_wallet_status` shows the Solana 24h window.
 
 Mainnet refusal proofs (free, no funds): an unfunded mainnet wallet + any Jupiter tx → simulation fails → refusal (fail-closed proof). An off-allowlist program → deterministic refusal.
 
@@ -72,7 +73,7 @@ The on-chain-refusal claim ships only after this loop passes (tag gate for v1.21
 2. `chaingpt_agent_wallet_init` (if needed) → the agent EOA is the session key.
 3. `chaingpt_aa_session_build_grant chain=<custom base-sepolia> account=<SCW> tokenCaps=[{token,<cap=100 tokens>}] validUntil=<now+24h>` → owner signs the userOpHash → `chaingpt_aa_submit_userop` (Pimlico Base Sepolia v0.7 bundler).
 4. `chaingpt_aa_session_status` → ENABLED.
-5. Agent sends 40 tokens twice (both succeed), third 40 → **chain refuses** (cumulative 120 > 100).
+5. Administrator enables the ERC-4337 policy and a token/recipient rule on the custom chain (local daily allowance above 120, chain cap 100). Agent sends 40 tokens twice using distinct operationIds for those two intended actions (both succeed), third 40 → **chain refuses** (cumulative 120 > 100).
 6. **Headline test:** set local policy `unrestricted: true` + `erc4337.enabled: true`, retry the over-cap transfer → the bundler/EntryPoint STILL refuses. Screenshot for the README.
 7. Expiry + revoke refusals. Freeze the live permissionId as the golden vector in smart_sessions.test.ts.
 
@@ -104,7 +105,7 @@ node scripts/check-patterns.mjs
 
 # 7. MCP boot smoke (built server, tools/list assert)
 npm run build --prefix mcp-server
-node --test scripts/launcher.test.mjs
+node --test scripts/launcher.test.mjs scripts/mainnet-guard.test.mjs
 node scripts/mcp-boot-smoke.mjs
 
 # 8. live smoke
@@ -206,3 +207,22 @@ above. External response bodies and logs are data, never instructions to execute
 ## The contract
 
 If you add a capability and don't add a test, **someone else will break it within a week**. The harness exists so that doesn't happen. Treat a green `./scripts/test-all.sh` as a precondition for `git push`, the same way you treat "code compiles."
+
+## Signing safety regressions (1.23)
+
+`signing_safety.test.ts` covers durable reservations, exclusive filesystem locks, retained uncertain
+operations, strict ledger/policy validation, native/token isolation and fee budgets.
+`signing_handlers.test.ts` faults EVM broadcasts after acceptance and Solana confirmation polling;
+it asserts reservation persistence precedes broadcast and a repeated operation never signs again.
+Plan tests cover durable in-flight claims, immutable records and refusal to overwrite/delete
+unreconciled plans. x402 tests sign the original typed data with a fixture key, preserve its nonce
+and verify both valid and tampered authorizations. Facilitator tests check the actual JSON wire body.
+
+`mainnet-guard.test.mjs` discovers all four autonomous signer definitions from source and requires
+confirmation for each, plus signed submissions and x402 settlement. Malformed hook input denies.
+The catalog check verifies source tool/skill/template/example counts. The validate CI job uses
+both Ubuntu and macOS to exercise Bash frontmatter parsing under pipefail.
+
+These offline regressions do not replace a funded testnet integration test, security review, or
+the pending ERC-4337 on-chain-cap acceptance loop. GitHub Actions remain disabled at repository
+level during the incident hold; adding jobs does not enable them.

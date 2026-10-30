@@ -16,7 +16,7 @@ A local mock server that mimics every ChainGPT API endpoint with realistic respo
 ```bash
 # Install dependencies
 cd mock-server
-npm install
+npm ci --ignore-scripts
 
 # Start in development mode
 npm run dev

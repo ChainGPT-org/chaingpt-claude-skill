@@ -122,13 +122,13 @@ if [[ -f "$SKILL_FILE" ]]; then
     FRONTMATTER=$(sed -n '2,/^---$/p' "$SKILL_FILE" | sed '$d')
 
     # Check required fields
-    if echo "$FRONTMATTER" | grep -q "^name:"; then
+    if [[ "$FRONTMATTER" == name:* || "$FRONTMATTER" == *$'\n'name:* ]]; then
       pass "SKILL.md has 'name' field"
     else
       fail "SKILL.md missing 'name' field in frontmatter"
     fi
 
-    if echo "$FRONTMATTER" | grep -q "^description:"; then
+    if [[ "$FRONTMATTER" == description:* || "$FRONTMATTER" == *$'\n'description:* ]]; then
       pass "SKILL.md has 'description' field"
     else
       fail "SKILL.md missing 'description' field in frontmatter"
@@ -253,12 +253,12 @@ for skill_dir in "$SKILL_ROOT"/skills/*/; do
       SUB_FIRST=$(head -1 "$SUB_SKILL")
       if [[ "$SUB_FIRST" == "---" ]]; then
         SUB_FM=$(sed -n '2,/^---$/p' "$SUB_SKILL" | sed '$d')
-        if echo "$SUB_FM" | grep -q "^name:"; then
+        if [[ "$SUB_FM" == name:* || "$SUB_FM" == *$'\n'name:* ]]; then
           pass "skills/$SKILL_NAME/SKILL.md has 'name' field"
         else
           fail "skills/$SKILL_NAME/SKILL.md missing 'name' field"
         fi
-        if echo "$SUB_FM" | grep -q "^description:"; then
+        if [[ "$SUB_FM" == description:* || "$SUB_FM" == *$'\n'description:* ]]; then
           pass "skills/$SKILL_NAME/SKILL.md has 'description' field"
         else
           fail "skills/$SKILL_NAME/SKILL.md missing 'description' field"
@@ -342,8 +342,10 @@ fi
 echo ""
 
 # -----------------------------------------------------------
-# Summary
+# Generated capability inventory
 # -----------------------------------------------------------
+if node "$SKILL_ROOT/scripts/check-catalog.mjs"; then pass "Generated capability catalog"; else fail "Generated capability catalog"; fi
+
 echo "========================================="
 echo " Results: $PASS passed, $FAIL failed, $WARN warnings"
 echo "========================================="

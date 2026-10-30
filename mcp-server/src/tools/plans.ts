@@ -1,3 +1,5 @@
+import { durableJson, withSigningLock, operationFingerprint } from '../lib/signing-journal.js';
+import { randomUUID } from 'node:crypto';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { mkdir, readFile, writeFile, readdir, unlink, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -27,7 +29,8 @@ function planDir(): string {
 
 function safeName(name: string): string {
   // Restrict to filesystem-safe chars
-  return name.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name)) throw new Error('Plan name must be 1–100 safe characters, starting with a letter or digit.');
+  return name;
 }
 
 function planPath(name: string): string {
@@ -36,6 +39,7 @@ function planPath(name: string): string {
 
 interface PersistedPlan {
   name: string;
+  planId?: string;
   createdAt: string;
   updatedAt: string;
   type?: string;
@@ -47,7 +51,7 @@ interface PersistedPlan {
    * chaingpt_strategy_mark_step — this is what makes scheduled runs
    * idempotent and crash-safe (a re-run sees the journal and skips).
    */
-  executions?: Record<string, { ts: string; status: 'done' | 'skipped'; txHash?: string; note?: string }>;
+  executions?: Record<string, { ts: string; status: 'claimed' | 'done' | 'skipped'; operationId?: string; txHash?: string; note?: string }>;
 }
 
 /** A schedulable step inside payload.steps — id + atUnix are the contract. */
@@ -62,19 +66,9 @@ interface PlanStep {
 // simultaneous ticks could both pass the idempotency check and both execute
 // — the exact failure the journal exists to prevent. (Cross-PROCESS races
 // are out of scope: run one scheduler per plan, as the skill instructs.)
-const planLocks = new Map<string, Promise<void>>();
 async function withPlanLock<T>(planName: string, fn: () => Promise<T>): Promise<T> {
-  const prev = planLocks.get(planName) ?? Promise.resolve();
-  let release!: () => void;
-  const next = new Promise<void>((r) => { release = r; });
-  planLocks.set(planName, next);
-  try {
-    await prev;
-    return await fn();
-  } finally {
-    release();
-    if (planLocks.get(planName) === next) planLocks.delete(planName);
-  }
+  safeName(planName);
+  return withSigningLock(join(planDir(), 'plans.activity'), fn);
 }
 
 function planSteps(plan: PersistedPlan): PlanStep[] | null {
@@ -145,13 +139,14 @@ export const planTools: Tool[] = [
     description:
       'List the steps of a saved plan that are DUE now (atUnix has passed, within the lookahead window) and ' +
       'not yet executed. The heart of scheduled execution: a cron/scheduled agent calls this each tick, ' +
-      'executes what it returns, then records each with chaingpt_strategy_mark_step — so re-runs and crashes ' +
-      'never double-execute. Plans need payload.steps = [{ id, atUnix, ... }] (chaingpt_strategy_dca_plan ' +
-      'emits this shape). Read-only. 0 ChainGPT credits.',
+      'claims steps with claim=true before signing, passes the stable operationId to the signer, and records the hash. ' +
+      'In-flight claims require reconciliation. Distinct IDs and external-wallet actions cannot be deduplicated automatically. ' +
+      'Plans need payload.steps = [{ id, atUnix, ... }]. Read-only unless claim=true. 0 credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         name: { type: 'string', description: 'Saved plan name.' },
+        claim: { type: 'boolean', description: 'Atomically claim due steps before autonomous execution. Claimed steps carry a stable operationId and are never automatically retried as new actions.' },
         lookaheadMinutes: {
           type: 'number',
           description: 'Also include steps due within the next N minutes (handles scheduler jitter). Default 10.',
@@ -167,7 +162,7 @@ export const planTools: Tool[] = [
     description:
       'Record that a plan step was executed (or deliberately skipped) in the plan\'s execution journal. ' +
       'Call IMMEDIATELY after the action lands, with the tx hash. Idempotent: a step already marked is ' +
-      'refused unless overwrite: true. 0 ChainGPT credits.',
+      'refused; completed journal entries are immutable. 0 ChainGPT credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -176,7 +171,6 @@ export const planTools: Tool[] = [
         status: { type: 'string', enum: ['done', 'skipped'], description: 'Default done.', default: 'done' },
         txHash: { type: 'string', description: 'Transaction hash / order id that executed this step.' },
         note: { type: 'string', description: 'Optional note (e.g. fill price, why skipped).' },
-        overwrite: { type: 'boolean', description: 'Replace an existing journal entry. Default false.', default: false },
       },
       required: ['name', 'stepId'],
     },
@@ -197,7 +191,7 @@ export const planTools: Tool[] = [
   },
 ];
 
-export async function handlePlanTool(
+async function handlePlanToolUnlocked(
   name: string,
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -237,19 +231,21 @@ export async function handlePlanTool(
       if (exists) {
         try {
           const prev = JSON.parse(await readFile(path, 'utf8')) as PersistedPlan;
+          if (Object.keys(prev.executions ?? {}).length) throw new Error('A journaled plan cannot be overwritten. Create a new plan name.');
           if (prev?.createdAt) createdAt = prev.createdAt;
-        } catch { /* ignore */ }
+        } catch (e: any) { throw new Error(`Cannot safely overwrite plan: ${e.message}`); }
       }
 
       const persisted: PersistedPlan = {
         name: planName,
+        planId: randomUUID(),
         createdAt,
         updatedAt: now,
         type,
         notes,
         payload,
       };
-      await writeFile(path, JSON.stringify(persisted, null, 2), 'utf8');
+      durableJson(path, persisted);
       return {
         content: [{
           type: 'text',
@@ -353,13 +349,23 @@ export async function handlePlanTool(
       const journal = plan.executions ?? {};
       const nowSec = Math.floor(Date.now() / 1000);
       const horizon = nowSec + lookaheadMin * 60;
-      const executed = steps.filter((s) => journal[String(s.id)]);
+      const claimed = steps.filter(s => journal[String(s.id)]?.status === 'claimed');
+      const executed = steps.filter(s => journal[String(s.id)] && journal[String(s.id)].status !== 'claimed');
       const due = steps.filter((s) => !journal[String(s.id)] && s.atUnix <= horizon);
       const upcoming = steps
         .filter((s) => !journal[String(s.id)] && s.atUnix > horizon)
         .sort((a, b) => a.atUnix - b.atUnix);
 
+      if (args.claim === true && due.length) {
+        plan.executions = journal;
+        for (const step of due.slice(0, limit)) {
+          const operationId = `plan:${operationFingerprint({ id: plan.planId ?? plan.createdAt, name: plan.name, step: String(step.id) })}`;
+          journal[String(step.id)] = { ts: new Date().toISOString(), status: 'claimed', operationId };
+        }
+        durableJson(path, plan);
+      }
       const lines: string[] = [];
+      for (const step of claimed) lines.push(`IN FLIGHT step ${step.id}: operationId=${journal[String(step.id)].operationId}. Reconcile; never execute with a new id.`);
       lines.push(`Plan "${planName}" — due steps (lookahead ${lookaheadMin}m)`);
       lines.push('');
       lines.push(`Total steps: ${steps.length}   Executed: ${executed.length}   Due now: ${due.length}   Upcoming: ${upcoming.length}`);
@@ -378,6 +384,7 @@ export async function handlePlanTool(
           const when = ageMin >= 0 ? `${ageMin} min overdue` : `due in ${Math.abs(ageMin)} min (within lookahead)`;
           lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${when})`);
           lines.push(`    ${JSON.stringify(detail)}`);
+          if (args.claim === true) lines.push(`    operationId=${journal[String(s.id)].operationId} (pass unchanged to sign_and_send)`);
         }
         if (due.length > limit) lines.push(`(+${due.length - limit} more due — raise limit)`);
         lines.push('');
@@ -390,7 +397,6 @@ export async function handlePlanTool(
 
     if (name === 'chaingpt_strategy_mark_step') {
       const planName = String(args.name);
-      return await withPlanLock(planName, async () => {
       const stepId = String(args.stepId);
       const status = (args.status === 'skipped' ? 'skipped' : 'done') as 'done' | 'skipped';
       const txHash = args.txHash ? String(args.txHash) : undefined;
@@ -409,28 +415,28 @@ export async function handlePlanTool(
       }
       plan.executions = plan.executions ?? {};
       const existing = plan.executions[stepId];
-      if (existing && !overwrite) {
+      if (existing && existing.status !== 'claimed') {
         return {
           content: [{
             type: 'text',
             text:
               `⚠ Step ${stepId} is ALREADY marked (${existing.status} at ${existing.ts}${existing.txHash ? `, tx ${existing.txHash}` : ''}). ` +
               `Refusing to double-record — if this step really executed twice, something upstream double-fired. ` +
-              `Pass overwrite: true only to correct a wrong entry.`,
+              `Execution journal entries are immutable. Reconcile before creating a replacement plan.`,
           }],
         };
       }
-      plan.executions[stepId] = { ts: new Date().toISOString(), status, txHash, note };
+      if (status === 'done' && !txHash) throw new Error('A completed step requires its broadcast transaction hash.');
+      plan.executions[stepId] = { ts: new Date().toISOString(), status, txHash, note, operationId: existing?.operationId };
       plan.updatedAt = new Date().toISOString();
-      await writeFile(path, JSON.stringify(plan, null, 2), 'utf8');
-      const remaining = steps.filter((s) => !plan.executions![String(s.id)]).length;
+      durableJson(path, plan);
+      const remaining = steps.filter(s => !plan.executions![String(s.id)] || plan.executions![String(s.id)].status === 'claimed').length;
       return {
         content: [{
           type: 'text',
           text: `✓ Step ${stepId} marked ${status}${txHash ? ` (tx ${txHash})` : ''}. ${remaining} step(s) remaining in "${planName}".${remaining === 0 ? ' Plan COMPLETE.' : ''}`,
         }],
       };
-      });
     }
 
     if (name === 'chaingpt_strategy_delete_plan') {
@@ -445,6 +451,8 @@ export async function handlePlanTool(
       }
       const path = planPath(planName);
       try {
+        const plan = JSON.parse(await readFile(path, 'utf8')) as PersistedPlan;
+        if (Object.values(plan.executions ?? {}).some(e => e.status === 'claimed')) throw new Error('Cannot delete a plan with in-flight claims. Reconcile first.');
         await unlink(path);
         return { content: [{ type: 'text', text: `✓ Deleted plan "${planName}" from ${path}.` }] };
       } catch (e: any) {
@@ -457,4 +465,11 @@ export async function handlePlanTool(
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`ChainGPT Plan error: ${message}`);
   }
+}
+
+export async function handlePlanTool(name: string, args: Record<string, unknown> | undefined) {
+  if (args && (['chaingpt_strategy_save_plan','chaingpt_strategy_mark_step','chaingpt_strategy_delete_plan'].includes(name) || (name === 'chaingpt_strategy_due_steps' && args.claim === true))) {
+    return withPlanLock(String(args.name), () => handlePlanToolUnlocked(name, args));
+  }
+  return handlePlanToolUnlocked(name, args);
 }

@@ -30,10 +30,11 @@ process.stdin.on('end', () => {
       return;
     }
     const evt = JSON.parse(raw || '{}');
+    if (!evt || typeof evt !== 'object' || Array.isArray(evt) || typeof evt.tool_name !== 'string' || !evt.tool_name || !evt.tool_input || typeof evt.tool_input !== 'object' || Array.isArray(evt.tool_input)) throw new Error('Malformed hook event.');
     const tool = String(evt.tool_name || '');
     const input = evt.tool_input || {};
 
-    const isAgentSend = /chaingpt_agent_wallet_sign_and_send$/.test(tool);
+    const isAgentSend = /chaingpt_agent_wallet_(?:tron_)?sign_and_send$/.test(tool);
     // NOTE: the EVM regex does NOT match the solana tool name — both tests are required.
     const isAgentSolanaSend = /chaingpt_agent_wallet_solana_sign_and_send$/.test(tool);
     const isAgent4337Send = /chaingpt_agent_wallet_4337_sign_and_send$/.test(tool);
@@ -62,7 +63,7 @@ process.stdin.on('end', () => {
     } else if (hasAck) {
       ask = true;
       why = `${tool.replace(/^.*__/, '')} was called with acknowledgeMainnet: true — the next step is signing real funds on mainnet. Confirm the asset, amount, and destination are what you intend.`;
-    } else if (mode === 'strict' && isOrderSigner) {
+    } else if (isOrderSigner || (/chaingpt_x402_facilitator$/.test(tool) && input.action === 'settle')) {
       ask = true;
       why = `${tool.replace(/^.*__/, '')} builds/submits a real-money order payload (strict guard mode).`;
     }
@@ -77,9 +78,8 @@ process.stdin.on('end', () => {
       };
     }
   } catch {
-    // Never block on guard malfunction — fail open to Claude Code's own
-    // permission system, which still governs every tool call.
-    out = {};
+    // A broken guard must not silently remove the confirmation layer.
+    out = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Mainnet guard could not validate this request.' } };
   }
   process.stdout.write(JSON.stringify(out));
 });

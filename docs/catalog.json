@@ -1,0 +1,243 @@
+{
+  "tools": 155,
+  "skills": 24,
+  "templates": 11,
+  "solidityBlocks": 47,
+  "toolsByModule": {
+    "aa": [
+      "chaingpt_aa_userop_hash",
+      "chaingpt_aa_pack_userop",
+      "chaingpt_aa_estimate_userop",
+      "chaingpt_aa_userop_receipt",
+      "chaingpt_aa_submit_userop"
+    ],
+    "aa_sessions": [
+      "chaingpt_aa_session_build_grant",
+      "chaingpt_aa_session_build_revoke",
+      "chaingpt_aa_session_status"
+    ],
+    "agent_wallet": [
+      "chaingpt_agent_wallet_init",
+      "chaingpt_agent_wallet_address",
+      "chaingpt_agent_wallet_status",
+      "chaingpt_agent_wallet_balances",
+      "chaingpt_agent_wallet_policy",
+      "chaingpt_agent_wallet_sign_and_send",
+      "chaingpt_agent_wallet_serve_ui"
+    ],
+    "agent_wallet_4337": [
+      "chaingpt_agent_wallet_4337_sign_and_send"
+    ],
+    "agent_wallet_solana": [
+      "chaingpt_agent_wallet_solana_init",
+      "chaingpt_agent_wallet_solana_address",
+      "chaingpt_agent_wallet_solana_sign_and_send"
+    ],
+    "agent_wallet_tron": [
+      "chaingpt_agent_wallet_tron_address",
+      "chaingpt_agent_wallet_tron_sign_and_send"
+    ],
+    "aggregators": [
+      "chaingpt_dex_1inch_quote",
+      "chaingpt_dex_1inch_swap_tx",
+      "chaingpt_dex_cow_create_order",
+      "chaingpt_dex_cow_submit_signed_order"
+    ],
+    "audit": [
+      "chaingpt_audit_contract",
+      "chaingpt_audit_history"
+    ],
+    "base": [
+      "chaingpt_base_resolve_name",
+      "chaingpt_base_name_availability",
+      "chaingpt_base_register_name_tx"
+    ],
+    "bridge": [
+      "chaingpt_bridge_quote",
+      "chaingpt_bridge_build_deposit_tx",
+      "chaingpt_bridge_status"
+    ],
+    "chat": [
+      "chaingpt_chat",
+      "chaingpt_chat_with_context",
+      "chaingpt_chat_history"
+    ],
+    "dashboard": [
+      "chaingpt_dashboard_serve"
+    ],
+    "defi": [
+      "chaingpt_defi_aave_health",
+      "chaingpt_defi_aave_supply_tx",
+      "chaingpt_defi_aave_borrow_tx",
+      "chaingpt_defi_aave_repay_tx",
+      "chaingpt_defi_aave_withdraw_tx",
+      "chaingpt_defi_lido_stake_tx",
+      "chaingpt_defi_eigenlayer_deposit_tx"
+    ],
+    "deploy": [
+      "chaingpt_deploy_compile",
+      "chaingpt_deploy_estimate",
+      "chaingpt_deploy_build_tx",
+      "chaingpt_deploy_verify",
+      "chaingpt_deploy_verify_status"
+    ],
+    "dex": [
+      "chaingpt_dex_quote",
+      "chaingpt_dex_build_swap_tx",
+      "chaingpt_dex_approve_tx",
+      "chaingpt_dex_jupiter_quote",
+      "chaingpt_dex_jupiter_build_swap_tx"
+    ],
+    "drift": [
+      "chaingpt_drift_markets",
+      "chaingpt_drift_market",
+      "chaingpt_drift_orderbook",
+      "chaingpt_drift_funding",
+      "chaingpt_drift_user"
+    ],
+    "erc8004": [
+      "chaingpt_erc8004_resolve_agent",
+      "chaingpt_erc8004_registries",
+      "chaingpt_erc8004_agentcard"
+    ],
+    "generator": [
+      "chaingpt_generate_contract",
+      "chaingpt_generate_history"
+    ],
+    "hyperliquid": [
+      "chaingpt_hl_markets",
+      "chaingpt_hl_mids",
+      "chaingpt_hl_orderbook",
+      "chaingpt_hl_account",
+      "chaingpt_hl_fills",
+      "chaingpt_hl_funding",
+      "chaingpt_hl_place_order_payload",
+      "chaingpt_hl_cancel_order_payload",
+      "chaingpt_hl_submit_signed_action"
+    ],
+    "intel": [
+      "chaingpt_intel_token",
+      "chaingpt_intel_wallet"
+    ],
+    "kamino_signed": [
+      "chaingpt_defi_kamino_deposit_tx",
+      "chaingpt_defi_kamino_withdraw_tx"
+    ],
+    "marginfi_signed": [
+      "chaingpt_defi_marginfi_deposit_tx",
+      "chaingpt_defi_marginfi_withdraw_tx"
+    ],
+    "miniapp": [
+      "chaingpt_miniapp_manifest",
+      "chaingpt_miniapp_embed",
+      "chaingpt_miniapp_validate"
+    ],
+    "news": [
+      "chaingpt_news_fetch",
+      "chaingpt_news_categories"
+    ],
+    "nft": [
+      "chaingpt_nft_generate_image",
+      "chaingpt_nft_enhance_prompt",
+      "chaingpt_nft_get_chains",
+      "chaingpt_nft_generate_and_mint",
+      "chaingpt_nft_surprise_me",
+      "chaingpt_nft_generate_multiple",
+      "chaingpt_nft_get_collections"
+    ],
+    "onchain": [
+      "chaingpt_onchain_tx",
+      "chaingpt_onchain_address",
+      "chaingpt_onchain_gas",
+      "chaingpt_onchain_block"
+    ],
+    "plans": [
+      "chaingpt_strategy_save_plan",
+      "chaingpt_strategy_load_plan",
+      "chaingpt_strategy_list_plans",
+      "chaingpt_strategy_due_steps",
+      "chaingpt_strategy_mark_step",
+      "chaingpt_strategy_delete_plan"
+    ],
+    "polymarket": [
+      "chaingpt_pm_markets",
+      "chaingpt_pm_market",
+      "chaingpt_pm_orderbook",
+      "chaingpt_pm_trades",
+      "chaingpt_pm_place_order_payload",
+      "chaingpt_pm_submit_signed_order"
+    ],
+    "portfolio": [
+      "chaingpt_portfolio_snapshot"
+    ],
+    "research": [
+      "chaingpt_research_token",
+      "chaingpt_research_pairs",
+      "chaingpt_research_trending"
+    ],
+    "risk": [
+      "chaingpt_risk_token",
+      "chaingpt_risk_honeypot",
+      "chaingpt_risk_address",
+      "chaingpt_risk_contract_source"
+    ],
+    "signals": [
+      "chaingpt_signals_feed"
+    ],
+    "solana": [
+      "chaingpt_solana_build_transfer_tx",
+      "chaingpt_solana_decode_tx"
+    ],
+    "solana_lending": [
+      "chaingpt_defi_marginfi_banks",
+      "chaingpt_defi_marginfi_account",
+      "chaingpt_defi_kamino_markets",
+      "chaingpt_defi_kamino_vaults"
+    ],
+    "strategy": [
+      "chaingpt_strategy_dca_plan",
+      "chaingpt_strategy_grid_plan",
+      "chaingpt_strategy_funding_arb_plan",
+      "chaingpt_strategy_copy_plan",
+      "chaingpt_backtest_dca",
+      "chaingpt_backtest_grid"
+    ],
+    "tron": [
+      "chaingpt_tron_validate_address",
+      "chaingpt_tron_balances",
+      "chaingpt_tron_token_balance",
+      "chaingpt_tron_account_resources",
+      "chaingpt_tron_tx_info",
+      "chaingpt_tron_research_token",
+      "chaingpt_tron_risk_token",
+      "chaingpt_tron_build_transfer_tx",
+      "chaingpt_tron_build_trc20_transfer_tx",
+      "chaingpt_tron_dex_sunswap_quote",
+      "chaingpt_tron_lend_justlend_account",
+      "chaingpt_tron_lend_justlend_build_tx"
+    ],
+    "utils": [
+      "chaingpt_estimate_credits",
+      "chaingpt_check_balance"
+    ],
+    "wallet": [
+      "chaingpt_wallet_balances",
+      "chaingpt_wallet_positions",
+      "chaingpt_wallet_pnl"
+    ],
+    "x402": [
+      "chaingpt_x402_decode",
+      "chaingpt_x402_build_payment",
+      "chaingpt_x402_facilitator",
+      "chaingpt_x402_fetch",
+      "chaingpt_x402_create_requirements"
+    ],
+    "yield": [
+      "chaingpt_defi_pendle_markets",
+      "chaingpt_defi_pendle_market",
+      "chaingpt_defi_morpho_markets",
+      "chaingpt_defi_morpho_vaults",
+      "chaingpt_defi_morpho_position"
+    ]
+  }
+}

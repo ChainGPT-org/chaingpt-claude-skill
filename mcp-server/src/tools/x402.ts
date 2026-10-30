@@ -14,7 +14,7 @@ import {
   type PaymentRequirements,
   X402_NETWORK_CHAINID,
 } from '../lib/x402.js';
-import { isAddress, type Hex } from 'viem';
+import { isAddress, verifyTypedData, type Hex } from 'viem';
 
 /**
  * Tier-7 x402 — Coinbase's HTTP 402 agentic-payment protocol. Custody-free:
@@ -55,6 +55,7 @@ export const x402Tools: Tool[] = [
         amount: { type: 'string', description: 'Human amount (e.g. "0.01") if not using `requirements`. Converted via token decimals.' },
         maxAmountRequired: { type: 'string', description: 'Atomic amount override (takes precedence over `amount`).' },
         validForSeconds: { type: 'number', description: 'Authorization validity window from now (default 600s).' },
+        authorization: { type: 'object', description: 'Exact authorization returned by the unsigned call; REQUIRED with signature. Includes original nonce and validity bounds.' },
         signature: { type: 'string', description: 'Optional 0x signature of the typed data; if present, returns the final X-PAYMENT header.' },
       },
       required: ['from'],
@@ -231,7 +232,7 @@ async function handleX402Fetch(args: any): Promise<string> {
   if (!args.from) {
     lines.push('Pass `from` (the payer wallet address) to get the UNSIGNED EIP-3009 typed data to sign.');
     lines.push('Flow: this tool (with from) → sign typed data in your wallet → chaingpt_x402_build_payment');
-    lines.push('(same requirements + signature) → re-call this tool with xPaymentHeader=<the header>.');
+    lines.push('(same requirements + authorization + signature) → re-call this tool with xPaymentHeader=<the header>.');
     lines.push('');
     lines.push('--- Raw PaymentRequirements ---');
     lines.push(JSON.stringify(req, null, 2));
@@ -242,7 +243,7 @@ async function handleX402Fetch(args: any): Promise<string> {
   const built = await handleBuildPayment({ from: String(args.from), requirements: req });
   lines.push(built);
   lines.push('');
-  lines.push(`After signing: chaingpt_x402_build_payment from=${args.from} requirements=<above> signature=<sig>`);
+  lines.push(`After signing: chaingpt_x402_build_payment from=${args.from} requirements=<above> authorization=<original> signature=<sig>`);
   lines.push(`→ then re-call chaingpt_x402_fetch url=${url} xPaymentHeader=<X-PAYMENT value> to complete the paid request.`);
   return lines.join('\n');
 }
@@ -278,18 +279,26 @@ async function handleBuildPayment(args: any): Promise<string> {
     throw new Error('Provide an amount (via requirements.maxAmountRequired, maxAmountRequired, or amount).');
   }
 
+  if (req && req.scheme !== 'exact') throw new Error('Only the exact EIP-3009 scheme is supported.');
+  if (!/^[0-9]+$/.test(atomic) || BigInt(atomic) <= 0n) throw new Error('Payment amount must be a positive atomic integer.');
   const now = Math.floor(Date.now() / 1000);
-  const validBefore = now + Number(args.validForSeconds ?? req?.maxTimeoutSeconds ?? 600);
-  const nonce = freshNonce();
+  if (args.signature && !args.authorization) throw new Error('Pass the EXACT original authorization with the signature; rebuilding would change the nonce.');
+  const original = args.authorization;
+  if (original && (typeof original !== 'object' || String(original.from).toLowerCase() !== from.toLowerCase() || String(original.to).toLowerCase() !== payTo.toLowerCase() || String(original.value) !== atomic || !/^0x[0-9a-fA-F]{64}$/.test(original.nonce) || !/^[0-9]+$/.test(String(original.validAfter)) || !/^[0-9]+$/.test(String(original.validBefore)))) throw new Error('Authorization does not match the payer, recipient and amount.');
+  const validBefore = original ? Number(original.validBefore) : now + Number(args.validForSeconds ?? req?.maxTimeoutSeconds ?? 600);
+  const validAfter = original ? Number(original.validAfter) : 0;
+  if (!Number.isSafeInteger(validBefore) || !Number.isSafeInteger(validAfter) || validBefore <= now || validAfter > now || validAfter < 0) throw new Error('Invalid or expired payment validity window.');
+  const nonce = original?.nonce ?? freshNonce();
 
   const { typedData, digest, authorization } = buildTransferWithAuthorizationTypedData({
-    token, chainId, from, to: payTo, value: atomic, validAfter: 0, validBefore, nonce,
+    token, chainId, from, to: payTo, value: atomic, validAfter, validBefore, nonce,
   });
 
   // Serialize typed data with bigints as strings for display.
   const typedDataJson = JSON.stringify(typedData, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
 
   if (args.signature) {
+    if (!await verifyTypedData({ ...typedData, address: from as Hex, signature: String(args.signature) as Hex })) throw new Error('Signature does not match the original payment authorization.');
     const payload: PaymentPayload = {
       x402Version: X402_VERSION,
       scheme: 'exact',
@@ -320,13 +329,17 @@ async function handleBuildPayment(args: any): Promise<string> {
     `--- Typed data to sign (eth_signTypedData_v4) ---`,
     typedDataJson,
     ``,
+    '--- Authorization (pass unchanged with the signature) ---',
+    JSON.stringify(authorization),
+    ``,
     `Custody-free: sign this with the payer wallet (or the agent wallet), then re-call`,
-    `chaingpt_x402_build_payment with the same args + signature=0x… to get the X-PAYMENT header.`,
+    `chaingpt_x402_build_payment with the same args + authorization=<original> + signature=0x… to get the X-PAYMENT header.`,
   ].join('\n');
 }
 
 async function handleFacilitator(args: any): Promise<string> {
   const base = String(args.facilitatorUrl).replace(/\/+$/, '');
+  if (!/^https:\/\//.test(base)) throw new Error('facilitatorUrl must be https://');
   const action = String(args.action);
   if (action === 'supported') {
     const res = await httpJson<any>(`${base}/supported`, { method: 'GET' });
@@ -339,7 +352,7 @@ async function handleFacilitator(args: any): Promise<string> {
     const res = await httpJson<any>(`${base}/${action}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ paymentPayload: args.paymentPayload, paymentRequirements: args.paymentRequirements }),
+      body: { paymentPayload: args.paymentPayload, paymentRequirements: args.paymentRequirements },
     });
     return `=== facilitator /${action} ===\n${JSON.stringify(res, null, 2)}`;
   }

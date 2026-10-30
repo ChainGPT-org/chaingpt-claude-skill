@@ -126,3 +126,11 @@ All API products: 200 requests/minute per API key.
 ## License
 
 MIT
+
+## Signing API compatibility (1.23)
+
+Read [wallet safety and migration](../docs/wallet-safety.md). Every agent signer requires a stable
+operationId; first-run signing is disabled. Restricted mode supports canonical direct transfers
+and bounded ERC-20 approvals with explicit asset/recipient limits. Opaque protocol transactions
+use unsigned builders and external signing. Pending operations retain durable fee/spend reservations.
+The MCP surface alone does not isolate policy/keystore files from a coding agent with host access.
