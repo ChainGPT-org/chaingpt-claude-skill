@@ -1,5 +1,9 @@
 # Authenticated read-only API validation
 
+See [provider follow-up](provider-warning-followup.md) for two fresh Etherscan
+passes, the remaining key gaps and the investigation of public-provider warnings.
+The five-check receipt below is retained as the earlier run.
+
 Manual checks on **2026-10-29 Hawaii / 2026-10-30 UTC**, based on main
 `33226cdb3b5ceaabff18c4aa53b88a0e1b96a4d3` plus this repair branch.
 Repository GitHub Actions remained disabled; no workflow was dispatched.

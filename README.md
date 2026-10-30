@@ -6,7 +6,7 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-The prepared local checkout exposes 155 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + Drift), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + local signing policy (requires host isolation)**. Custody‑free. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
+The prepared local checkout exposes 155 MCP tools across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + legacy Drift; hosted Drift data unavailable), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an **agent wallet with localhost admin dashboard + local signing policy (requires host isolation)**. Custody‑free. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
 
 [![npm version](https://img.shields.io/badge/version-1.23.0-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -154,7 +154,7 @@ If startup reports missing dependencies, repeat Step 3 in this same checkout.
 
 ### Step 5 — Set your API key (optional but recommended)
 
-Without an API key, the **dashboard works**, all the **on‑chain tools work** (DEX swaps, Aave, Hyperliquid, etc. — they hit public endpoints), but the **ChainGPT product tools fail** (chat, NFT generation, contract audit, news — these need credits).
+Without an API key, the **dashboard works** and public tools such as Aave and Hyperliquid can use their public endpoints, subject to provider availability. Some integrations need separate provider keys. The **ChainGPT product tools** (chat, NFT generation, contract audit, news) need a ChainGPT key and credits. See [provider follow-up](docs/provider-warning-followup.md) for current availability gaps.
 
 Drop this in your shell rc (`~/.zshrc` or `~/.bashrc`):
 
@@ -167,7 +167,7 @@ Reload your shell (`source ~/.zshrc`) and re‑launch Claude Code.
 Get a key + credits at <https://app.chaingpt.org>. 1,000 credits = $10. 15 % bonus if you pay in $CGPT.
 
 > [!IMPORTANT]
-> **Using Solana DeFi tools?** (Marginfi deposit/withdraw, Jupiter swaps, Drift, Kamino.) Set a real Solana RPC — the default public endpoint rate‑limits the heavy on‑chain SDK fetches these tools rely on, so they'll be slow or fail. A free Helius / Triton / QuickNode endpoint is plenty:
+> **Using Solana DeFi tools?** (Marginfi deposit/withdraw, Jupiter swaps, Kamino.) Set a real Solana RPC — the default public endpoint rate‑limits the heavy on‑chain SDK fetches these tools rely on, so they'll be slow or fail. A free Helius / Triton / QuickNode endpoint is plenty:
 > ```bash
 > export SOLANA_RPC_URL="https://your-solana-mainnet-rpc-url"
 > ```
@@ -267,7 +267,9 @@ Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.
 | Port 8788 already in use | `/chaingpt:dashboard 9999` (or any free port). |
 | `WARN: CHAINGPT_API_KEY is not set` in MCP server logs | Optional. The plugin still works; only the ChainGPT product tools (chat / NFT / audit / generator / news) will fail with a clear per-call message. Set the env var if you need those tools. |
 | `chaingpt_agent_wallet_init` errors with passphrase complaint | The `CHAINGPT_AGENT_WALLET_PASSPHRASE` env var must be set in the same shell that launched Claude Code, with ≥16 chars. Quit Claude Code, `export …`, relaunch. |
-| Solana DeFi tools (Marginfi deposit/withdraw, Jupiter, Drift) are slow or time out / `429` | The default public Solana RPC rate‑limits the heavy DeFi SDK fetches. Set `SOLANA_RPC_URL` to a real endpoint (Helius / Triton / QuickNode free tier) before launching Claude Code — see Step 5. |
+| Solana DeFi tools (Marginfi deposit/withdraw, Jupiter) are slow or time out / `429` | The default public Solana RPC rate‑limits the heavy DeFi SDK fetches. Set `SOLANA_RPC_URL` to a real endpoint (Helius / Triton / QuickNode free tier) before launching Claude Code — see Step 5. |
+| Drift read tools fail or smoke reports WARN | The original Drift program is paused; its legacy HTTP data hosts are unavailable. A different Solana RPC does not fix this. Velocity is a separate deployment, not a compatible endpoint replacement. See [provider follow-up](docs/provider-warning-followup.md). |
+| OpenOcean quote receives HTTP 403 HTML challenge | Provider access restrictions remain. Consult OpenOcean support about IP allowlisting; do not treat the challenge as a valid quote. See [provider follow-up](docs/provider-warning-followup.md). |
 
 
 
@@ -307,7 +309,7 @@ Building with Web3 AI APIs means juggling **seven different domains in one task*
 | **Solo Web3 dev** | Skip the "30 SDKs, 3 docs sites, 12 schema versions" tax. Build a deploy pipeline, an MEV‑protected swap, or a portfolio dashboard from chat. |
 | **DeFi power user** | Health‑factor monitor + automated stake/unstake + cross‑chain rebalance, all custody‑free, no on‑chain bot infrastructure required. |
 | **Hackathon team** | The `chaingpt-hackathon` skill scaffolds a working 5‑file Web3 + AI project in 60 seconds. 11 template files including multi‑product compositions (NFT Marketplace, DeFi Dashboard). |
-| **Quant / desk** | Hyperliquid + Drift + Polymarket live data, Pendle yield discovery, Morpho vault analytics, strategy plan persistence + grid backtester, all from one toolkit. |
+| **Quant / desk** | Hyperliquid + Polymarket live data, Pendle yield discovery, Morpho vault analytics, strategy plan persistence + grid backtester, all from one toolkit. |
 | **Smart‑contract engineer** | 45+ Solidity examples Claude composes from. Mainnet deploy with audit-before-deploy workflow. Verification via Etherscan v2 across every major EVM chain. |
 | **Agent builder** | The agent gets its own EOA and deterministic policy checks under the documented host-isolation boundary. Localhost admin dashboard with 9 policy templates + kill switch. Build "bounded autonomous" trading/yield bots safely. |
 

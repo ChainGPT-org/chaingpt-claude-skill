@@ -15,7 +15,7 @@
 #   ./scripts/test-all.sh                # run everything
 #   ./scripts/test-all.sh --fast         # skip live smoke (everything offline)
 #   ./scripts/test-all.sh --only smoke   # one layer only
-#   ./scripts/test-all.sh --skip-drift   # smoke without drift (when upstream 503s)
+#   ./scripts/test-all.sh --skip-drift   # smoke without legacy Drift (explicit coverage exclusion)
 #
 # Exit codes:
 #   0  every requested layer passed

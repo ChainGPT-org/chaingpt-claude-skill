@@ -368,10 +368,9 @@ contract Hello { string public greeting = "hi"; }`,
   },
 
   // ─── Tier 6.4: Drift ─────────────────────────────────────────────
-  // Drift's public data plane has been gated/offline since ~2026-05
-  // (dlob 503 / data API 403). degradedOk keeps these visible as WARN
-  // without failing the whole run; they flip back to hard asserts the
-  // day the endpoint returns.
+  // Legacy Drift hosted data is unavailable and the original program is paused.
+  // Keep transport/access failures visible as WARN; malformed responses fail.
+  // A separate Velocity deployment must not be substituted for this coverage.
   {
     name: 'drift_markets (top by volume)',
     fn: () => handleDriftTool('chaingpt_drift_markets', { sortBy: 'volume', limit: 5 }),
@@ -453,7 +452,7 @@ const failures: Array<{ name: string; reason: string }> = [];
 const warnings: Array<{ name: string; reason: string }> = [];
 
 // Allow CI / local runs to skip Drift cases when dlob.drift.trade is in a
-// known outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
+// legacy-host outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
 const skipDrift = process.env.SKIP_DRIFT_SMOKE === '1';
 const filteredCases = skipDrift
   ? cases.filter((c) => !/^drift_/.test(c.name))

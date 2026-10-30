@@ -2,33 +2,23 @@ import { httpJson } from '../lib/http.js';
 /**
  * Tier-6.4 Drift Protocol — Solana perpetuals.
  *
- * Hyperliquid is the dominant non-custodial perp venue, but it lives on its
- * own L1. Drift is the Solana-native counterpart — same custody model (the
- * user keeps the keys, the protocol holds collateral on-chain), different
- * blockchain and signing scheme. For SOL-denominated traders or users
- * already operating on Solana, Drift is the natural Hyperliquid alternative.
- *
- * READ-ONLY by design. Drift trading requires constructing Solana program
- * instructions and signing with a Solana keypair (Ed25519), which is a
- * different signing flow than the EVM EIP-712 pattern used elsewhere. The
- * read tools here surface markets, funding, orderbooks, and positions so
- * users can make decisions; deployment happens via the official UI at
- * https://app.drift.trade.
+ * Legacy read-only integration. The original Drift program is paused and
+ * its hosted data endpoints are unavailable. Velocity is a separate fork
+ * with a new program ID and no migrated accounts; never substitute its data
+ * for Drift. See https://docs.velocity.exchange/developers/migrate-from-drift.
  *
  * Endpoints:
  *   dlob.drift.trade            — live orderbook + market metadata
  *   data.api.drift.trade        — historical funding rates + analytics
- *   mainnet-beta.api.drift.trade — fallback contract metadata
  */
 const DRIFT_DLOB = 'https://dlob.drift.trade';
 const DRIFT_DATA = 'https://data.api.drift.trade';
-const DRIFT_MAIN = 'https://mainnet-beta.api.drift.trade';
+const DRIFT_AVAILABILITY = 'Legacy Drift: the original program is paused; hosted data is unavailable. ';
 export const driftTools = [
     {
         name: 'chaingpt_drift_markets',
-        description: 'List Drift perpetual markets on Solana. Returns each market with: index, symbol, mark price, ' +
-            '24h volume, open interest, current funding rate (1h). Drift has 50+ perps including SOL-PERP, ' +
-            'BTC-PERP, ETH-PERP, plus a long-tail of Solana memes (BONK, WIF, POPCAT, …). Read-only. ' +
+        description: DRIFT_AVAILABILITY + 'List Drift perpetual markets on Solana. Returns each market with: index, symbol, mark price, ' +
+            '24h volume, open interest, current funding rate (1h). Read-only. ' +
             '0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
@@ -46,7 +36,7 @@ export const driftTools = [
     },
     {
         name: 'chaingpt_drift_market',
-        description: 'Get a single Drift perp market in detail: mark price, oracle price, basis, current funding ' +
+        description: DRIFT_AVAILABILITY + 'Get a single Drift perp market in detail: mark price, oracle price, basis, current funding ' +
             'rate (hourly), funding rate annualized, open interest (long + short), max leverage, ' +
             'taker fee, maker fee. Read-only. 0 ChainGPT credits.',
         inputSchema: {
@@ -59,7 +49,7 @@ export const driftTools = [
     },
     {
         name: 'chaingpt_drift_orderbook',
-        description: 'Get the L2 orderbook for a Drift perp market (best bids + asks by price level). Useful for ' +
+        description: DRIFT_AVAILABILITY + 'Get the L2 orderbook for a Drift perp market (best bids + asks by price level). Useful for ' +
             'sizing trades against available liquidity. Read-only. 0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
@@ -72,7 +62,7 @@ export const driftTools = [
     },
     {
         name: 'chaingpt_drift_funding',
-        description: 'Get historical funding rates for a Drift perp market over the last 24h or 7d. Returns a series ' +
+        description: DRIFT_AVAILABILITY + 'Get historical funding rates for a Drift perp market over the last 24h or 7d. Returns a series ' +
             'of (timestamp, fundingRate, oraclePriceTwap, markPriceTwap) tuples. Use to spot persistent ' +
             'funding skew that funding-arb strategies can exploit. Read-only. 0 ChainGPT credits.',
         inputSchema: {
@@ -91,7 +81,7 @@ export const driftTools = [
     },
     {
         name: 'chaingpt_drift_user',
-        description: "Get a user's Drift account: USDC collateral, free collateral, total leverage, open perp " +
+        description: DRIFT_AVAILABILITY + "Get a user's Drift account: USDC collateral, free collateral, total leverage, open perp " +
             'positions (with mark price, entry, PnL, funding accrued), and unfilled orders. The user is ' +
             'identified by their Solana wallet authority (base58). Read-only. 0 ChainGPT credits.',
         inputSchema: {
@@ -135,31 +125,28 @@ function fmtUsdShort(n) {
 function annualizedFunding(hourly) {
     return hourly * 24 * 365;
 }
-// dlob.drift.trade has been returning 503 "no healthy upstream" and data.api.drift.trade 403
-// since ~2026-05; Drift appears to have gated/moved its public data plane. Try every known
-// host before failing, and fail with a message that explains the degraded state instead of
-// surfacing a bare upstream error.
-const DRIFT_DEGRADED_HINT = 'Drift public endpoints are currently unreachable (dlob.drift.trade 503 / data.api.drift.trade 403). ' +
-    'Drift read tools are DEGRADED until Drift restores public access. ' +
-    'Options: check https://docs.drift.trade/developers/data-api for the current endpoint, ' +
-    'or self-host the orderbook server (https://github.com/drift-labs/dlob-server) and set DRIFT_DLOB_URL.';
+// Keep observed failures separate from availability context. A DNS failure does
+// not establish an HTTP status, and Velocity data does not belong to Drift.
+const DRIFT_DEGRADED_HINT = 'Drift read tools are DEGRADED. The original Drift program is paused and its hosted data is unavailable. ' +
+    'Velocity is a separate deployment with a new program ID and no carried-over accounts; ' +
+    'its endpoints are not a Drift fallback. See https://docs.velocity.exchange/developers/migrate-from-drift. ' +
+    'DRIFT_DLOB_URL may select a trusted compatible legacy data service; this does not resume the Drift program.';
 function driftHosts(primary) {
     const override = process.env.DRIFT_DLOB_URL;
     const ordered = primary === DRIFT_DATA ? [DRIFT_DATA, DRIFT_DLOB] : [DRIFT_DLOB, DRIFT_DATA];
     return override ? [override.replace(/\/$/, ''), ...ordered] : ordered;
 }
 async function driftGet(path, primary = DRIFT_DLOB) {
-    let lastErr;
+    const failures = [];
     for (const host of driftHosts(primary)) {
         try {
             return await httpJson(`${host}${path}`);
         }
         catch (e) {
-            lastErr = e;
+            failures.push(e instanceof Error ? e.message : String(e));
         }
     }
-    const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
-    throw new Error(`${msg}\n\n${DRIFT_DEGRADED_HINT}`);
+    throw new Error(`${failures.join('\n')}\n\n${DRIFT_DEGRADED_HINT}`);
 }
 export async function handleDriftTool(name, args) {
     if (!args)
