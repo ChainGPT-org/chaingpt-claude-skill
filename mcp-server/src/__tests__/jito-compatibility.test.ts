@@ -79,17 +79,24 @@ describe('Jito compatibility through the Pyth consumer path', () => {
     const tx = transaction();
     // Start unsigned so a no-op wallet cannot satisfy the helper's signing contract.
     tx.signatures[0].fill(0);
+    const expected = VersionedTransaction.deserialize(tx.serialize());
+    expected.sign([payer]);
     const send = vi.fn((request, callback) => {
       const codec = SearcherServiceService.sendBundle;
       const decoded = codec.requestDeserialize(codec.requestSerialize(request));
-      expect(Buffer.from(decoded.bundle.packets[0].data)).toEqual(Buffer.from(tx.serialize()));
+      expect(Buffer.from(decoded.bundle.packets[0].data)).toEqual(Buffer.from(expected.serialize()));
       const submitted = VersionedTransaction.deserialize(decoded.bundle.packets[0].data);
       expect(verify(null, submitted.message.serialize(), payerVerificationKey, submitted.signatures[0])).toBe(true);
       callback(null, { uuid: 'fixture-bundle-id' });
     });
-    const wallet = { signTransaction: vi.fn(async (input: VersionedTransaction) => { input.sign([payer]); return input; }) };
+    const wallet = { signTransaction: vi.fn(async (input: VersionedTransaction) => {
+      const signed = VersionedTransaction.deserialize(input.serialize());
+      signed.sign([payer]);
+      return signed;
+    }) };
     const signature = await sendTransactionsJito([{ tx }], new SearcherClient({ sendBundle: send }), wallet);
-    expect(signature).toBe(require('bs58').encode(tx.signatures[0]));
+    expect(signature).toBe(require('bs58').encode(expected.signatures[0]));
+    expect(tx.signatures[0].every(byte => byte === 0)).toBe(true);
     expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledTimes(1);
   });

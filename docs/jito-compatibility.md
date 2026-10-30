@@ -38,7 +38,8 @@ CommonJS packages through Pyth's Jito resolution path:
   signed bytes; tip recipient, amount, blockhash and cryptographically valid
   signature; bundle capacity limits.
 - Pyth's signing helper through Jito's SearcherClient and real protobuf request
-  codec, starting unsigned and verifying the submitted signature, including wallet
+  codec, starting unsigned, using the wallet's separate signed return object and
+  verifying the submitted signature, including wallet
   refusal and submission-error propagation without retries.
 - Jito bundle simulation success and failure, preserving error messages and logs.
 - A real loopback WebSocket slot subscription, notification and unsubscribe using
