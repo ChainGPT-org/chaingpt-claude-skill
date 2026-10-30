@@ -1,5 +1,8 @@
 # October 2026 high-severity dependency remediation
 
+> Historical standalone-branch validation. For the merged graph and current integration results,
+> see [dependency security notes](dependency-security.md#combined-october-integration).
+
 The review traced the high-severity audit findings to nine upstream packages.
 Most of the affected MCP parent packages inherit the same TOML findings through
 Anchor; replacing the parser removes those propagated findings without changing
