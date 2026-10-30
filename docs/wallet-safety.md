@@ -86,6 +86,8 @@ Uncertain operations remain reserved indefinitely. Reservations with observed ch
 24-hour budget from the time finality is observed. Repeating the original operation can
 query its receipt and mark it confirmed; it never creates or signs another transaction. A missing
 receipt, timeout, corrupt ledger or disk failure never restores allowance automatically.
+ERC-4337 reconciliation verifies the matching `UserOperationEvent` from the configured
+EntryPoint in the canonical transaction receipt; a bundler's claim alone cannot age out a hold.
 
 ## Recovery
 

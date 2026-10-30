@@ -1,4 +1,4 @@
-import { finalizedEvmReceipt } from '../lib/signing-finality.js';
+import { finalizedUserOperationReceipt } from '../lib/signing-finality.js';
 import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
 import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -135,7 +135,7 @@ async function handleAgentWallet4337ToolUnlocked(
       if (existing.hash && existing.state !== 'confirmed') {
         try {
           const receipt = await bundlerRpc<any>({ url: bundlerUrl, method: 'eth_getUserOperationReceipt', params: [existing.hash] });
-          if (receipt?.userOpHash?.toLowerCase() === existing.hash.toLowerCase() && receipt.receipt?.transactionHash && await finalizedEvmReceipt(rpcEndpointsWithCustom(String(args.chain)), receipt.receipt.transactionHash)) {
+          if (await finalizedUserOperationReceipt(rpcEndpointsWithCustom(String(args.chain)), existing.hash, ENTRY_POINT_V07, receipt)) {
             saveReservation(activityPath(), { ...existing, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
             return { content: [{ type: 'text', text: replayMessage({ ...existing, state: 'confirmed' }) }] };
           }
@@ -275,7 +275,7 @@ async function handleAgentWallet4337ToolUnlocked(
           const r = await bundlerRpc<any>({ url: bundlerUrl, method: 'eth_getUserOperationReceipt', params: [submittedHash] });
           if (r?.receipt?.transactionHash) {
             txHash = r.receipt.transactionHash;
-            if (await finalizedEvmReceipt(rpcs, txHash)) saveReservation(activityPath(), { ...reservation, ts: new Date().toISOString(), state: 'confirmed', hash: txHash });
+            if (await finalizedUserOperationReceipt(rpcs, submittedHash, ENTRY_POINT_V07, r)) saveReservation(activityPath(), { ...reservation, ts: new Date().toISOString(), state: 'confirmed', hash: submittedHash });
             if (r.success === false) {
               return { content: [{ type: 'text', text: `userOp ${submittedHash} was included in ${txHash} but the inner call REVERTED. Inspect the tx on the explorer.` }] };
             }

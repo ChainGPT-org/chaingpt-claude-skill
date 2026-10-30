@@ -22,8 +22,8 @@ import { withRpcFallback as unverifiedRpcFallback } from '../lib/solana-sign.js'
  *   parse → structural checks (sole signer, agent is fee payer, program-id
  *   enumeration) → cheap policy short-circuit (killSwitch / solana.enabled,
  *   pre-RPC) → simulate (fee-payer lamport delta) → checkSolanaPolicy (the
- *   single decision point, fail-closed) → refuse sim-failing txs → refresh
- *   blockhash → sign → send → journal to the velocity ledger.
+ *   single decision point, fail-closed) → refuse sim-failing txs → reserve →
+ *   sign the unchanged message → persist signed bytes → send → reconcile finality.
  */
 export const agentWalletSolanaTools = [
     {
