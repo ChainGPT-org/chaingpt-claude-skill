@@ -35,12 +35,15 @@ existing Node.js 22.14+ requirement. The MCP SDK pin from PR #111 explicitly
 permits the 2.x Hono adapter. Jayson is a major override across legacy parent
 ranges; keep the Solana compatibility tests when revisiting it.
 
-Solana's browser-client path remains compatible. Tests make fixture-only
-`Connection.getVersion()` calls through the root and Marginfi Solana copies and
-exercise the browser client resolved by Jito's legacy Solana copy. A full import
-of that legacy Jito Solana copy fails on an existing `rpc-websockets` private
-export mismatch, also reproduced with Jayson 4.3.0. That unrelated compatibility
-issue remains; the browser-client test does not establish full Jito support.
+During the moderate review, tests made fixture-only `Connection.getVersion()`
+calls through the root and Marginfi Solana copies and exercised the browser
+client resolved by Jito's legacy Solana copy. A full import of that legacy copy
+failed on a `rpc-websockets` private export mismatch, also reproduced with
+Jayson 4.3.0. That unrelated compatibility
+issue was left open in that review. The [Jito compatibility follow-up](jito-compatibility.md)
+resolves the import failure and extends coverage to actual Solana HTTP/WebSocket
+calls and Jito/Pyth bundle APIs. The original browser-client test alone did not
+establish full Jito support.
 
 Jayson 5's generic stream parser now requires delimiter-terminated frames
 (newline by default), including the final frame. Callers relying on undelimited

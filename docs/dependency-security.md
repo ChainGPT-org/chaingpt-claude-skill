@@ -26,8 +26,9 @@ All 76 committed build files reproduced byte for byte; boot smoke listed 155 uni
 Go/Rust example checks were skipped because those toolchains are unavailable.
 
 Validation runs locally while repository GitHub Actions remains disabled. Live funded-chain
-and authenticated upstream smoke tests are outside this offline validation; the legacy
-Jito import limitation described in the moderate report remains.
+and authenticated upstream smoke tests are outside this offline validation. The legacy
+Jito import limitation recorded during that validation is resolved by the
+[scoped Jito compatibility follow-up](jito-compatibility.md).
 
 ## October 2026 proxy-trust patch (standalone snapshot)
 
@@ -82,6 +83,7 @@ in either graph. The September review below is a historical snapshot.
 | MCP | `toml` → `5.0.1` | Fixes parser resource-consumption advisories. Both Anchor families retain CommonJS `parse`, including Buffer input. Large integers now follow TOML's signed 64-bit bounds; unsafe JavaScript integers need the explicit `bigint` option. |
 | MCP | `uuid@<11.1.1` → `11.1.1` | Patched release retaining CommonJS `v4` used by legacy SDKs. Newer ESM-only major versions are not interchangeable. |
 | MCP | `jayson` → `5.0.0` | Retains Solana's browser-client API and removes stream-json. TCP/TLS stream frames now require their configured delimiter. |
+| MCP / `jito-ts` only | `@solana/web3.js` → direct dependency pin (`1.99.0`) | Removes the legacy Solana private WebSocket imports. Jito/Pyth imports, HTTP RPC, WebSocket subscriptions, bundle serialization and tips have offline regression coverage. |
 | Mock | `qs` → `6.16.1` | Fixes hostile comma-array coercion while retaining Express 4/body-parser query APIs. |
 
 The [October high-severity remediation](high-severity-dependencies.md) documents

@@ -108,7 +108,7 @@ describe('Jayson 5 compatibility through Solana consumers', () => {
     expect(truncated.errors).toHaveLength(1);
     expect(truncated.values).toEqual([]);
   });
-  it.each(['@solana/web3.js', '@mrgnlabs/mrgn-common'])('preserves Solana RPC calls through %s', async (consumer) => {
+  it.each(['@solana/web3.js', '@mrgnlabs/mrgn-common', 'jito-ts'])('preserves Solana RPC calls through %s', async (consumer) => {
     const consumerRequire = createRequire(require.resolve(consumer));
     const { Connection } = consumer === '@solana/web3.js' ? require(consumer) : consumerRequire('@solana/web3.js');
     const fetch = vi.fn(async (_url: unknown, options: { body: string }) => {
@@ -120,10 +120,10 @@ describe('Jayson 5 compatibility through Solana consumers', () => {
     expect(await connection.getVersion()).toEqual({ 'solana-core': 'fixture', 'feature-set': 1 });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it('preserves the browser-client API resolved by the legacy Jito Solana dependency', async () => {
+  it('preserves the browser-client API resolved by the Jito Solana dependency', async () => {
     const jitoRequire = createRequire(require.resolve('jito-ts'));
-    const legacyRequire = createRequire(jitoRequire.resolve('@solana/web3.js'));
-    const BrowserClient = legacyRequire('jayson/lib/client/browser');
+    const solanaRequire = createRequire(jitoRequire.resolve('@solana/web3.js'));
+    const BrowserClient = solanaRequire('jayson/lib/client/browser');
     const client = new BrowserClient((body: string, callback: (error: Error | null, result: string) => void) => {
       const request = JSON.parse(body);
       expect(request.method).toBe('getVersion');
