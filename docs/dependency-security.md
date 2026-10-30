@@ -60,11 +60,15 @@ in either graph. The September review below is a historical snapshot.
 | --- | --- | --- |
 | MCP | `bigint-buffer` → `npm:@exodus/bigint-buffer@1.1.5-exodus.1` | Replaces the unpatched native buffer-overflow implementation with the reviewed pure-JavaScript [Exodus fork](https://github.com/ExodusForks/bigint-buffer). The published code has no native binding or runtime dependency. Solana u64 encoding, endian conversions and long-buffer behavior are covered by regression tests. |
 | MCP + mock | `proxy-addr` → `2.0.8` | Patches CVE-2026-90711. Covers trust matching and Express client-IP resolution in both dependency trees. |
-| MCP | `axios@<1` → `0.33.0` | Uses the 0.x security backport required by the legacy Orca graph. |
+| MCP | `axios@<1` → `0.34.0` | Uses the 0.x security backport required by the legacy Orca graph; inherited form-serialization options are covered by a regression test. |
 | MCP | `tmp` → `0.2.7` | Patched release retaining solc's `fileSync` and `removeCallback` APIs. |
-| MCP | `toml` → `4.2.0` | Patched release retaining Anchor's CommonJS `parse` API. |
+| MCP | `toml` → `5.0.1` | Fixes parser resource-consumption advisories. Both Anchor families retain CommonJS `parse`, including Buffer input. Large integers now follow TOML's signed 64-bit bounds; unsafe JavaScript integers need the explicit `bigint` option. |
 | MCP | `uuid@<11.1.1` → `11.1.1` | Patched release retaining CommonJS `v4` used by Jayson and SDKs. Newer ESM-only major versions are not interchangeable. |
-| Mock | `qs` → `6.16.0` | Patched parser used through Express 4/body-parser. |
+| Mock | `qs` → `6.16.0` | Pinned query parser used through Express 4/body-parser. Its remaining moderate findings are included in the October audit. |
+
+The [October high-severity remediation](high-severity-dependencies.md) documents
+the newer SDK and additional overrides, regression coverage, and remaining
+advisories. The September audit figures below are historical.
 
 Vitest is pinned to **4.1.11** in both projects for patched test tooling.
 Constructor mocks use function expressions, as required by [Vitest 4](https://v4.vitest.dev/guide/migration#spyon-and-fn-support-constructors).
