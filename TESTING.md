@@ -39,7 +39,7 @@ checks. Example READMEs include formatting and test commands.
 |---|---|---|---|---|
 | **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example **+ version consistency** (VERSION ↔ plugin.json ↔ package.json ↔ index.ts ↔ README badge) | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
 | **typecheck** | `tsc --noEmit` over `mcp-server/` and `mock-server/` | ~5s | none | each package's `tsconfig.json` |
-| **mcp-test** | 667 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
+| **mcp-test** | 701 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
 | **mock-test** | 61 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
 | **examples** | JS and Python syntax checks; Go vet and offline Cargo check when those toolchains are installed | varies | module downloads disabled | [`examples/`](examples/) |
 | **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
@@ -147,6 +147,25 @@ Cases by upstream:
 Refusal-path cases (no broadcast — we check the gate fires correctly):
 
 - deploy_build_tx, dex_build_swap_tx, defi_aave_supply_tx, defi_lido_stake_tx, bridge_build_deposit_tx, dex_cow_create_order — each one MUST refuse when `acknowledgeMainnet: true` is omitted.
+
+## Authenticated read-only smoke
+
+Use the separate opt-in entry point after securely configuring only the selected
+provider's scoped test key:
+
+```bash
+npm run build --prefix mcp-server
+node mcp-server/dist/authenticated-smoke-test.js etherscan
+node mcp-server/dist/authenticated-smoke-test.js moralis
+```
+
+Optional providers are `1inch` and `chaingpt`. The ChainGPT case fetches one news
+article through the SDK and costs one API credit. Omitting the provider selects
+all seven checks; missing credentials produce SKIP. Output contains case status
+and safe HTTP codes, not raw provider responses or arbitrary exception details.
+See [authenticated validation notes](docs/authenticated-api-validation.md) for
+coverage, provider limits and the two remaining credential gaps. Keep Actions
+disabled; these checks are manual.
 
 ## CI gates
 

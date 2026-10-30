@@ -9,7 +9,7 @@ import { httpJson, jsonRpc, jsonRpcFallback, hexToNumber } from '../lib/http.js'
  * - chaingpt_wallet_positions   : DeFi positions (Moralis DeFi summary; key required)
  * - chaingpt_wallet_pnl         : profit/loss summary (Moralis P&L endpoint; key required)
  *
- * Moralis API is free up to 25k req/month. Set MORALIS_API_KEY to enable
+ * Set MORALIS_API_KEY to enable
  * full functionality. Without a key, balances falls back to native-coin only
  * via the chain's public RPC.
  */
@@ -44,7 +44,7 @@ export const walletTools: Tool[] = [
     description:
       'Get native + ERC-20 token balances for a wallet address across multiple chains. ' +
       'Returns symbol, balance, USD value (when available), contract address per token. ' +
-      'Full multi-chain ERC-20 scan requires MORALIS_API_KEY (free tier: 25k req/month at https://moralis.io). ' +
+      'Authenticated ERC-20 balance pages require MORALIS_API_KEY (see current plans at https://moralis.com). ' +
       'Without a key, returns native-coin balances only via public RPCs. 0 ChainGPT credits.',
     inputSchema: {
       type: 'object' as const,
@@ -135,12 +135,13 @@ async function fetchMoralisBalances(
   address: string,
   chainSlug: string,
   key: string
-): Promise<MoralisTokenBalance[]> {
+): Promise<{ tokens: MoralisTokenBalance[]; hasMore: boolean }> {
   const moralisChain = MORALIS_CHAIN_MAP[chainSlug];
-  if (!moralisChain) return [];
+  if (!moralisChain) return { tokens: [], hasMore: false };
   const url = `${MORALIS_BASE}/wallets/${address}/tokens?chain=${moralisChain}`;
-  const res = await httpJson<{ result: MoralisTokenBalance[] }>(url, { headers: moralisHeaders(key) });
-  return res.result ?? [];
+  const res = await httpJson<{ result: MoralisTokenBalance[]; cursor?: string | null }>(url, { headers: moralisHeaders(key) });
+  if (!Array.isArray(res?.result)) throw new Error('Unrecognized Moralis balances response.');
+  return { tokens: res.result, hasMore: typeof res.cursor === 'string' && !!res.cursor.trim() };
 }
 
 async function fetchNativeBalanceViaRpc(address: string, chainSlug: string): Promise<{ balance: string; symbol: string } | null> {
@@ -162,12 +163,16 @@ async function fetchNativeBalanceViaRpc(address: string, chainSlug: string): Pro
 }
 
 function formatTokenLine(t: MoralisTokenBalance): string {
+  const rawDecimals: unknown = t.decimals;
+  const validType = typeof rawDecimals === 'number' || (typeof rawDecimals === 'string' && /^\d+$/.test(rawDecimals));
+  const decimals = Number(rawDecimals);
+  if (!validType || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error('Invalid Moralis token decimals.');
   const balance = BigInt(t.balance);
-  const divisor = 10n ** BigInt(t.decimals || 18);
+  const divisor = 10n ** BigInt(decimals);
   const whole = balance / divisor;
   const fraction = balance % divisor;
-  const fracStr = fraction.toString().padStart(t.decimals || 18, '0').slice(0, 4);
-  const amount = `${whole}.${fracStr}`;
+  const fracStr = decimals ? fraction.toString().padStart(decimals, '0').slice(0, 4) : '';
+  const amount = `${whole}${fracStr ? `.${fracStr}` : ''}`;
   const usd = t.usd_value !== undefined ? ` ($${t.usd_value.toFixed(2)})` : '';
   const tag = t.native_token ? ' [native]' : '';
   return `  ${t.symbol.padEnd(10)} ${amount}${usd}${tag} — ${t.token_address}`;
@@ -199,7 +204,7 @@ export async function handleWalletTool(
       if (!key) {
         sections.push('');
         sections.push('No MORALIS_API_KEY set — returning native-coin balances only via public RPC.');
-        sections.push('Get a free key (25k req/month) at https://moralis.io to unlock ERC-20 scanning, positions, and P&L.');
+        sections.push('Get a key at https://moralis.com and review current plan limits to unlock ERC-20 scanning, positions, and P&L.');
         sections.push('');
         for (const slug of requestedChains) {
           const native = await fetchNativeBalanceViaRpc(address, slug);
@@ -214,12 +219,14 @@ export async function handleWalletTool(
 
       // Moralis path
       let totalUsd = 0;
+      let partial = false;
       for (const slug of requestedChains) {
         if (!MORALIS_CHAIN_MAP[slug]) {
           sections.push(`\n${CHAINS[slug]?.name ?? slug}: (chain not yet supported by Moralis adapter)`);
           continue;
         }
-        const tokens = await fetchMoralisBalances(address, slug, key);
+        const { tokens, hasMore } = await fetchMoralisBalances(address, slug, key);
+        partial ||= hasMore;
         const filtered = tokens.filter((t) => {
           if (!includeNative && t.native_token) return false;
           if (t.usd_value !== undefined && t.usd_value < minUsd) return false;
@@ -229,6 +236,7 @@ export async function handleWalletTool(
         totalUsd += chainUsd;
         sections.push('');
         sections.push(`${CHAINS[slug]?.name ?? slug} — $${chainUsd.toFixed(2)} across ${filtered.length} token(s):`);
+        if (hasMore) sections.push('  Additional tokens are available; values cover the returned page only.');
         if (filtered.length === 0) {
           sections.push('  (none above filter)');
         } else {
@@ -236,7 +244,7 @@ export async function handleWalletTool(
         }
       }
       sections.push('');
-      sections.push(`Total: $${totalUsd.toFixed(2)}`);
+      sections.push(`${partial ? 'Partial total (returned tokens only)' : 'Total'}: $${totalUsd.toFixed(2)}`);
       return { content: [{ type: 'text', text: sections.join('\n') }] };
     }
 
@@ -250,7 +258,7 @@ export async function handleWalletTool(
             type: 'text',
             text:
               'MORALIS_API_KEY is required for chaingpt_wallet_positions.\n' +
-              'Get a free key (25k req/month) at https://moralis.io and add it to your environment.',
+              'Get a key at https://moralis.com and review current plan limits and add it to your environment.',
           }],
         };
       }
@@ -260,18 +268,26 @@ export async function handleWalletTool(
         return { content: [{ type: 'text', text: `Chain not supported for positions: ${chainSlug}` }] };
       }
       const url = `${MORALIS_BASE}/wallets/${address}/defi/positions?chain=${moralisChain}`;
-      const res = await httpJson<{ result?: any[]; cursor?: string }>(url, { headers: moralisHeaders(key) });
-      const positions = res.result ?? [];
+      const res = await httpJson<any>(url, { headers: moralisHeaders(key) });
+      const positions: any[] = Array.isArray(res) ? res : res?.result;
+      if (!Array.isArray(positions)) throw new Error('Unrecognized Moralis positions response.');
       if (positions.length === 0) {
         return { content: [{ type: 'text', text: `No DeFi positions found for ${address} on ${chainSlug}.` }] };
       }
       const lines = [`DeFi positions for ${address} on ${CHAINS[chainSlug]?.name ?? chainSlug}:`, ''];
       for (const p of positions) {
         const proto = p.protocol_name ?? 'unknown protocol';
-        const label = p.label ?? p.position_type ?? 'position';
-        const usd = p.balance_usd ?? p.total_usd_value;
+        const label = p.position?.label ?? p.label ?? p.position_type ?? 'position';
+        const usd = p.position?.balance_usd ?? p.balance_usd ?? p.total_usd_value;
         const usdStr = usd !== undefined ? ` ($${Number(usd).toFixed(2)})` : '';
         lines.push(`  ${proto} — ${label}${usdStr}`);
+        for (const token of Array.isArray(p.position?.tokens) ? p.position.tokens : []) {
+          const tokenType = token.token_type ?? 'token';
+          const symbol = token.symbol ?? '?';
+          // This field has explicit human units; do not guess units from a raw balance.
+          const balance = token.balance_formatted ?? 'n/a';
+          lines.push(`    ${tokenType}: ${symbol} ${balance}`);
+        }
       }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
@@ -284,7 +300,7 @@ export async function handleWalletTool(
         return {
           content: [{
             type: 'text',
-            text: 'MORALIS_API_KEY is required for chaingpt_wallet_pnl. Get a free key at https://moralis.io.',
+            text: 'MORALIS_API_KEY is required for chaingpt_wallet_pnl. Get a key at https://moralis.com and review current plan limits.',
           }],
         };
       }

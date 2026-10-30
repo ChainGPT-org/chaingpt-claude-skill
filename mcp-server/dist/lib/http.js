@@ -7,9 +7,39 @@
  */
 const DEFAULT_TIMEOUT_MS = 15_000;
 const USER_AGENT = 'chaingpt-mcp/1.2 (+https://github.com/ChainGPT-org/chaingpt-claude-skill)';
+/** Keep authentication material out of diagnostics, including reflected/truncated bodies. */
+function requestDiagnostics(url, headers) {
+    const credentialName = /^(?:api[-_]?key|key|access[-_]?token|auth[-_]?token|token|secret|password|authorization|cookie|signature)$/i;
+    let authenticated = Object.keys(headers ?? {}).some(name => credentialName.test(name.replace(/^x-/i, '')));
+    try {
+        const safe = new URL(url);
+        // Fragments are never sent over HTTP, but can hide a credential appended to an interpolated URL.
+        if (safe.hash) {
+            authenticated = true;
+            safe.hash = '';
+        }
+        if (safe.username || safe.password) {
+            authenticated = true;
+            safe.username = '[redacted]';
+            safe.password = '[redacted]';
+        }
+        for (const name of new Set(safe.searchParams.keys())) {
+            if (credentialName.test(name)) {
+                authenticated = true;
+                safe.searchParams.set(name, '[redacted]');
+            }
+        }
+        return { url: safe.toString(), authenticated };
+    }
+    catch {
+        return { url: '[invalid URL]', authenticated: true };
+    }
+}
 export async function httpJson(url, opts = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const diagnostics = requestDiagnostics(url, opts.headers);
+    let failureStatus;
     try {
         const hasBody = opts.body !== undefined;
         const res = await fetch(url, {
@@ -24,10 +54,23 @@ export async function httpJson(url, opts = {}) {
             signal: controller.signal,
         });
         if (!res.ok) {
+            failureStatus = res.status;
+            if (diagnostics.authenticated) {
+                // Release the connection without retaining or exposing a reflected response body.
+                await res.body?.cancel().catch(() => undefined);
+                throw new Error('Authenticated HTTP failure');
+            }
             const text = await safeText(res);
             throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
         }
         return (await res.json());
+    }
+    catch (error) {
+        if (!diagnostics.authenticated)
+            throw error;
+        // Do not retain the original error/cause: fetch, parsers and servers can echo credentials.
+        const prefix = failureStatus === undefined ? 'Authenticated request failed' : `HTTP ${failureStatus}`;
+        throw new Error(`${prefix} for ${diagnostics.url} (authenticated response details omitted)`);
     }
     finally {
         clearTimeout(timeout);

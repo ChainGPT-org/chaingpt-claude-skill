@@ -646,7 +646,7 @@ The plugin works without these but unlocks more if present:
 
 | Env var | Unlocks | Get one |
 |---|---|---|
-| `MORALIS_API_KEY` | Full multi‑chain ERC‑20 scan + DeFi positions + P&L | https://moralis.io (25k req/month free) |
+| `MORALIS_API_KEY` | Multi‑chain ERC‑20 balance pages + DeFi positions + P&L | [Moralis plans](https://docs.moralis.com/get-started/pricing) |
 | `ETHERSCAN_API_KEY` | Higher Etherscan rate limit (Etherscan v2 covers every major EVM chain) | https://etherscan.io/myapikey (free) |
 | `JUPITER_API_KEY` | Optional higher-rate Jupiter Swap V1 access; keyless public access is supported | https://portal.jup.ag |
 | `ONEINCH_API_KEY` | 1inch v6 aggregator routing | https://portal.1inch.dev |

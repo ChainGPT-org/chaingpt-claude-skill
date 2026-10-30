@@ -29,7 +29,7 @@ Tools degrade gracefully when these are absent — set them for full functionali
 
 | Env var | Unlocks | Where to get |
 |---|---|---|
-| `MORALIS_API_KEY` | Multi-chain ERC-20 scan + DeFi positions + P&L | https://moralis.io (free 25k req/mo) |
+| `MORALIS_API_KEY` | Multi-chain ERC-20 scan + DeFi positions + P&L | [Moralis plans](https://docs.moralis.com/get-started/pricing) |
 | `ETHERSCAN_API_KEY` | Higher rate limit on all EVM chains via v2 | https://etherscan.io/myapikey (free 5 req/s) |
 
 Without `MORALIS_API_KEY`, wallet_balances returns native-coin only via public RPC.
@@ -41,14 +41,14 @@ Multi-chain native + ERC-20 balances for one wallet.
 
 ```jsonc
 {
-  "address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-  "chains": ["ethereum", "base", "arbitrum", "polygon", "bsc"],
+  "address": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+  "chains": ["ethereum"],
   "includeNative": true,
   "minUsdValue": 1
 }
 ```
 
-Returns native + ERC-20 balances per chain, sorted by USD value descending. Filters out dust below `minUsdValue`. Total at the bottom.
+This example queries the public Uniswap V2 USDC/WETH pool on Ethereum. Very large wallets can exceed Moralis provider limits. Returns native + ERC-20 balances per chain, sorted by USD value descending, with dust filtered below `minUsdValue`. A nonempty continuation cursor marks the displayed page and total as partial.
 
 Direct API: `GET https://deep-index.moralis.io/api/v2.2/wallets/{addr}/tokens?chain={ethSlug}`.
 Native fallback: `eth_getBalance` via the chain's public RPC.
@@ -159,7 +159,7 @@ This is the "one call covers it" research tool. Skill files (`chaingpt-research`
 | GoPlus | `api.gopluslabs.io/api/v1/...` | none |
 | Honeypot.is | `api.honeypot.is/v2/IsHoneypot` | none |
 | Etherscan v2 | `api.etherscan.io/v2/api?chainid={id}&...` | `ETHERSCAN_API_KEY` (free 5 req/s) |
-| Moralis | `deep-index.moralis.io/api/v2.2/...` | `X-API-Key: ${MORALIS_API_KEY}` (free 25k req/mo) |
+| Moralis | `deep-index.moralis.io/api/v2.2/...` | `X-API-Key: ${MORALIS_API_KEY}` (subject to the current account plan) |
 
 ## Common workflows
 
