@@ -81,5 +81,9 @@ in [PR #110](https://github.com/ChainGPT-org/chaingpt-claude-skill/pull/110).
 These are package findings, including propagated parent findings, not counts of
 independent vulnerabilities. Re-run the audits after merging both changes.
 
+Those moderate counts describe the PR #111 snapshot. The
+[moderate-severity follow-up](moderate-severity-dependencies.md) resolves them and
+documents the additional major-version compatibility checks.
+
 GitHub Actions remains disabled under the incident hold. Local validation does
 not constitute a release or deployment approval, and no live API smoke ran.
