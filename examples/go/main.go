@@ -4,8 +4,9 @@
 // the Go standard library (net/http + encoding/json). No SDK dependency.
 //
 // Run:
-//   go mod init chaingpt-news-example   # one-time
-//   CHAINGPT_API_KEY=… go run main.go
+//
+//	cd examples/go
+//	CHAINGPT_API_KEY=… go run main.go
 //
 // Endpoint reference: https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk
 package main
@@ -31,12 +32,12 @@ type NewsRequest struct {
 	TokenID       []int    `json:"tokenId,omitempty"`
 	Limit         int      `json:"limit,omitempty"`
 	Offset        int      `json:"offset,omitempty"`
-	SortBy        string   `json:"sortBy,omitempty"`        // "createdAt" | "publishedAt" | "trending"
-	SortOrder     string   `json:"sortOrder,omitempty"`     // "ASC" | "DESC"
+	SortBy        string   `json:"sortBy,omitempty"`    // "createdAt" | "publishedAt" | "trending"
+	SortOrder     string   `json:"sortOrder,omitempty"` // "ASC" | "DESC"
 	SearchQuery   string   `json:"searchQuery,omitempty"`
-	FetchAfter    string   `json:"fetchAfter,omitempty"`    // ISO-8601
-	WordLimit     int      `json:"wordLimit,omitempty"`     // truncate description
-	Languages     []string `json:"languages,omitempty"`     // e.g. ["en"]
+	FetchAfter    string   `json:"fetchAfter,omitempty"` // ISO-8601
+	WordLimit     int      `json:"wordLimit,omitempty"`  // truncate description
+	Languages     []string `json:"languages,omitempty"`  // e.g. ["en"]
 }
 
 type NewsItem struct {

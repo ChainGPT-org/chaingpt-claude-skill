@@ -6,14 +6,14 @@ Minimal Rust program that calls the public ChainGPT AI News endpoint using `reqw
 
 ```bash
 cd examples/rust
-CHAINGPT_API_KEY=your-key cargo run --release
+CHAINGPT_API_KEY=your-key cargo run --locked --release
 ```
 
 Override the endpoint for local testing against the mock server:
 
 ```bash
 CHAINGPT_API_KEY=anything CHAINGPT_API_BASE=http://localhost:3001/news/getNews \
-  cargo run --release
+  cargo run --locked --release
 ```
 
 ## What it does
@@ -22,11 +22,27 @@ Sends a POST with a `NewsRequest` JSON body (limit, sortBy, sortOrder, languages
 
 ## Why blocking reqwest
 
-The blocking client keeps the example single-file: no tokio runtime, no async/.await, no executor boilerplate. For a real service you'd use the async variant — switch `default-features` and drop `blocking`, then make `main` an async tokio function.
+The blocking client keeps `main` synchronous, with no async/.await or executor setup in the example. Reqwest manages its Tokio runtime internally. An async service can use reqwest's async client and configure its own runtime.
 
 ## TLS backend
 
-`rustls-tls` instead of the default `native-tls`. Rustls is a pure-Rust TLS implementation — no OpenSSL system dependency, makes the binary trivially portable to Alpine / scratch containers.
+`rustls-tls` instead of the default `native-tls` avoids an OpenSSL system dependency. Builds still need a compiler and linker for their target platform.
+
+## Offline checks
+
+The committed `Cargo.lock` pins the tested dependency graph. Prepare the toolchain
+and dependency cache explicitly, then run checks without downloading or updating
+dependencies:
+
+```bash
+cargo fetch --locked
+cargo check --locked --offline
+cargo test --locked --offline
+cargo fmt --check
+```
+
+The full repository harness also uses `cargo check --locked --offline`. Keep
+`Cargo.lock` under version control; `target/` contains generated build output.
 
 ## Why this exists
 
