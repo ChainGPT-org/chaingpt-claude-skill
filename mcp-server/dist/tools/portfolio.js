@@ -171,10 +171,12 @@ async function fetchMorpho(address) {
             if (!res?.data || !Object.prototype.hasOwnProperty.call(res.data, 'userByAddress'))
                 throw new Error('Unrecognized Morpho user response.');
             const u = res?.data?.userByAddress;
-            if (!u)
+            if (u === null)
                 continue;
-            const mps = u.marketPositions ?? [];
-            const vps = u.vaultPositions ?? [];
+            if (!u || !Array.isArray(u.marketPositions) || !Array.isArray(u.vaultPositions))
+                throw new Error('Incomplete Morpho user positions response.');
+            const mps = u.marketPositions;
+            const vps = u.vaultPositions;
             const activeMps = mps.filter((p) => Number(p.state?.supplyAssetsUsd ?? 0) + Number(p.state?.borrowAssetsUsd ?? 0) + Number(p.state?.collateralUsd ?? 0) > 0);
             const activeVps = vps.filter((p) => Number(p.state?.assetsUsd ?? 0) > 0);
             if (activeMps.length === 0 && activeVps.length === 0)

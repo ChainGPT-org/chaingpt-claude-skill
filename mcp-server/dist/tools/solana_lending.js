@@ -87,19 +87,25 @@ export const solanaLendingTools = [
     },
 ];
 // ── Helpers ────────────────────────────────────────────────────────
+function finiteMetric(value) {
+    if (typeof value !== 'number' && typeof value !== 'string')
+        return undefined;
+    if (typeof value === 'string' && !value.trim())
+        return undefined;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+}
 function fmtPct(d, decimals = 2) {
-    if (d === null || d === undefined)
-        return 'n/a';
-    const n = typeof d === 'string' ? Number(d) : d;
-    if (!isFinite(n))
+    const n = finiteMetric(d);
+    if (n === undefined)
         return 'n/a';
     // Marginfi/Kamino APIs sometimes return APYs already scaled to percentage (e.g. 5.2)
     // and sometimes as decimal (0.052). Be defensive: if it's > 1.5, assume already percentage.
     return (Math.abs(n) > 1.5 ? n : n * 100).toFixed(decimals) + '%';
 }
 function fmtUsdShort(n) {
-    const v = typeof n === 'string' ? Number(n) : n;
-    if (n === undefined || n === null || !isFinite(v))
+    const v = finiteMetric(n);
+    if (v === undefined)
         return 'n/a';
     if (v === 0)
         return '$0';
@@ -121,7 +127,8 @@ function pickField(obj, ...names) {
 }
 /** Current APIs explicitly label percentages; never infer their units from magnitude. */
 function fmtPercent(value) {
-    return value !== undefined && value !== null && Number.isFinite(Number(value)) ? Number(value).toFixed(2) + '%' : 'n/a';
+    const n = finiteMetric(value);
+    return n === undefined ? 'n/a' : n.toFixed(2) + '%';
 }
 function currentBank(b) {
     if (!b.rates || !b.size)
@@ -223,10 +230,13 @@ export async function handleSolanaLendingTool(name, args) {
                 const health = typeof acc.health === 'object' ? acc.health?.health_factor ?? 'n/a (empty account)' : pickField(acc, 'health', 'healthRatio', 'healthFactor');
                 const assets = acc.equity?.total_assets_usd ?? pickField(acc, 'totalAssetsUsd', 'totalAssets', 'assetsUsd');
                 const liabs = acc.equity?.total_liabilities_usd ?? pickField(acc, 'totalLiabilitiesUsd', 'totalLiabilities', 'liabilitiesUsd');
+                const assetValue = finiteMetric(assets);
+                const liabilityValue = finiteMetric(liabs);
+                const equity = assetValue === undefined || liabilityValue === undefined ? undefined : assetValue - liabilityValue;
                 lines.push(`Account ${accAddr}`);
                 lines.push(`  Total assets:       ${fmtUsdShort(assets)}`);
                 lines.push(`  Total liabilities:  ${fmtUsdShort(liabs)}`);
-                lines.push(`  Net equity:         ${fmtUsdShort(Number(assets) - Number(liabs))}`);
+                lines.push(`  Net equity:         ${fmtUsdShort(equity)}`);
                 if (health !== undefined)
                     lines.push(`  Health ratio:       ${typeof health === 'number' ? health.toFixed(3) : health}`);
                 const balances = pickField(acc, 'balances', 'positions') ?? [];
@@ -269,7 +279,7 @@ export async function handleSolanaLendingTool(name, args) {
                     if (typeof address !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address))
                         throw new Error('Invalid market address.');
                     const reserves = await httpJson(`${KAMINO_API}/kamino-market/${address}/reserves/metrics`);
-                    if (!Array.isArray(reserves) || !reserves.length || reserves.some(r => ['totalSupplyUsd', 'totalBorrowUsd'].some(k => r[k] == null || !Number.isFinite(Number(r[k])))))
+                    if (!Array.isArray(reserves) || !reserves.length || reserves.some(r => ['totalSupplyUsd', 'totalBorrowUsd'].some(k => finiteMetric(r?.[k]) === undefined)))
                         throw new Error('Reserve metrics unavailable.');
                     top[i] = { ...m, totalSuppliedUsd: reserves.reduce((n, r) => n + Number(r.totalSupplyUsd), 0),
                         totalBorrowedUsd: reserves.reduce((n, r) => n + Number(r.totalBorrowUsd), 0),

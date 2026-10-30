@@ -98,6 +98,13 @@ describe('current Solana lending schemas', () => {
     expect(t).not.toContain('[object Object]');
   });
 
+  it('does not derive zero equity from blank account totals', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ accounts: [{ address: sol, equity: { total_assets_usd: '', total_liabilities_usd: '0' }, positions: [] }] }));
+    const t = text(await handleSolanaLendingTool('chaingpt_defi_marginfi_account', { authority: sol }));
+    expect(t).toContain('Total assets:       n/a');
+    expect(t).toContain('Net equity:         n/a');
+  });
+
   it('joins only requested Kamino metadata rows to reserve metrics', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response([{ name: 'Market', lendingMarket: sol }, { lendingMarket: 'unused' }])).mockResolvedValueOnce(response([{ liquidityToken: 'SOL', totalSupplyUsd: '100.25', totalBorrowUsd: '10.5' }, { liquidityToken: 'USDC', totalSupplyUsd: '20.5', totalBorrowUsd: '1.5' }]));
     const t = text(await handleSolanaLendingTool('chaingpt_defi_kamino_markets', { limit: 1 }));
@@ -113,6 +120,20 @@ describe('current Solana lending schemas', () => {
     expect(t).toContain('Supplied: n/a    Borrowed: n/a');
     expect(t).toContain('Metrics unavailable');
     expect(t).not.toContain('$0');
+  });
+
+  it.each(['', '   ', false, [], {}])('does not coerce invalid reserve USD metrics into zero: %j', async value => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response([{ lendingMarket: sol }])).mockResolvedValueOnce(response([{ liquidityToken: 'SOL', totalSupplyUsd: value, totalBorrowUsd: '0' }]));
+    const t = text(await handleSolanaLendingTool('chaingpt_defi_kamino_markets', {}));
+    expect(t).toContain('Supplied: n/a    Borrowed: n/a');
+    expect(t).toContain('Metrics unavailable');
+  });
+
+  it('keeps blank vault TVL/APY unavailable while preserving genuine zero metrics', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response([{ strategy: 'Blank', totalValueLocked: '', kaminoApy: { totalApy: ' ' } }, { strategy: 'Zero', totalValueLocked: '0', kaminoApy: { totalApy: '0' } }]));
+    const t = text(await handleSolanaLendingTool('chaingpt_defi_kamino_vaults', {}));
+    expect(t).toContain('APY: n/a    TVL: n/a');
+    expect(t).toContain('APY: 0.00%    TVL: $0');
   });
 
   it('uses LIVE vault metrics with percent APY and current TVL, sorted by TVL', async () => {

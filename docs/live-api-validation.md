@@ -62,6 +62,8 @@ or broadcast. Logs remained local.
   challenge and Drift transport/access errors; a canned degradation banner
   cannot hide a parser bug or arbitrary API 403.
 
+PR review also reproduced blank/nonnumeric metric coercion and incomplete Morpho user objects being accepted as empty positions. Numeric metrics now require finite numbers or nonblank numeric strings; an explicit null Morpho user remains an empty result, while absent position arrays produce a venue error. Ten additional regressions cover these cases, including genuine zero metrics and unavailable equity when component totals are invalid.
+
 Fixture regressions live in `live_api_drift.test.ts` and `portfolio.test.ts`.
 They exercise request units, decimals, sub-gwei gas, optional Jupiter headers,
 current lending payloads, percentage units, unknown schemas and smoke result

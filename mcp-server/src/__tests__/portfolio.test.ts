@@ -171,7 +171,7 @@ describe('Portfolio snapshot handler', () => {
     expect(r.content[0].text).not.toContain('Errored venues');
   });
 
-  it.each([{ errors: [{ message: 'Schema changed' }] }, {}])('does not treat GraphQL errors or missing data as an empty portfolio: %j', async payload => {
+  it.each([{ errors: [{ message: 'Schema changed' }] }, {}, { data: { userByAddress: {} } }, { data: { userByAddress: false } }, { data: { userByAddress: { marketPositions: [], vaultPositions: null } } }])('does not treat GraphQL errors or missing data as an empty portfolio: %j', async payload => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(payload)));
     const r = await handlePortfolioTool('chaingpt_portfolio_snapshot', { evmAddress: '0x1111111111111111111111111111111111111111', venues: ['morpho'] });
     expect(r.content[0].text).toContain('Errored venues: morpho');
