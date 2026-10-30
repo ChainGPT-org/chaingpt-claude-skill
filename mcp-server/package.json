@@ -39,7 +39,7 @@
     "@types/qrcode": "1.5.6",
     "ts-node": "10.9.2",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": ">=22.14.0"
@@ -56,11 +56,16 @@
   "license": "MIT",
   "overrides": {
     "@grpc/grpc-js": "1.14.5",
+    "@hono/node-server": "2.1.3",
     "axios@<1": "0.34.0",
     "bigint-buffer": "npm:@exodus/bigint-buffer@1.1.5-exodus.1",
     "proxy-addr": "2.0.8",
     "body-parser@2": "2.4.0",
+    "fast-uri": "3.1.9",
     "follow-redirects": "1.16.1",
+    "hono": "4.13.11",
+    "ip-address": "10.7.4",
+    "jayson": "5.0.0",
     "qs": "6.16.1",
     "source-map-js": "1.2.2",
     "tmp": "0.2.7",
