@@ -1,5 +1,8 @@
 # October 2026 low-severity dependency verification
 
+> Historical standalone-branch validation. For the merged graph and current integration results,
+> see [dependency security notes](dependency-security.md#combined-october-integration).
+
 The two open low-severity Dependabot alerts, **#156 (mock)** and **#157 (MCP)**,
 identify the same Vite advisory:
 [CVE-2026-112945 / GHSA-9jrq-w75r-8gcw](https://github.com/advisories/GHSA-9jrq-w75r-8gcw).

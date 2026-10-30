@@ -12,7 +12,24 @@ npm ci --prefix mock-server --ignore-scripts
 For the shipped MCP build alone, add `--omit=dev`. Keep credentials unset during
 installation and never reuse `node_modules` from an untrusted checkout.
 
-## October 2026 proxy-trust patch
+## Combined October integration
+
+PRs #109–#113 combine the wallet hardening and all dependency remediations.
+Fresh lockfile audits of both complete graphs report **zero known findings at every severity**.
+The sections and linked remediation reports below preserve their original standalone
+validation snapshots; their remaining-alert counts do not describe the combined graph.
+The current MCP SDK is **1.32.2**, and `proxy-addr` remains **2.0.8** in both graphs.
+
+Integration validation on Node.js 26.9.0 passed **621 MCP tests and 61 mock tests**,
+all seven offline test layers, 47 Solidity examples and 16 scanner regression tests.
+All 76 committed build files reproduced byte for byte; boot smoke listed 155 unique tools.
+Go/Rust example checks were skipped because those toolchains are unavailable.
+
+Validation runs locally while repository GitHub Actions remains disabled. Live funded-chain
+and authenticated upstream smoke tests are outside this offline validation; the legacy
+Jito import limitation described in the moderate report remains.
+
+## October 2026 proxy-trust patch (standalone snapshot)
 
 Dependabot alerts **#132 (MCP)** and **#131 (mock)** identify the same critical
 [CVE-2026-90711 / GHSA-jqcg-44mw-7w3h](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)
@@ -22,7 +39,7 @@ and `req.ips`. Both packages override this dependency to **2.0.8**, the first
 patched release, and commit its registry integrity hash in their lockfiles.
 This is a patch-only change; Express and its other dependencies are unchanged.
 
-The MCP path is `@modelcontextprotocol/sdk@1.29.0 → express@5.2.1 → proxy-addr`.
+At the time of the isolated proxy patch, the MCP path was `@modelcontextprotocol/sdk@1.29.0 → express@5.2.1 → proxy-addr`.
 The shipped MCP entry point uses stdio; its wallet/dashboard HTTP listeners use
 `node:http`. The mock path is `express@4.22.1 → proxy-addr`; the mock app retains
 Express's default `trust proxy = false`. No application source enables Express

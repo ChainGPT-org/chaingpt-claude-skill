@@ -1,5 +1,8 @@
 # October 2026 moderate-severity dependency follow-up
 
+> Historical standalone-branch validation. For the merged graph and current integration results,
+> see [dependency security notes](dependency-security.md#combined-october-integration).
+
 This change builds on [PR #111](https://github.com/ChainGPT-org/chaingpt-claude-skill/pull/111).
 Seven upstream packages account for the remaining nine MCP and six mock moderate
 package findings, including parent findings propagated through the same package.
