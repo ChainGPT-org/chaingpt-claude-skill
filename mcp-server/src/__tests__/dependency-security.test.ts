@@ -67,14 +67,13 @@ describe('security dependency replacements', () => {
     }
   });
 
-  it('parses JSON-RPC values without loading the vulnerable stream-json path filters', async () => {
-    // GHSA-528h-pc64-c93x explicitly excludes StreamValues. Jayson uses it
-    // directly; a forced stream-json 3.x override would break its CJS imports.
+  it('parses framed JSON-RPC values without loading stream-json', async () => {
+    // Jayson 5 removes stream-json, including its newly affected Assembler.
     const jayson = require('jayson');
     const parsed = await new Promise<unknown[]>((resolve, reject) => {
       const values: unknown[] = [];
       jayson.Utils.parseStream(
-        Readable.from(['{"jsonrpc":"2.0","id":1,"result":', '{"nested":[1,2]}}\n', '{"jsonrpc":"2.0","id":2,"result":null}']),
+        Readable.from(['{"jsonrpc":"2.0","id":1,"result":', '{"nested":[1,2]}}\n', '{"jsonrpc":"2.0","id":2,"result":null}\n']),
         {},
         (error: Error | null, value: unknown) => {
           if (error) return reject(error);
@@ -95,7 +94,6 @@ describe('security dependency replacements', () => {
     };
     visit(require.cache[require.resolve('jayson')]);
     const jsonModules = [...loaded].filter((path) => path.includes('/stream-json/'));
-    expect(jsonModules.some((path) => path.endsWith('/streamers/StreamValues.js'))).toBe(true);
-    expect(jsonModules.filter((path) => path.includes('/filters/'))).toEqual([]);
+    expect(jsonModules).toEqual([]);
   });
 });
