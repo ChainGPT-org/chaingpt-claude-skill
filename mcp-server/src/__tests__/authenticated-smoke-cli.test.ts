@@ -9,11 +9,13 @@ const script = join(buildDir, 'authenticated-smoke-test.js');
 beforeAll(() => {
   const compiler = fileURLToPath(new URL('../../node_modules/typescript/bin/tsc', import.meta.url));
   const config = fileURLToPath(new URL('../../tsconfig.build.json', import.meta.url));
-  const build = spawnSync(process.execPath, [compiler, '-p', config, '--outDir', buildDir], { encoding: 'utf8', timeout: 20000 });
-  expect(build.status, build.stdout + build.stderr).toBe(0);
+  // Full typechecking is a separate harness layer. Emit current source here
+  // without repeating that analysis inside a concurrent unit-test worker.
+  const build = spawnSync(process.execPath, [compiler, '-p', config, '--noCheck', '--outDir', buildDir], { encoding: 'utf8', timeout: 60000 });
+  expect(build.status, build.error?.message ?? build.stdout + build.stderr).toBe(0);
   writeFileSync(join(buildDir, 'package.json'), JSON.stringify({ type: 'module' }));
   symlinkSync(fileURLToPath(new URL('../../node_modules', import.meta.url)), join(buildDir, 'node_modules'), 'dir');
-}, 30000);
+}, 70000);
 afterAll(() => rmSync(buildDir, { recursive: true, force: true }));
 function run(provider?: string) {
   return spawnSync(process.execPath, [script, ...(provider ? [provider] : [])], { encoding: 'utf8', timeout: 5000,

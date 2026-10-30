@@ -134,19 +134,38 @@ const DRIFT_DEGRADED_HINT = 'Drift read tools are DEGRADED. The original Drift p
 function driftHosts(primary) {
     const override = process.env.DRIFT_DLOB_URL;
     const ordered = primary === DRIFT_DATA ? [DRIFT_DATA, DRIFT_DLOB] : [DRIFT_DLOB, DRIFT_DATA];
-    return override ? [override.replace(/\/$/, ''), ...ordered] : ordered;
+    const publicHosts = ordered.map(url => ({ url, override: false }));
+    return override ? [{ url: override.replace(/\/$/, ''), override: true }, ...publicHosts] : publicHosts;
 }
 async function driftGet(path, primary = DRIFT_DLOB) {
     const failures = [];
     for (const host of driftHosts(primary)) {
         try {
-            return await httpJson(`${host}${path}`);
+            return await httpJson(`${host.url}${path}`);
         }
         catch (e) {
-            failures.push(e instanceof Error ? e.message : String(e));
+            const message = e instanceof Error ? e.message : String(e);
+            if (host.override) {
+                // Custom endpoints may put credentials in paths or reflect them in any
+                // diagnostic. Retain only the HTTP status, never the URL/body/cause.
+                const status = message.match(/^HTTP (\d{3})\b/)?.[1];
+                failures.push(`Drift override request failed${status ? ` (HTTP ${status})` : ''}; details omitted`);
+            }
+            else {
+                // One line per host: reflected newlines cannot impersonate the hint
+                // delimiter and conceal a later host's parser or validation error.
+                failures.push(message.replace(/[\r\n\u2028\u2029]+/g, ' '));
+            }
         }
     }
     throw new Error(`${failures.join('\n')}\n\n${DRIFT_DEGRADED_HINT}`);
+}
+function driftContracts(response) {
+    if (Array.isArray(response))
+        return response;
+    if (response && typeof response === 'object' && 'contracts' in response && Array.isArray(response.contracts))
+        return response.contracts;
+    throw new Error('Unrecognized Drift contracts response');
 }
 export async function handleDriftTool(name, args) {
     if (!args)
@@ -156,8 +175,7 @@ export async function handleDriftTool(name, args) {
             const sortBy = String(args.sortBy ?? 'volume');
             const limit = Number(args.limit ?? 30);
             const res = await driftGet('/contracts');
-            // Drift returns either { contracts: [...] } or a raw array. Be defensive.
-            const contracts = Array.isArray(res) ? res : (res?.contracts ?? []);
+            const contracts = driftContracts(res);
             // Only perp contracts (not spot)
             const perps = contracts.filter((c) => {
                 const ct = String(c?.contract_type ?? c?.contractType ?? 'perp').toLowerCase();
@@ -180,8 +198,7 @@ export async function handleDriftTool(name, args) {
             lines.push(`Drift perp markets — ${perps.length} total, showing top ${top.length} by ${sortBy}`);
             lines.push('');
             if (top.length === 0) {
-                lines.push('(no markets returned — Drift API may be down; raw response below)');
-                lines.push(JSON.stringify(res, null, 2).slice(0, 500));
+                lines.push('(no legacy Drift markets returned)');
                 return { content: [{ type: 'text', text: lines.join('\n') }] };
             }
             for (const c of top) {
@@ -204,7 +221,7 @@ export async function handleDriftTool(name, args) {
             const marketIndex = Number(args.marketIndex);
             // Pull from the contracts list and filter — dlob.drift.trade returns all in one go
             const res = await driftGet('/contracts');
-            const contracts = Array.isArray(res) ? res : (res?.contracts ?? []);
+            const contracts = driftContracts(res);
             const c = contracts.find((x) => Number(x?.market_index ?? x?.marketIndex) === marketIndex);
             if (!c) {
                 return { content: [{ type: 'text', text: `Drift market index ${marketIndex} not found.` }] };

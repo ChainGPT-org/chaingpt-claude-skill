@@ -581,13 +581,13 @@ Aave V3 chains: ethereum, base, arbitrum, optimism, polygon, bsc, avalanche.
 
 ### Perps — Hyperliquid + Drift (14 tools)
 
-Live mainnet data. Hyperliquid supports **signed EIP‑712 L1 actions** (custody‑free order placement). Drift is read‑only in this release.
+Hyperliquid provides live mainnet data and supports **signed EIP‑712 L1 actions** (custody‑free order placement). Drift tools retain legacy read-only interfaces; hosted Drift data is unavailable and the original program is paused. See [provider follow-up](docs/provider-warning-followup.md).
 
 | Tool | What it does |
 |---|---|
 | `chaingpt_hl_markets` · `_mids` · `_orderbook` · `_account` · `_fills` · `_funding` | Read HL market data + account state |
 | `chaingpt_hl_place_order_payload` · `_cancel_order_payload` · `_update_leverage_payload` | EIP‑712 signed intents — user wallet finalizes |
-| `chaingpt_drift_markets` · `_market` · `_orderbook` · `_funding` · `_user` | Read Drift perp markets, orderbook, funding, user account |
+| `chaingpt_drift_markets` · `_market` · `_orderbook` · `_funding` · `_user` | Legacy Drift reads; hosted data unavailable |
 
 ### Polymarket prediction markets (6 tools)
 

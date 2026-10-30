@@ -9,7 +9,7 @@
  * that don't require a wallet. Exits non-zero on any failure.
  */
 
-import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage, positiveQuoteOutput } from './lib/smoke-assertions.js';
+import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage, driftOrderbookSmoke, positiveQuoteOutput } from './lib/smoke-assertions.js';
 import { handleResearchTool } from './tools/research.js';
 import { handleRiskTool } from './tools/risk.js';
 import { handleOnchainTool } from './tools/onchain.js';
@@ -381,8 +381,7 @@ contract Hello { string public greeting = "hi"; }`,
   {
     name: 'drift_orderbook (idx 0 = SOL-PERP)',
     fn: () => handleDriftTool('chaingpt_drift_orderbook', { marketIndex: 0, depth: 5 }),
-    expect: /Drift L2 orderbook/i,
-    degradedOk: driftOutage,
+    ...driftOrderbookSmoke,
   },
 
   // ─── Tier 8: portfolio snapshot ──────────────────────────────────
