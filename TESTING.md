@@ -25,7 +25,7 @@ npm ci --prefix mock-server --ignore-scripts
 ./scripts/test-all.sh --only smoke --skip-drift
 ```
 
-Exit code `0` = every requested layer passed. `1` = at least one layer failed.
+Exit code `0` = no hard failures in the requested layers. Live smoke reports known upstream outages as WARN and missing optional credentials as SKIP; neither counts as PASS. Read those counts before accepting live coverage. `1` = at least one layer failed.
 `--fast` skips live smoke; it is not a network sandbox. Missing dependencies fail
 the checks and must be installed explicitly. Go checks disable automatic toolchain downloads, module-proxy and
 checksum-server access; Rust checks use `cargo check --locked --offline` against
@@ -39,12 +39,12 @@ checks. Example READMEs include formatting and test commands.
 |---|---|---|---|---|
 | **validate** | Frontmatter, anchor, file-existence, structural checks across every SKILL.md / reference / template / pattern / example **+ version consistency** (VERSION ↔ plugin.json ↔ package.json ↔ index.ts ↔ README badge) | ~1s | none | [`scripts/validate.sh`](scripts/validate.sh) |
 | **typecheck** | `tsc --noEmit` over `mcp-server/` and `mock-server/` | ~5s | none | each package's `tsconfig.json` |
-| **mcp-test** | 529 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
-| **mock-test** | 26 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
+| **mcp-test** | 657 Vitest cases covering MCP handlers, policy gates, signing logic, schema validation and dependency compatibility | ~3s | none (HTTP is mocked) | [`mcp-server/src/__tests__/`](mcp-server/src/__tests__/) |
+| **mock-test** | 61 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
 | **examples** | JS and Python syntax checks; Go vet and offline Cargo check when those toolchains are installed | varies | module downloads disabled | [`examples/`](examples/) |
 | **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
 | **boot** | Spawns `mcp-server/launch.mjs`, completes the MCP `initialize` handshake, and asserts ≥155 unique `chaingpt_*` tools with valid metadata. The child receives fixture credentials and isolated application state. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
-| **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~30s | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
+| **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~1–3 min | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
 ## Manual live verification — Solana agent wallet (devnet, ~5 min, free)
 
@@ -122,24 +122,26 @@ changes that fixtures cannot detect. Run it explicitly when checking an upstream
 integration. The GitHub workflow is manual; there is no daily schedule, automatic
 issue publication or autonomous repair agent. Its output stays in the run log.
 
+See [live API validation notes](docs/live-api-validation.md) for the latest run, API migrations and coverage gaps. Paid ChainGPT SDK calls, funded wallet operations and testnet acceptance loops are separate from this read-only suite.
+
 Cases by upstream:
 
 - **DexScreener** — research_token, research_pairs, research_trending
-- **GoPlus + Honeypot** — risk_token, risk_address, risk_contract_source
-- **Etherscan family** — onchain_gas, onchain_block, onchain_address (requires `ETHERSCAN_API_KEY` for the last two; falls back to friendly hint without)
+- **GoPlus + Honeypot** — risk_token, risk_address
+- **Etherscan / public RPC** — onchain_gas and onchain_block use public RPC fallback; risk_contract_source and onchain_address require `ETHERSCAN_API_KEY` and are skipped without it
 - **Moralis / RPC fallback** — wallet_balances (no key required; falls back to direct RPC)
 - **Solidity compiler (local)** — deploy_compile
 - **OpenOcean v4** — dex_quote, dex_build_swap_tx (the build path tests the mainnet-acknowledgement gate, not a real broadcast)
-- **Jupiter v6** — dex_jupiter_quote
+- **Jupiter Swap V1 (`api.jup.ag`)** — dex_jupiter_quote
 - **Aave V3 on-chain reads** — defi_aave_health
-- **1inch** — dex_1inch_quote (key gated; without `ONEINCH_API_KEY` we assert the friendly hint)
+- **1inch** — dex_1inch_quote (SKIP without `ONEINCH_API_KEY`; missing-key hints remain covered offline)
 - **CoW Protocol** — dex_cow_create_order (mainnet ack gate)
 - **Pendle + Morpho APIs** — defi_pendle_markets, defi_morpho_markets, defi_morpho_vaults
 - **Hyperliquid public info** — hl_markets, hl_mids, hl_orderbook, hl_funding
 - **Polymarket CLOB** — pm_markets
 - **Across** — bridge_quote, bridge_build_deposit_tx (mainnet ack gate)
 - **Drift DLOB** — drift_markets, drift_orderbook *(use `SKIP_DRIFT_SMOKE=1` if upstream is down)*
-- **Marginfi + Kamino** — defi_marginfi_banks, defi_kamino_markets, defi_kamino_vaults
+- **Marginfi / Project 0 + Kamino metrics** — defi_marginfi_banks, defi_kamino_markets, defi_kamino_vaults
 - **Strategy backtest** — backtest_grid (CoinGecko free tier)
 
 Refusal-path cases (no broadcast — we check the gate fires correctly):
@@ -190,7 +192,7 @@ For a new example:
 | typecheck red | broken type signature | fix the type, not the assertion. Re-run `tsc --noEmit`. |
 | validate red | missing frontmatter, dead anchor, missing file | open `scripts/validate.sh`, find the failing rule, fix the markdown |
 | smoke red | upstream API drift OR our wiring broke | open the workflow log, identify which case + endpoint, hit the endpoint manually with `curl`. If our shape parsing is wrong, fix it and add a fixture-based vitest case so this regression doesn't recur. |
-| smoke red on Drift only | `dlob.drift.trade` 503 is common — they go down ~weekly for hours | re-run with `SKIP_DRIFT_SMOKE=1`. If down for >24h, page the Drift Discord. |
+| smoke WARN on Drift / OpenOcean | Public Drift endpoint outage or an OpenOcean HTML access challenge | Record the missing coverage and retry when access is restored. Only narrowly identified transport/access failures are tolerated; parsing bugs and API validation errors still fail. |
 | `npm run build` red | the rogue `tsc@2.0.4` shim package | the build script intentionally calls `node ./node_modules/typescript/bin/tsc`. If you see "This is not the tsc command you are looking for," your script regressed back to bare `tsc` |
 | `EADDRINUSE :3001` | something else is on port 3001 | tests pass anyway — the mock-server only calls `app.listen` when `process.env.VITEST` is unset. Find the squatter with `lsof -i :3001` |
 
@@ -198,7 +200,7 @@ For a new example:
 
 The harness does not require real API keys. Unit tests mock requests, boot smoke
 uses a fixed dummy key with keychain access disabled, and live smoke checks public
-endpoints or missing-key responses. The GitHub smoke workflow does not read
+endpoints. Missing optional Etherscan and 1inch credentials produce SKIP, not successful API coverage. The GitHub smoke workflow does not read
 GitHub Secrets.
 
 Local test processes can inherit your shell environment, and application code can

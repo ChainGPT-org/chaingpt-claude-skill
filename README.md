@@ -557,7 +557,7 @@ Custody‑free. Same `acknowledgeMainnet` safety pattern.
 | Tool | Backend |
 |---|---|
 | `chaingpt_dex_quote` · `_build_swap_tx` · `_approve_tx` | OpenOcean v4 (EVM) |
-| `chaingpt_dex_jupiter_quote` · `_jupiter_build_swap_tx` | Jupiter v6 (Solana) |
+| `chaingpt_dex_jupiter_quote` · `_jupiter_build_swap_tx` | Jupiter Swap V1 (Solana, `api.jup.ag`) |
 | `chaingpt_dex_1inch_quote` · `_1inch_build_swap_tx` | 1inch v6 (EVM, key‑gated) |
 | `chaingpt_dex_cow_quote` · `_cow_create_order` | CoW Protocol (EVM, intent‑based, MEV‑protected) |
 
@@ -648,6 +648,7 @@ The plugin works without these but unlocks more if present:
 |---|---|---|
 | `MORALIS_API_KEY` | Full multi‑chain ERC‑20 scan + DeFi positions + P&L | https://moralis.io (25k req/month free) |
 | `ETHERSCAN_API_KEY` | Higher Etherscan rate limit (Etherscan v2 covers every major EVM chain) | https://etherscan.io/myapikey (free) |
+| `JUPITER_API_KEY` | Optional higher-rate Jupiter Swap V1 access; keyless public access is supported | https://portal.jup.ag |
 | `ONEINCH_API_KEY` | 1inch v6 aggregator routing | https://portal.1inch.dev |
 | `TRON_PRO_API_KEY` | Higher TronGrid rate limit for Tron tools (mainnet keyless is throttled) | https://www.trongrid.io (free) |
 | `TRON_RPC_URL` | Override the Tron node host (mainnet/Shasta/Nile). Agent‑wallet signing refuses a non‑TronGrid host. | — |

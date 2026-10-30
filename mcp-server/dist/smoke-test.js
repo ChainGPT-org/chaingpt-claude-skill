@@ -8,6 +8,7 @@
  * unit tests can't surface. Tests the read-only and quote/build paths
  * that don't require a wallet. Exits non-zero on any failure.
  */
+import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage } from './lib/smoke-assertions.js';
 import { handleResearchTool } from './tools/research.js';
 import { handleRiskTool } from './tools/risk.js';
 import { handleOnchainTool } from './tools/onchain.js';
@@ -77,14 +78,15 @@ const cases = [
         expect: /Address risk/i,
     },
     {
-        name: 'risk_contract_source (USDC verified source — or friendly key-missing hint)',
+        name: 'risk_contract_source (USDC verified source — authenticated API)',
         fn: () => handleRiskTool('chaingpt_risk_contract_source', {
             address: USDC_ETH,
             chain: 'ethereum',
             previewChars: 200,
         }),
-        // Without ETHERSCAN_API_KEY, the tool surfaces a friendly hint; with a key it returns source.
-        expect: /Contract source|verified|Source preview|ETHERSCAN_API_KEY/i,
+        requiresEnv: 'ETHERSCAN_API_KEY',
+        expect: /Source preview/i,
+        rejectData: /No verified source code|ETHERSCAN_API_KEY/i,
     },
     // ─── Tier 1: onchain ─────────────────────────────────────────────
     {
@@ -99,13 +101,15 @@ const cases = [
         expect: /Block \d+|Timestamp/i,
     },
     {
-        name: 'onchain_address (Vitalik recent txs — or friendly key-missing hint)',
+        name: 'onchain_address (Vitalik recent txs — authenticated API)',
         fn: () => handleOnchainTool('chaingpt_onchain_address', {
             address: VITALIK,
             chain: 'ethereum',
             limit: 3,
         }),
-        expect: /transaction|tx|recent|ETHERSCAN_API_KEY/i,
+        requiresEnv: 'ETHERSCAN_API_KEY',
+        expect: /transaction|tx|recent/i,
+        rejectData: /ETHERSCAN_API_KEY|error|failed/i,
     },
     // ─── Tier 1: wallet ──────────────────────────────────────────────
     {
@@ -114,7 +118,9 @@ const cases = [
             address: VITALIK,
             chains: ['ethereum', 'base'],
         }),
-        expect: /Wallet|ETH/i,
+        expect: /Wallet/i,
+        expectData: /Ethereum: [\d.]+ ETH[\s\S]*Base: [\d.]+ ETH/,
+        rejectData: /RPC unavailable/i,
     },
     // ─── Tier 2: deploy (compile only — no network needed) ───────────
     {
@@ -145,6 +151,7 @@ contract Hello { string public greeting = "hi"; }`,
         }),
         expect: /Swap quote|expected|USDC/i,
         expectData: /Out \(expected\):\s+[\d.]+/,
+        degradedOk: openOceanChallenge,
     },
     {
         name: 'dex_build_swap_tx (mainnet refusal without ack)',
@@ -165,7 +172,8 @@ contract Hello { string public greeting = "hi"; }`,
             amountIn: '0.01',
             decimalsIn: 9,
         }),
-        expect: /Jupiter quote|outAmount|Amount out/i,
+        expect: /Jupiter quote/i,
+        expectData: /Amount out:\s+\d+ raw units/,
     },
     // ─── Tier 3d: DeFi (Aave health read only) ───────────────────────
     {
@@ -253,7 +261,7 @@ contract Hello { string public greeting = "hi"; }`,
     },
     // ─── Tier 6.2: 1inch + CoW aggregators ───────────────────────────
     {
-        name: 'dex_1inch_quote (key gating)',
+        name: 'dex_1inch_quote (authenticated quote)',
         fn: () => handleAggregatorTool('chaingpt_dex_1inch_quote', {
             network: 'ethereum',
             inToken: USDC_ETH,
@@ -261,8 +269,10 @@ contract Hello { string public greeting = "hi"; }`,
             amountIn: '100',
             decimalsIn: 6,
         }),
-        // Either succeeds (key present) or returns helpful setup hint
-        expect: /1inch|ONEINCH_API_KEY|quote/i,
+        requiresEnv: 'ONEINCH_API_KEY',
+        expect: /1inch/i,
+        expectData: /Out.*\d/i,
+        rejectData: /ONEINCH_API_KEY|error|failed/i,
     },
     {
         name: 'dex_cow_create_order (mainnet refusal without ack)',
@@ -305,13 +315,13 @@ contract Hello { string public greeting = "hi"; }`,
         fn: () => handleDriftTool('chaingpt_drift_markets', { sortBy: 'volume', limit: 5 }),
         expect: /Drift perp markets/i,
         expectData: /\$\d/,
-        degradedOk: /DEGRADED|no healthy upstream|403|503/i,
+        degradedOk: driftOutage,
     },
     {
         name: 'drift_orderbook (idx 0 = SOL-PERP)',
         fn: () => handleDriftTool('chaingpt_drift_orderbook', { marketIndex: 0, depth: 5 }),
         expect: /Drift L2 orderbook/i,
-        degradedOk: /DEGRADED|no healthy upstream|403|503/i,
+        degradedOk: driftOutage,
     },
     // ─── Tier 8: portfolio snapshot ──────────────────────────────────
     {
@@ -320,23 +330,31 @@ contract Hello { string public greeting = "hi"; }`,
             evmAddress: VITALIK,
             venues: ['hyperliquid', 'morpho'],
         }),
-        expect: /Portfolio snapshot|Total cross-venue exposure/i,
+        expect: /Portfolio snapshot/i,
+        expectData: /Total cross-venue exposure: \$\d/,
+        rejectData: /Errored venues|Partial result|error:|n\/a/i,
     },
     // ─── Tier 6.5: Solana lending (Marginfi + Kamino) ────────────────
     {
         name: 'defi_marginfi_banks',
         fn: () => handleSolanaLendingTool('chaingpt_defi_marginfi_banks', { limit: 3 }),
-        expect: /Marginfi v2 banks|endpoint unreachable/i,
+        expect: /Marginfi v2 banks/i,
+        expectData: /Supply APY: [\d.]+%[\s\S]*Supplied: \$\d[\s\S]*Bank: [1-9A-HJ-NP-Za-km-z]{32,44}/,
+        rejectData: /n\/a|unreachable/i,
     },
     {
         name: 'defi_kamino_markets',
         fn: () => handleSolanaLendingTool('chaingpt_defi_kamino_markets', { limit: 3 }),
-        expect: /Kamino lending markets|endpoint unreachable/i,
+        expect: /Kamino lending markets/i,
+        expectData: /Supplied: \$\d[\s\S]*Borrowed: \$\d/,
+        rejectData: /n\/a|unavailable|unreachable/i,
     },
     {
         name: 'defi_kamino_vaults',
         fn: () => handleSolanaLendingTool('chaingpt_defi_kamino_vaults', { limit: 3 }),
-        expect: /Kamino vault strategies|endpoint unreachable/i,
+        expect: /Kamino vault strategies/i,
+        expectData: /APY: [\d.]+%[\s\S]*TVL: \$\d/,
+        rejectData: /n\/a|unreachable/i,
     },
     // ─── Plans persistence (round-trip via tmp env) ──────────────────
     {
@@ -355,12 +373,13 @@ contract Hello { string public greeting = "hi"; }`,
             levels: 5,
             totalBudget: 1000,
         }),
-        expect: /Backtest — Grid|Not enough price data/i,
+        expect: /Backtest — Grid/i,
     },
 ];
 let pass = 0;
 let fail = 0;
 let warn = 0;
+let skip = 0;
 const failures = [];
 const warnings = [];
 // Allow CI / local runs to skip Drift cases when dlob.drift.trade is in a
@@ -375,18 +394,25 @@ if (skipDrift)
 console.log();
 for (const c of filteredCases) {
     process.stdout.write(`  ${c.name.padEnd(60)} `);
+    const missingKey = missingSmokeCredential(c, process.env);
+    if (missingKey) {
+        console.log(`${YELLOW}SKIP (requires ${missingKey})${RESET}`);
+        skip++;
+        continue;
+    }
     try {
         const result = await c.fn();
         const text = result.content?.[0]?.text ?? '';
         const matches = c.expect instanceof RegExp ? c.expect.test(text) : text.includes(c.expect);
         const dataOk = !c.expectData || c.expectData.test(text);
-        if (matches && dataOk && !result.isError) {
+        const status = smokeStatus(c, text, result.isError);
+        if (status === 'PASS') {
             console.log(`${GREEN}PASS${RESET}`);
             pass++;
             if (c.verbose)
                 console.log(`    ${text.slice(0, 300)}`);
         }
-        else if (c.degradedOk && c.degradedOk.test(text)) {
+        else if (status === 'WARN') {
             console.log(`${YELLOW}WARN (degraded upstream)${RESET}`);
             warnings.push({ name: c.name, reason: text.slice(0, 200) });
             warn++;
@@ -397,7 +423,7 @@ for (const c of filteredCases) {
                 ? `expected ${c.expect}, got: ${text.slice(0, 200)}`
                 : !dataOk
                     ? `DATA-QUALITY: expected ${c.expectData}, got: ${text.slice(0, 200)}`
-                    : `result marked isError: ${text.slice(0, 200)}`;
+                    : `Error or incomplete data: ${text.slice(0, 200)}`;
             failures.push({ name: c.name, reason });
             fail++;
         }
@@ -418,7 +444,8 @@ for (const c of filteredCases) {
 }
 console.log(`\n${YELLOW}════════════════════════════════════════════════════${RESET}`);
 console.log(` Results: ${GREEN}${pass} passed${RESET}, ${fail > 0 ? RED : GREEN}${fail} failed${RESET}` +
-    (warn > 0 ? `, ${YELLOW}${warn} degraded (warn)${RESET}` : ''));
+    (warn > 0 ? `, ${YELLOW}${warn} degraded (warn)${RESET}` : '') +
+    (skip > 0 ? `, ${YELLOW}${skip} skipped (missing credentials)${RESET}` : ''));
 console.log(`${YELLOW}════════════════════════════════════════════════════${RESET}\n`);
 if (warnings.length > 0) {
     console.log(`${YELLOW}Degraded upstreams (not failing the run):${RESET}`);

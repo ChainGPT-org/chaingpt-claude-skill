@@ -33,9 +33,8 @@ const OPENOCEAN_CHAIN = {
     blast: 'blast',
 };
 const OPENOCEAN_BASE = 'https://open-api.openocean.finance/v4';
-// Jupiter migrated from quote-api.jup.ag/v6 to lite-api.jup.ag/swap/v1 in 2026.
-// The old domain no longer resolves. Use the new endpoint.
-const JUPITER_BASE = 'https://lite-api.jup.ag/swap/v1';
+// The Lite hostname retires on 2026-10-30; paths remain compatible on api.jup.ag.
+const JUPITER_BASE = 'https://api.jup.ag/swap/v1';
 const EVM_NETWORKS = Object.keys(OPENOCEAN_CHAIN);
 // OpenOcean's "native" token sentinel is 0xEee...EeEEEe. Some EVM aggregators
 // use 0x000...0000. We accept both as input and translate to OO's sentinel.
@@ -220,7 +219,7 @@ export async function handleDexTool(name, args) {
             const amountIn = String(args.amountIn || '');
             const slippageBps = Number(args.slippageBps ?? 100);
             const slippagePct = slippageBps / 100; // OpenOcean uses percentage (e.g. 1 = 1%)
-            const gasPriceGwei = args.gasPriceGwei ? Number(args.gasPriceGwei) : undefined;
+            const gasPriceGwei = args.gasPriceGwei;
             if (name === 'chaingpt_dex_build_swap_tx') {
                 if (args.acknowledgeMainnet !== true) {
                     return {
@@ -240,11 +239,19 @@ export async function handleDexTool(name, args) {
             }
             const account = args.account || '0x0000000000000000000000000000000000000000';
             const path = name === 'chaingpt_dex_build_swap_tx' ? 'swap' : 'quote';
-            // OpenOcean v4 requires a `gasPrice` query param. If the user didn't supply one,
-            // fetch the current chain gas price via the chain's public RPC and pass it in gwei.
+            // V4 uses atomic token amounts and gas prices in wei. Do not truncate sub-gwei fees.
+            const inDecimals = inToken === NATIVE_ADDR ? 18 : await fetchErc20Decimals(network, inToken);
+            if (!/^\d+(?:\.\d+)?$/.test(amountIn) || (amountIn.split('.')[1]?.length ?? 0) > inDecimals)
+                throw new Error('amountIn must be a decimal within the input token precision.');
+            const amountRaw = parseUnits(amountIn, inDecimals);
+            if (amountRaw <= 0n)
+                throw new Error('amountIn must be positive.');
             let resolvedGasPrice;
             if (gasPriceGwei !== undefined) {
-                resolvedGasPrice = gasPriceGwei;
+                const gasDecimal = typeof gasPriceGwei === 'number' && Number.isFinite(gasPriceGwei) ? gasPriceGwei.toFixed(9) : String(gasPriceGwei);
+                if (!/^\d+(?:\.\d{1,9})?$/.test(gasDecimal) || Number(gasDecimal) !== Number(gasPriceGwei))
+                    throw new Error('gasPriceGwei must be a nonnegative decimal with at most 9 fractional digits.');
+                resolvedGasPrice = parseUnits(gasDecimal, 9);
             }
             else {
                 const endpoints = rpcEndpoints(network);
@@ -258,27 +265,24 @@ export async function handleDexTool(name, args) {
                 }
                 try {
                     const gpHex = await jsonRpcFallback(endpoints, 'eth_gasPrice', []);
-                    // convert wei → gwei (truncate; OpenOcean accepts integers)
-                    resolvedGasPrice = Number(BigInt(gpHex) / 1000000000n);
-                    if (resolvedGasPrice === 0)
-                        resolvedGasPrice = 1; // degenerate fallback
+                    resolvedGasPrice = BigInt(gpHex);
                 }
                 catch {
-                    resolvedGasPrice = 30; // conservative-ish fallback that works on most chains
+                    throw new Error('Could not fetch gas price; pass gasPriceGwei explicitly.');
                 }
             }
             const params = new URLSearchParams({
                 inTokenAddress: inToken,
                 outTokenAddress: outToken,
-                amount: amountIn,
+                amountDecimals: amountRaw.toString(),
                 slippage: String(slippagePct),
                 account,
-                gasPrice: String(resolvedGasPrice),
+                gasPriceDecimals: resolvedGasPrice.toString(),
             });
             const url = `${OPENOCEAN_BASE}/${ooChain}/${path}?${params.toString()}`;
             const res = await httpJson(url);
             const data = res?.data ?? res;
-            if (!data || res?.code && res.code !== 200) {
+            if (!data || (res?.code && res.code !== 200) || !/^\d+$/.test(String(data?.outAmount))) {
                 return {
                     content: [{
                             type: 'text',
@@ -427,7 +431,9 @@ export async function handleDexTool(name, args) {
             const rawAmount = parseUnits(amountIn, decimalsIn).toString();
             const quoteUrl = `${JUPITER_BASE}/quote?inputMint=${inputMint}&outputMint=${outputMint}` +
                 `&amount=${rawAmount}&slippageBps=${slippageBps}`;
-            const quote = await httpJson(quoteUrl);
+            const apiKey = process.env.JUPITER_API_KEY?.trim();
+            const headers = apiKey ? { 'x-api-key': apiKey } : undefined;
+            const quote = await httpJson(quoteUrl, { headers });
             if (!quote || quote.error) {
                 return { content: [{ type: 'text', text: `Jupiter quote error: ${quote?.error ?? 'unknown'}` }] };
             }
@@ -469,6 +475,7 @@ export async function handleDexTool(name, args) {
             }
             const swap = await httpJson(`${JUPITER_BASE}/swap`, {
                 method: 'POST',
+                headers,
                 body: {
                     quoteResponse: quote,
                     userPublicKey,

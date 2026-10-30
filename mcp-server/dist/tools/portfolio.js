@@ -132,7 +132,6 @@ async function fetchMorpho(address) {
     userByAddress(address: $address, chainId: $chainId) {
       marketPositions {
         market {
-          uniqueKey
           loanAsset { symbol }
           collateralAsset { symbol }
         }
@@ -167,6 +166,10 @@ async function fetchMorpho(address) {
                 method: 'POST',
                 body: { query, variables: { address: address.toLowerCase(), chainId: c.id } },
             });
+            if (res?.errors?.length)
+                throw new Error(`Morpho GraphQL error: ${res.errors.map((e) => e.message).join('; ')}`);
+            if (!res?.data || !Object.prototype.hasOwnProperty.call(res.data, 'userByAddress'))
+                throw new Error('Unrecognized Morpho user response.');
             const u = res?.data?.userByAddress;
             if (!u)
                 continue;

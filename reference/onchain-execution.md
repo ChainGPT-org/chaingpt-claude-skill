@@ -72,11 +72,11 @@ chaingpt_dex_build_swap_tx         REFUSES mainnet without ack
 chaingpt_onchain_tx                confirm execution
 ```
 
-Backends: **OpenOcean v4** for EVM (no API key), **Jupiter v6** for Solana (no API key).
+Backends: **OpenOcean v4** for EVM (no API key), **Jupiter Swap V1** for Solana (`https://api.jup.ag/swap/v1`; keyless access supported, optional `JUPITER_API_KEY` for higher limits).
 
 OpenOcean Pathfinder router (canonical, same across EVM chains via CREATE2): `0x6352a56caadc4f1e25cd6c75970fa768a3304e64`. Used as the default spender by `chaingpt_dex_approve_tx`.
 
-If `gasPriceGwei` is omitted on a DEX build/quote call, the tool fetches current gas via the chain's public RPC fallback chain — OpenOcean v4 requires `gasPrice` on every call so this can't be skipped.
+OpenOcean v4 receives `amountDecimals` (atomic input-token units) and `gasPriceDecimals` (wei). The tool resolves ERC-20 input decimals on-chain and rejects excess precision. If `gasPriceGwei` is omitted, it fetches gas via public RPC without truncating sub-gwei fees; if RPC fails, provide an explicit gas price. See the [OpenOcean v4 reference](https://docs.openocean.finance/docs/swap-api/v4). Jupiter uses the [canonical API host](https://developers.jup.ag/docs/portal/setup), replacing the Lite host scheduled to retire on 2026-10-30.
 
 ### Honeypot refusal protocol
 
