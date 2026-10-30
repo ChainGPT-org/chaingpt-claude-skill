@@ -8,7 +8,7 @@
  * unit tests can't surface. Tests the read-only and quote/build paths
  * that don't require a wallet. Exits non-zero on any failure.
  */
-import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage, positiveQuoteOutput } from './lib/smoke-assertions.js';
+import { smokeStatus, missingSmokeCredential, openOceanChallenge, driftOutage, driftOrderbookSmoke, positiveQuoteOutput } from './lib/smoke-assertions.js';
 import { handleResearchTool } from './tools/research.js';
 import { handleRiskTool } from './tools/risk.js';
 import { handleOnchainTool } from './tools/onchain.js';
@@ -306,10 +306,9 @@ contract Hello { string public greeting = "hi"; }`,
         expectData: /Net APY: \d[\s\S]*TVL: \$\d/,
     },
     // ─── Tier 6.4: Drift ─────────────────────────────────────────────
-    // Drift's public data plane has been gated/offline since ~2026-05
-    // (dlob 503 / data API 403). degradedOk keeps these visible as WARN
-    // without failing the whole run; they flip back to hard asserts the
-    // day the endpoint returns.
+    // Legacy Drift hosted data is unavailable and the original program is paused.
+    // Keep transport/access failures visible as WARN; malformed responses fail.
+    // A separate Velocity deployment must not be substituted for this coverage.
     {
         name: 'drift_markets (top by volume)',
         fn: () => handleDriftTool('chaingpt_drift_markets', { sortBy: 'volume', limit: 5 }),
@@ -320,8 +319,7 @@ contract Hello { string public greeting = "hi"; }`,
     {
         name: 'drift_orderbook (idx 0 = SOL-PERP)',
         fn: () => handleDriftTool('chaingpt_drift_orderbook', { marketIndex: 0, depth: 5 }),
-        expect: /Drift L2 orderbook/i,
-        degradedOk: driftOutage,
+        ...driftOrderbookSmoke,
     },
     // ─── Tier 8: portfolio snapshot ──────────────────────────────────
     {
@@ -383,7 +381,7 @@ let skip = 0;
 const failures = [];
 const warnings = [];
 // Allow CI / local runs to skip Drift cases when dlob.drift.trade is in a
-// known outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
+// legacy-host outage. Set SKIP_DRIFT_SMOKE=1 to skip just those two cases.
 const skipDrift = process.env.SKIP_DRIFT_SMOKE === '1';
 const filteredCases = skipDrift
     ? cases.filter((c) => !/^drift_/.test(c.name))

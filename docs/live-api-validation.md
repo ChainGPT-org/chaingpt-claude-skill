@@ -1,5 +1,9 @@
 # Live API validation
 
+For the subsequent provider investigation, fresh Etherscan checks and corrected
+Drift availability guidance, see [provider follow-up](provider-warning-followup.md).
+The run below is retained as its original receipt.
+
 Manual run on **2026-10-30 UTC** (2026-10-29 Hawaii), based on main
 `e600727380f546401ee64927d5ab0a1200755ff5` plus this repair branch.
 GitHub Actions remained disabled. No workflow was dispatched.

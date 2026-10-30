@@ -66,11 +66,16 @@ describe('IP allowlist and parser boundaries', () => {
   });
   it('rejects hostile IPv6 zone input within a bounded child process', () => {
     const source = `const { Address6 } = require(${JSON.stringify(rateLimitRequire.resolve('ip-address'))});
-      if (Address6.isValid('%'.repeat(100000) + '\\n')) process.exit(2);`;
-    const child = spawnSync(process.execPath, ['--max-old-space-size=128', '-e', source], { timeout: 1500, maxBuffer: 32 * 1024 });
+      const input = '%'.repeat(100000) + '\\n';
+      const start = process.cpuUsage();
+      if (Address6.isValid(input)) process.exit(2);
+      const used = process.cpuUsage(start);
+      if (used.user + used.system > 1000000) process.exit(3);`;
+    // Keep parser CPU bounded independently of Node startup and host scheduling.
+    const child = spawnSync(process.execPath, ['--max-old-space-size=128', '-e', source], { timeout: 10000, maxBuffer: 32 * 1024 });
     expect(child.error?.message ?? child.stderr.toString()).toBe('');
     expect(child.status).toBe(0);
-  });
+  }, 15000);
 });
 
 describe('Jayson 5 compatibility through Solana consumers', () => {
