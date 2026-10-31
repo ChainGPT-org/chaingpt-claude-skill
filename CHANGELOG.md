@@ -2,6 +2,7 @@
 
 ## [1.23.0] - Unreleased
 ### Security and compatibility
+- The agent wallet is disabled by default: `chaingpt_agent_wallet_*` tools are hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true` is set in the real launch environment (a working-directory `.env` cannot enable it). Boot smoke asserts this.
 - First-run signing is disabled. Strict policy validation rejects malformed booleans and limits.
 - Cross-process signing locks and durable budget reservations precede signatures. Uncertain operations remain reserved and cannot be signed twice under the same operationId.
 - Solana verifies RPC cluster genesis identity against administrator pins, preventing custom-URL cluster confusion.
