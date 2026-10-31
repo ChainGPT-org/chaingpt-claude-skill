@@ -6,6 +6,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+// Must stay above 'dotenv/config': the wallet gate reads only the real launch environment.
+import { AGENT_WALLET_ENABLED, AGENT_WALLET_DISABLED_MESSAGE, isAgentWalletTool } from './lib/agent-wallet-gate.js';
 import 'dotenv/config';
 
 import { chatTools, handleChatTool } from './tools/chat.js';
@@ -101,14 +103,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...miniappTools,
     ...erc8004Tools,
     ...planTools,
-    ...agentWalletTools,
-    ...agentWalletSolanaTools,
-    ...agentWallet4337Tools,
+    ...(AGENT_WALLET_ENABLED ? agentWalletTools : []),
+    ...(AGENT_WALLET_ENABLED ? agentWalletSolanaTools : []),
+    ...(AGENT_WALLET_ENABLED ? agentWallet4337Tools : []),
     ...aaSessionTools,
     ...aaTools,
     ...solanaTools,
     ...tronTools,
-    ...agentWalletTronTools,
+    ...(AGENT_WALLET_ENABLED ? agentWalletTronTools : []),
     ...dashboardTools,
   ],
 }));
@@ -200,6 +202,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name.startsWith('chaingpt_defi')) return await handleDefiTool(name, args);
     if (name.startsWith('chaingpt_hl')) return await handleHyperliquidTool(name, args);
     if (name.startsWith('chaingpt_pm')) return await handlePolymarketTool(name, args);
+    if (isAgentWalletTool(name) && !AGENT_WALLET_ENABLED) {
+      return { content: [{ type: 'text', text: AGENT_WALLET_DISABLED_MESSAGE }], isError: true };
+    }
     // ORDER: sub-prefixes must route before the generic agent-wallet prefix.
     if (name.startsWith('chaingpt_agent_wallet_4337')) return await handleAgentWallet4337Tool(name, args);
     if (name.startsWith('chaingpt_agent_wallet_solana')) return await handleAgentWalletSolanaTool(name, args);

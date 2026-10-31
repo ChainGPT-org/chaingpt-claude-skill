@@ -18,12 +18,12 @@
  *
  * Env:
  *   CHAINGPT_MCP_BIN     path to the built server entrypoint (default: ../mcp-server/launch.mjs)
- *   MIN_EXPECTED_TOOLS   minimum acceptable tool count (default: 155)
+ *   MIN_EXPECTED_TOOLS   minimum acceptable tool count (default: 142; agent wallet off)
  *   BOOT_SMOKE_TIMEOUT_MS  per-step timeout (default: 8000)
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
@@ -34,7 +34,7 @@ const __dirname = dirname(__filename);
 const BIN = process.env.CHAINGPT_MCP_BIN
   ? resolve(process.env.CHAINGPT_MCP_BIN)
   : resolve(__dirname, '..', 'mcp-server', 'launch.mjs');
-const MIN_EXPECTED_TOOLS = Number(process.env.MIN_EXPECTED_TOOLS ?? 155);
+const MIN_EXPECTED_TOOLS = Number(process.env.MIN_EXPECTED_TOOLS ?? 142);
 const STEP_TIMEOUT_MS = Number(process.env.BOOT_SMOKE_TIMEOUT_MS ?? 8000);
 
 if (!existsSync(BIN)) {
@@ -46,6 +46,8 @@ if (!existsSync(BIN)) {
 // Exercise the production launcher with only fixture credentials and isolated
 // application state. Never forward the caller's secrets or keychain access.
 const SMOKE_STATE = mkdtempSync(join(tmpdir(), 'chaingpt-mcp-boot-smoke-'));
+// A .env in the working directory must NOT be able to re-enable the agent wallet.
+writeFileSync(join(SMOKE_STATE, '.env'), 'CHAINGPT_AGENT_WALLET_ENABLED=true\n');
 const child = spawn(process.execPath, [BIN], {
   cwd: SMOKE_STATE,
   env: {
@@ -168,6 +170,10 @@ async function main() {
     throw new Error(`tools missing chaingpt_ prefix: ${badPrefix.join(', ')}`);
   }
 
+  const wallet = names.filter((n) => n.startsWith('chaingpt_agent_wallet'));
+  if (wallet.length > 0) {
+    throw new Error(`agent wallet tools exposed while disabled (a .env must not enable them): ${wallet.join(', ')}`);
+  }
   console.log(`[boot-smoke] tools/list OK — ${names.length} unique tools`);
   if (names.length < MIN_EXPECTED_TOOLS) {
     throw new Error(

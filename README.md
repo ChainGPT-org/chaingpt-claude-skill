@@ -213,6 +213,8 @@ The dashboard binds **127.0.0.1 only**, the admin token rotates every time the s
 
 ### Step 8 — Optional: enable the Agent Wallet (only needed for "bounded autonomous" flows)
 
+> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. To withdraw from an existing agent wallet, start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment (a `.env` file cannot enable it), move the funds, then remove the variable.
+
 If you want Claude to **sign and broadcast transactions itself** within a policy you set, the Agent Wallet feature ships with the plugin. It's optional — if you just want the AI co‑pilot that returns *unsigned* transactions for you to sign in MetaMask / Rabby / Phantom, **skip this step**.
 
 The keystore is AES‑256‑GCM encrypted with a passphrase. You have two ways to provide it:
@@ -412,6 +414,8 @@ names, counts and timestamps. Signed transaction bytes in the safety journal are
 local authorization material: do not paste journal files into chat or commit them.
 
 ## 🖥️ The Agent Wallet Dashboard
+
+> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. To withdraw from an existing agent wallet, start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment (a `.env` file cannot enable it), move the funds, then remove the variable.
 
 Ships with a real localhost wallet UI for the AI agent — not just a CLI. Encrypted EOA keystore, admin-controlled signing policy with an explicit host-isolation boundary, kill switch, 9 policy templates including 🚨 unrestricted mode, custom EVM chain registration, blue‑chip auto‑scan.
 
