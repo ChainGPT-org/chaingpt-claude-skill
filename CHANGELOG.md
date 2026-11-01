@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.23.0] - Unreleased
+## [1.23.0] - 2026-10-31
 ### Security and compatibility
 - The agent wallet is disabled by default: `chaingpt_agent_wallet_*` tools are hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true` is set in the real launch environment (a working-directory `.env` cannot enable it). Boot smoke asserts this.
 - First-run signing is disabled. Strict policy validation rejects malformed booleans and limits.
@@ -14,8 +14,13 @@
 - x402 signature assembly preserves and verifies the original authorization; facilitator JSON is encoded once.
 - Clarified host-isolation assumptions, workflow-only audit checks, ERC-4337 beta status and privacy disclosures.
 - Fixed Bash pipefail/SIGPIPE frontmatter checks; added guard and catalog checks.
+- `chaingpt_agent_wallet_serve_ui` no longer returns the admin token in its tool result (model context). The human operator reads it from the 0600 token file; the dashboard refuses to start if that file cannot be written, and the write never follows a symlink.
+- A working-directory `.env` supplies API credentials only. Keystore/policy/ledger/plan paths, `CHAINGPT_AGENT_WALLET_PASSPHRASE`, `CHAINGPT_DISABLE_KEYCHAIN` and RPC URLs are read from the real launch environment only; ignored keys are reported on stderr.
+- Dashboard Form editor saves merge only the form's own fields into the saved policy; daily caps and the asset/Solana/Tron/ERC-4337 sections are no longer dropped. A form save from a page whose policy has since changed is refused.
+- Scheduled plan step operationIds derive from the plan name and step content, so deleting and re-saving a finished plan cannot make the signer execute its steps again.
+- The mainnet guard asks for every `chaingpt_agent_wallet_*sign_and_send` tool, including future chains; Tron prompts show the TRX/TRC-20 amount, token and recipient.
 
-Compatibility: existing policies must be reviewed for supported calls and assetLimits. Read docs/wallet-safety.md before enabling the updated signer. This entry does not claim a live-chain acceptance test or publish a release.
+Compatibility: RPC URLs and file-path overrides in a project `.env` are now ignored; set them in the MCP server launch environment. Existing policies must be reviewed for supported calls and assetLimits. Read docs/wallet-safety.md before enabling the updated signer. No live-chain acceptance test has been run; the agent wallet stays disabled by default.
 
 ## [1.22.2] - 2026-06-29
 ### Fixed — duplicate hooks-file load error

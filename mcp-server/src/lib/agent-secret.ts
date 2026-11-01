@@ -4,8 +4,10 @@
  * The keystore is AES-256-GCM encrypted with a passphrase. Where that
  * passphrase comes from is resolved here, in priority order:
  *
- *   1. CHAINGPT_AGENT_WALLET_PASSPHRASE env var  — explicit power-user override.
- *      Highest priority. Never touches disk or keychain. Best for CI / headless.
+ *   1. CHAINGPT_AGENT_WALLET_PASSPHRASE env var  — explicit override for hosts
+ *      with no keychain (headless/CI). Real launch environment only: a
+ *      working-directory .env cannot set it (lib/dotenv-credentials). Any process
+ *      the agent starts inherits it, so prefer the keychain.
  *   2. OS keychain                                — auto-managed secret.
  *      macOS Keychain (`security`) or Linux libsecret (`secret-tool`).
  *      Generated once at init, read back on every load. Never in LLM context.
@@ -128,6 +130,9 @@ function keychainSet(value: string): void {
 
 /**
  * Resolve the keystore passphrase. Env var wins; otherwise the keychain.
+ * The env var is read from the real launch environment only: a working-directory
+ * .env cannot set it (lib/dotenv-credentials). Whoever controls the launch
+ * environment controls the keystore path too, so precedence is not a boundary.
  * Returns the value plus where it came from (for status display).
  */
 export function resolvePassphrase(): { value: string | null; source: SecretSource } {

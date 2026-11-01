@@ -94,7 +94,7 @@ That last refusal is the product: the MCP surface does not expose policy editing
 
 ## 🆕 What's new
 
-**[v1.22](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.22.0)** Tron (TVM) integration — non-EVM chain at EVM/Solana parity (14 tools, reuses the EVM key, fail-closed `tron` policy, SunSwap + JustLend) · **[v1.19](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights (autonomous self-heal is now disabled) · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a durable execution claims) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+**[v1.23](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.23.0)** security release: agent wallet off by default, bounty fixes · **v1.22** Tron (TVM) integration — non-EVM chain at EVM/Solana parity (14 tools, reuses the EVM key, fail-closed `tron` policy, SunSwap + JustLend) · **[v1.21](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights (autonomous self-heal is now disabled) · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a durable execution claims) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 
 ## ⚡ Quickstart — full step‑by‑step
 
@@ -225,12 +225,7 @@ The keystore is AES‑256‑GCM encrypted with a passphrase. You have two ways t
 > initialize the agent wallet
 ```
 
-**Option B — explicit env var (CI / headless / maximum control):** set a passphrase before launching Claude Code.
-
-```bash
-export CHAINGPT_AGENT_WALLET_PASSPHRASE="your-strong-passphrase-min-16-chars"
-# then relaunch claude, and: > initialize the agent wallet
-```
+**Option B — env var (headless hosts with no keychain):** set `CHAINGPT_AGENT_WALLET_PASSPHRASE` (min 16 chars) in the MCP server's launch environment. A project `.env` file is ignored for this variable. Any process the agent starts inherits this variable and can read it, so do not use Option B where the agent has shell access; use the keychain or a separately isolated signer.
 
 Either way, Claude calls `chaingpt_agent_wallet_init` and prints the new EOA address (and tells you which passphrase source it used). First-run policy has signing disabled (`killSwitch: true`, all chain opt-ins off). Review [wallet safety and migration](docs/wallet-safety.md), configure limits and recipients, then enable the intended chain before funding.
 
@@ -242,7 +237,7 @@ For full wallet management (multi-chain balances, kill switch, 9 policy template
 > open the wallet admin UI
 ```
 
-Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.0.1:8787` and its own admin token (separate from the dashboard's 8788 token).
+Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.0.1:8787`. The admin token is **not** shown to Claude: read it yourself from the token file path the tool reports (default `~/.chaingpt-mcp/agent-wallet/.admin-token`, 0600, rotated on every start; separate from the dashboard's 8788 token).
 
 ### Slash commands you'll use most
 
@@ -390,8 +385,9 @@ budget durably, under a cross-process lock, before broadcast. Uncertain sends re
 The local policy boundary assumes the agent cannot edit wallet files, run arbitrary host commands,
 retrieve the keychain passphrase or administer the dashboard. A coding agent with shell/file/browser
 access needs OS-level separation from the signer and its secrets. The absence of an MCP policy-write
-tool alone does not create that separation. Dashboard admin tokens are privileged and appear in tool
-output; keep dashboard administration in a trusted human context.
+tool alone does not create that separation. The wallet admin token is written only to a 0600 file, never
+to tool output; keep that file and dashboard administration in a trusted human context. A project `.env`
+can supply API keys only, never wallet paths, the passphrase or RPC hosts.
 
 Mainnet hooks request human confirmation for every agent signer, signed-order submission and x402
 settlement. Hook parsing errors deny the call. Keep confirmation enabled in scheduled environments.

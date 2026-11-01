@@ -623,10 +623,15 @@ describe('Admin dashboard HTTP endpoints', () => {
       port: PORT + 2,
       chains: ['ethereum'],
     });
-    // Pull the admin token out of the printed output
-    const tokenMatch = startResult.content[0].text.match(/[0-9a-f]{48}/);
-    expect(tokenMatch).not.toBeNull();
-    const token = tokenMatch![0];
+    // The admin token is never in the tool result (model context); the human reads the 0600 file.
+    const { readFileSync, statSync } = await import('node:fs');
+    const tokenFile = join(TMP, '.admin-token');
+    const token = readFileSync(tokenFile, 'utf8').trim();
+    expect(token).toMatch(/^[0-9a-f]{48}$/);
+    expect(startResult.content[0].text).not.toContain(token);
+    expect(startResult.content[0].text).not.toMatch(/[0-9a-f]{48}/);
+    expect(startResult.content[0].text).toContain(tokenFile);
+    expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
 
     const base = `http://127.0.0.1:${PORT + 2}`;
 
@@ -784,4 +789,114 @@ describe('Admin dashboard HTTP endpoints', () => {
 
     _stopUiForTests();
   }, 20_000);
+
+  it('serve_ui re-tightens a loosened token file and refuses to start when it cannot write one', async () => {
+    const { chmodSync, statSync, mkdirSync } = await import('node:fs');
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    const tokenFile = join(TMP, '.admin-token');
+    writeFileSync(tokenFile, 'stale');
+    chmodSync(tokenFile, 0o644);
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 4, chains: ['ethereum'] });
+    expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
+    _stopUiForTests();
+
+    // A symlink planted at the token path is replaced, never followed.
+    const { symlinkSync, lstatSync, readFileSync: rf } = await import('node:fs');
+    const decoy = join(TMP, 'decoy-in-project.txt');
+    writeFileSync(decoy, 'untouched');
+    rmSync(tokenFile, { force: true });
+    symlinkSync(decoy, tokenFile);
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 6, chains: ['ethereum'] });
+    expect(lstatSync(tokenFile).isSymbolicLink()).toBe(false);
+    expect(rf(decoy, 'utf8')).toBe('untouched');
+    _stopUiForTests();
+
+    // Unwritable token path (a directory) → no dashboard, no token anywhere.
+    const blocked = join(TMP, 'token-is-a-dir');
+    mkdirSync(blocked, { recursive: true });
+    process.env.CHAINGPT_ADMIN_TOKEN_FILE = blocked;
+    try {
+      const r = await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 5, chains: ['ethereum'] });
+      expect(r.content[0].text).toMatch(/^Agent wallet error: .*Dashboard not started/);
+      await expect(fetch(`http://127.0.0.1:${PORT + 5}/`)).rejects.toThrow();
+    } finally {
+      delete process.env.CHAINGPT_ADMIN_TOKEN_FILE;
+    }
+  });
+
+  it('form-editor save keeps policy fields the form does not render (daily caps, chain sections)', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 3, chains: ['ethereum'] });
+    const base = `http://127.0.0.1:${PORT + 3}`;
+    const sid = await adminLogin(base);
+    const post = (body: string) => fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `cg_admin_sid=${sid}`, origin: base },
+      body,
+    });
+
+    // Admin sets daily caps + a Tron section through the raw JSON editor (full replace).
+    const full = {
+      version: 1, killSwitch: false, allowedChains: [1], maxTxValueWei: '100000000000000000',
+      maxDailySpendWei: '300000000000000000', maxDailyTxCount: 3,
+      tron: { enabled: true, maxTxSun: '1000000', maxDailySpendSun: '5000000' },
+    };
+    expect((await post('policy=' + encodeURIComponent(JSON.stringify(full)))).status).toBe(200);
+    const before = loadPolicy();
+    expect(before.maxDailySpendWei).toBe('300000000000000000');
+
+    // Form editor save (what the browser sends): only the form's fields, plus mode=form.
+    const formPolicy = {
+      version: 1, killSwitch: false, unrestricted: false, allowedChains: [1], allowedToAddresses: [],
+      blockedToAddresses: [], maxTxValueWei: '100000000000000000', maxTxGas: '1000000',
+      blockedSelectors: [], requireMemo: false, notes: 'notes-only edit',
+    };
+    const { policyDigest } = await import('../lib/agent-policy.js');
+    const formSave = (p: object, digest = policyDigest(loadPolicy())) =>
+      post('policy=' + encodeURIComponent(JSON.stringify(p)) + '&mode=form&baseDigest=' + digest);
+    const res = await formSave(formPolicy);
+    expect(res.status).toBe(200);
+    const after = loadPolicy();
+    expect(after.notes).toBe('notes-only edit');
+    expect(after.maxDailySpendWei).toBe('300000000000000000');
+    expect(after.maxDailyTxCount).toBe(3);
+    expect(after.tron).toEqual(before.tron);
+
+    // A form save cannot smuggle non-form fields (e.g. raise the daily caps).
+    const smuggled = { ...formPolicy, maxDailySpendWei: '1000000000000000000000', maxDailyTxCount: 1000 };
+    expect((await formSave(smuggled)).status).toBe(200);
+    expect(loadPolicy().maxDailySpendWei).toBe('300000000000000000');
+    expect(loadPolicy().maxDailyTxCount).toBe(3);
+
+    // A stale tab (page loaded before the kill switch was engaged) cannot switch it back off.
+    const staleDigest = policyDigest(loadPolicy());
+    await fetch(`${base}/api/killswitch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `cg_admin_sid=${sid}`, origin: base },
+      body: 'set=on',
+    });
+    const stale = await formSave({ ...formPolicy, killSwitch: false }, staleDigest);
+    expect(stale.status).toBe(400);
+    expect(await stale.text()).toContain('Policy changed since this page loaded');
+    expect(loadPolicy().killSwitch).toBe(true);
+
+    // The served page's form handler marks its submission as mode=form.
+    const dash = await (await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } })).text();
+    expect(dash).toContain("m.name = 'mode'; m.value = 'form'");
+    expect(dash).toContain("d.name = 'baseDigest'");
+  }, 20_000);
 });
+
+/** Log in to the admin dashboard with the token from its 0600 file (the human-side path). */
+async function adminLogin(base: string): Promise<string> {
+  const { readFileSync } = await import('node:fs');
+  const token = readFileSync(process.env.CHAINGPT_ADMIN_TOKEN_FILE || join(TMP, '.admin-token'), 'utf8').trim();
+  const r = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: `token=${token}`,
+    redirect: 'manual',
+  });
+  expect(r.status).toBe(302);
+  return r.headers.get('set-cookie')!.match(/cg_admin_sid=([a-f0-9]+)/)![1];
+}

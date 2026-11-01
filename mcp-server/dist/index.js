@@ -2,9 +2,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
-// Must stay above 'dotenv/config': the wallet gate reads only the real launch environment.
+// Must stay above the .env loader: the wallet gate reads only the real launch environment.
 import { AGENT_WALLET_ENABLED, AGENT_WALLET_DISABLED_MESSAGE, isAgentWalletTool } from './lib/agent-wallet-gate.js';
-import 'dotenv/config';
+import './lib/dotenv-credentials.js';
 import { chatTools, handleChatTool } from './tools/chat.js';
 import { nftTools, handleNftTool } from './tools/nft.js';
 import { auditTools, handleAuditTool } from './tools/audit.js';

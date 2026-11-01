@@ -1,5 +1,5 @@
 // The agent wallet (key custody + autonomous signing) is OFF by default while open
-// bug-bounty findings are reviewed. This module must be imported BEFORE 'dotenv/config'
+// bug-bounty findings are reviewed. This module must be imported BEFORE the .env loader (lib/dotenv-credentials)
 // so only the real launch environment can enable it, never a .env file in the working dir.
 export const AGENT_WALLET_ENABLED = process.env.CHAINGPT_AGENT_WALLET_ENABLED === 'true';
 export const AGENT_WALLET_DISABLED_MESSAGE = 'The ChainGPT agent wallet is disabled in this release while security reports are reviewed. ' +
