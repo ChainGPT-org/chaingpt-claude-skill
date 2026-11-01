@@ -204,6 +204,12 @@ describe('Polymarket handler smoke', () => {
     expect(r.content[0].text).toContain('POLY_CLOB_API_KEY');
   });
 
+  it('proxy-wallet orders keep maker = proxy and signer = EOA', () => {
+    const proxy = ('0x' + 'a'.repeat(40)) as `0x${string}`, eoa = ('0x' + 'b'.repeat(40)) as `0x${string}`;
+    const o = buildOrder({ maker: proxy, signer: eoa, signatureType: 1, tokenId: '1', price: '0.5', size: '10', side: 'BUY' });
+    expect([o.maker, o.signer, o.signatureType]).toEqual([proxy, eoa, 1]);
+  });
+
   it('new orders use salts that survive the CLOB API\'s numeric salt exactly', () => {
     for (let i = 0; i < 50; i++) {
       const o = buildOrder({ maker: ('0x' + '1'.repeat(40)) as `0x${string}`, tokenId: '1', price: '0.5', size: '10', side: 'BUY' });

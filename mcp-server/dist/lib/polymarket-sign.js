@@ -79,7 +79,7 @@ export function buildOrder(opts) {
         // salt (a JSON number) round-trips exactly and matches what was signed.
         salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
         maker: opts.maker,
-        signer: opts.maker,
+        signer: opts.signer ?? opts.maker,
         taker: '0x0000000000000000000000000000000000000000',
         tokenId: opts.tokenId,
         makerAmount: (isBuy ? usdcAmount : sizeUnits).toString(),

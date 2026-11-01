@@ -118,6 +118,8 @@ export function buildOrder(opts: {
   feeRateBps?: number;
   /** Signature type (0 = EOA — default). */
   signatureType?: 0 | 1 | 2;
+  /** Signing EOA when it differs from maker (proxy / Safe wallets). Default: maker. */
+  signer?: Hex;
   /** Optional explicit salt. */
   salt?: string;
 }): PolymarketOrder {
@@ -148,7 +150,7 @@ export function buildOrder(opts: {
     // salt (a JSON number) round-trips exactly and matches what was signed.
     salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
     maker: opts.maker,
-    signer: opts.maker,
+    signer: opts.signer ?? opts.maker,
     taker: '0x0000000000000000000000000000000000000000',
     tokenId: opts.tokenId,
     makerAmount: (isBuy ? usdcAmount : sizeUnits).toString(),
