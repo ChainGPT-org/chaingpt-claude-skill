@@ -204,6 +204,13 @@ describe('Polymarket handler smoke', () => {
     expect(r.content[0].text).toContain('POLY_CLOB_API_KEY');
   });
 
+  it('new orders use salts that survive the CLOB API\'s numeric salt exactly', () => {
+    for (let i = 0; i < 50; i++) {
+      const o = buildOrder({ maker: ('0x' + '1'.repeat(40)) as `0x${string}`, tokenId: '1', price: '0.5', size: '10', side: 'BUY' });
+      expect(Number.isSafeInteger(Number(o.salt))).toBe(true);
+    }
+  });
+
   it('submit_signed_order sends the API key as owner and the signer as POLY_ADDRESS', async () => {
     process.env.POLY_CLOB_API_KEY = 'fixture-api-key';
     process.env.POLY_CLOB_SECRET = Buffer.from('fixture-secret').toString('base64');
@@ -211,9 +218,12 @@ describe('Polymarket handler smoke', () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true, orderID: '0x1' }), { status: 200 }));
     try {
       const maker = '0x' + 'a'.repeat(40), signer = '0x' + 'b'.repeat(40); // proxy wallet: maker != signer
-      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: { maker, signer, side: 0 } as any, signature: '0x' + 'a'.repeat(130) });
+      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: { maker, signer, side: 0, salt: '281474976710655' } as any, signature: '0x' + 'a'.repeat(130) });
       const init = spy.mock.calls[0][1] as RequestInit;
-      expect(JSON.parse(String(init.body)).owner).toBe('fixture-api-key');
+      const body = JSON.parse(String(init.body));
+      expect(body.owner).toBe('fixture-api-key');
+      expect(body.order.side).toBe('BUY');
+      expect(body.order.salt).toBe(281474976710655); // the signed value, exactly, as a JSON number
       expect((init.headers as Record<string, string>).POLY_ADDRESS).toBe(signer);
     } finally {
       spy.mockRestore();

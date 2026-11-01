@@ -99,7 +99,7 @@ export const aggregatorTools = [
                 sellDecimals: { type: 'number' },
                 from: { type: 'string', description: 'Order owner (0x…).' },
                 slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
-                validForMinutes: { type: 'number', minimum: 1, maximum: 1440, description: 'How long the order is valid (1-1440 minutes). Default 30.', default: 30 },
+                validForMinutes: { type: 'integer', minimum: 1, maximum: 1440, description: 'How long the order is valid (1-1440 whole minutes). Default 30.', default: 30 },
                 acknowledgeMainnet: { type: 'boolean' },
             },
             required: ['network', 'sellToken', 'buyToken', 'sellAmount', 'sellDecimals', 'from'],

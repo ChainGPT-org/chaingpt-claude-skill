@@ -75,8 +75,9 @@ export function buildOrder(opts) {
     }
     const isBuy = opts.side === 'BUY';
     return {
-        // Money-touching salt: must come from a CSPRNG, not Math.random().
-        salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(16).toString('hex')).toString(),
+        // Money-touching salt: must come from a CSPRNG, not Math.random(). 48 bits so the CLOB API's numeric
+        // salt (a JSON number) round-trips exactly and matches what was signed.
+        salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
         maker: opts.maker,
         signer: opts.maker,
         taker: '0x0000000000000000000000000000000000000000',

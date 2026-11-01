@@ -170,6 +170,14 @@ function formatPct(v: unknown, decimals = 1): string {
   return `${(n * 100).toFixed(decimals)}%`;
 }
 
+function clobSalt(salt: string): number {
+  const n = Number(salt);
+  if (!/^\d+$/.test(String(salt)) || !Number.isSafeInteger(n)) {
+    throw new Error('Order salt must be an integer below 2^53 so the CLOB API receives exactly the signed value. Rebuild the order with chaingpt_pm_place_order_payload.');
+  }
+  return n;
+}
+
 export async function handlePolymarketTool(
   name: string,
   args: Record<string, unknown> | undefined
@@ -374,7 +382,8 @@ export async function handlePolymarketTool(
       const orderType = String(args.orderType ?? 'GTC');
 
       const body = JSON.stringify({
-        order: { ...order, signature },
+        // CLOB wire format: side as "BUY"/"SELL" and salt as a number (the signed uint256 value, kept exact).
+        order: { ...order, salt: clobSalt(order.salt), side: order.side === 0 ? 'BUY' : 'SELL', signature },
         owner,
         orderType,
       });
