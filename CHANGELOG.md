@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+### Fixed
+- Tron unsigned builders decode the node-built transaction and refuse it unless txID, owner, recipient or contract, amount, call data and fee limit match the request.
+- `chaingpt_dex_approve_tx` checks caller-supplied decimals against the token's `decimals()`.
+- 1inch/CoW amounts must be positive decimals within the token's precision (no silent truncation); CoW order lifetime is 1-1440 minutes.
+- Polymarket order submission sends the CLOB API key as `owner` and the signer address as `POLY_ADDRESS`, as the CLOB API expects (fixes proxy-wallet orders).
+- Session status labels locally recorded grants as built, not signed; the on-chain state is authoritative.
+
 ## [1.24.0] - 2026-11-01
 ### Breaking: agent wallet is ERC-4337 session keys only
 - Removed `chaingpt_agent_wallet_sign_and_send` (direct EVM EOA signing), the three `chaingpt_agent_wallet_solana_*` tools and the two `chaingpt_agent_wallet_tron_*` tools. A locally held key cannot be bounded against an agent that runs as the same OS user; the remaining autonomous path, `chaingpt_agent_wallet_4337_sign_and_send`, acts through the user's smart account within caps the owner grants on-chain.

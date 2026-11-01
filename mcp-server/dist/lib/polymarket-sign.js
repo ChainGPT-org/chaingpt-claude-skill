@@ -91,7 +91,7 @@ export function buildOrder(opts) {
     };
 }
 /** Build HMAC headers for a POST to clob.polymarket.com endpoints. */
-export function clobHeaders(creds, method, path, bodyJson, maker) {
+export function clobHeaders(creds, method, path, bodyJson, signer) {
     const ts = Math.floor(Date.now() / 1000).toString();
     const message = ts + method + path + bodyJson;
     // Polymarket secret is base64; HMAC takes the decoded key bytes.
@@ -100,7 +100,7 @@ export function clobHeaders(creds, method, path, bodyJson, maker) {
     // Polymarket uses base64-URL-safe (replace + → -, / → _).
     const sig = hmac.toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
     return {
-        POLY_ADDRESS: maker,
+        POLY_ADDRESS: signer,
         POLY_SIGNATURE: sig,
         POLY_TIMESTAMP: ts,
         POLY_API_KEY: creds.apiKey,
