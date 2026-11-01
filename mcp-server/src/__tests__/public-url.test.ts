@@ -18,7 +18,7 @@ describe('assertPublicUrl', () => {
 
   it('refuses loopback, private, link-local, metadata and mapped addresses', async () => {
     for (const u of ['http://localhost/', 'http://127.0.0.1:8545/', 'http://10.1.2.3/', 'http://192.168.0.1/', 'http://169.254.169.254/',
-      'http://[::1]/', 'http://[fd00::1]/', 'http://mixed.example/', 'http://mapped.example/', 'http://0.0.0.0/']) {
+      'http://[::1]/', 'http://[fd00::1]/', 'http://[::7f00:1]/', 'http://[::ffff:0:7f00:1]/', 'http://[64:ff9b::a9fe:a9fe]/', 'http://[2002:7f00:1::]/', 'http://[fec0::1]/', 'http://mixed.example/', 'http://mapped.example/', 'http://0.0.0.0/']) {
       await expect(assertPublicUrl(u), u).rejects.toThrow(/loopback, private or link-local/);
     }
   });

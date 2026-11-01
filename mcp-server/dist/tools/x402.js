@@ -238,12 +238,14 @@ async function handleBuildPayment(args) {
     const chainId = chainIdForNetwork(network);
     // Resolve token: prefer the requirements' asset+extra; else the symbol map.
     let token;
+    let unknownNote = '';
     if (req?.asset && req.extra?.name && req.extra?.version) {
         const known = Object.values(X402_TOKENS).find((t) => t.address.toLowerCase() === req.asset.toLowerCase());
         token = { address: req.asset, name: req.extra.name, version: req.extra.version, decimals: known?.decimals ?? 0 };
         // Unknown token: show raw atomic units rather than guess decimals (a wrong guess misstates the price 10^n×).
+        // Display only: token.name is the EIP-712 domain name and must stay exactly as the contract expects.
         if (!known)
-            token.name = `${token.name} (unrecognised token: amounts shown in atomic units)`;
+            unknownNote = ' (unrecognised token: amounts shown in atomic units)';
     }
     else {
         token = resolveToken(network, String(args.symbol ?? 'USDC'));
@@ -268,7 +270,7 @@ async function handleBuildPayment(args) {
     if (req && req.scheme !== 'exact')
         throw new Error('Only the exact EIP-3009 scheme is supported.');
     // The paying server chooses the price in `requirements`; the caller must state what it is willing to pay.
-    if (req && !args.authorization) {
+    if (req && !args.signature) {
         if (!/^[0-9]+$/.test(String(args.maxAtomicAmount ?? ''))) {
             throw new Error(`The server asks for ${req.maxAmountRequired} atomic units of ${req.asset}. Pass maxAtomicAmount (your budget, atomic units) to build this payment.`);
         }
@@ -289,6 +291,8 @@ async function handleBuildPayment(args) {
     const validAfter = original ? Number(original.validAfter) : 0;
     if (!Number.isSafeInteger(validBefore) || !Number.isSafeInteger(validAfter) || validBefore <= now || validAfter > now || validAfter < 0)
         throw new Error('Invalid or expired payment validity window.');
+    if (!args.signature && validBefore - now > 3600)
+        throw new Error('Payment authorizations are limited to one hour of validity.');
     const nonce = original?.nonce ?? freshNonce();
     const { typedData, digest, authorization } = buildTransferWithAuthorizationTypedData({
         token, chainId, from, to: payTo, value: atomic, validAfter, validBefore, nonce,
@@ -307,7 +311,7 @@ async function handleBuildPayment(args) {
         const header = encodeXPaymentHeader(payload);
         return [
             `=== x402 X-PAYMENT header (signed) ===`,
-            `network: ${network}  token: ${token.name} (${token.address})`,
+            `network: ${network}  token: ${token.name}${unknownNote} (${token.address})`,
             `amount:  ${formatAtomic(atomic, token.decimals)}  to: ${payTo}`,
             ``,
             `Set this request header and retry the original request:`,
@@ -317,7 +321,7 @@ async function handleBuildPayment(args) {
     return [
         `=== x402 payment — UNSIGNED EIP-712 (sign this) ===`,
         `network:  ${network} (chainId ${chainId})`,
-        `token:    ${token.name} v${token.version} @ ${token.address}`,
+        `token:    ${token.name} v${token.version} @ ${token.address}${unknownNote}`,
         `pay:      ${formatAtomic(atomic, token.decimals)}  →  ${payTo}`,
         `from:     ${from}`,
         `expires:  ${new Date(validBefore * 1000).toISOString()}`,

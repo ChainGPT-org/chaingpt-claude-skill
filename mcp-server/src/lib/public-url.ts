@@ -8,7 +8,9 @@ for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], 
   ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 3]] as const) {
   blocked.addSubnet(net, bits, 'ipv4');
 }
-for (const [net, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]] as const) blocked.addSubnet(net, bits, 'ipv6');
+// ::/96 IPv4-compatible, ::ffff:0:0:0/96 SIIT, 64:ff9b::/96 NAT64, 2002::/16 6to4 all embed IPv4; fec0::/10 site-local.
+for (const [net, bits] of [['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b::', 96], ['2002::', 16], ['fc00::', 7], ['fec0::', 10],
+  ['fe80::', 10], ['ff00::', 8]] as const) blocked.addSubnet(net, bits, 'ipv6');
 
 function isBlocked(ip: string): boolean {
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);

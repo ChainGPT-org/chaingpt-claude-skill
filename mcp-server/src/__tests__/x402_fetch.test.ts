@@ -122,5 +122,17 @@ describe('x402_build_payment server-controlled fields', () => {
     expect(expires - Date.now()).toBeLessThanOrEqual(3600_000 + 5_000);
     expect(t).toContain('unrecognised token: amounts shown in atomic units');
     expect(t).toMatch(/pay:\s+10000 /);
+    // The label is display-only: the EIP-712 domain name is exactly what the server's requirements said.
+    expect(t).toMatch(/"name": "Weird"/);
+  });
+
+  it('an authorization passed back without a signature still needs the budget and the one-hour cap', async () => {
+    const req = { ...CHALLENGE.accepts[0] };
+    const authorization = { from: PAYER, to: PAYEE, value: '10000', validAfter: '0',
+      validBefore: String(Math.floor(Date.now() / 1000) + 365 * 86400), nonce: '0x' + '11'.repeat(32) };
+    let t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, authorization })).content[0].text;
+    expect(t).toContain('Pass maxAtomicAmount');
+    t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, authorization, maxAtomicAmount: '10000' })).content[0].text;
+    expect(t).toContain('limited to one hour');
   });
 });
