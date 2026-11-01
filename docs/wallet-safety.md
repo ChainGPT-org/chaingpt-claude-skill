@@ -134,5 +134,5 @@ passphrase and RPC hosts come from the launch environment. An env passphrase is 
 process the agent starts, so prefer the keychain where the agent has shell access. Host compromise defeats the local policy; ERC-4337 on-chain session-cap
 support remains beta until the published live acceptance loop exists.
 
-Protocol risk checks are workflow requirements. For deploys, a mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true` is passed. That binds the audit run to the bytecode; it does not judge the audit's findings. Solidity example
+Protocol risk checks are workflow requirements. For deploys, a mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true` is passed. Only the default full audit counts (custom `auditInstructions` do not). That binds the audit run to the bytecode; it does not judge the audit's findings. Solidity example
 compilation proves compilation only.

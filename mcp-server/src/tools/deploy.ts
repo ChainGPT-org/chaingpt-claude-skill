@@ -316,6 +316,7 @@ export async function handleDeployTool(
               `⚠ Mainnet deploy refused: this bytecode was not compiled here from source audited in this session.\n` +
               `  1. chaingpt_audit_contract sourceCode=<the exact source>\n` +
               `  2. chaingpt_deploy_compile source=<the same source>, then pass that bytecode here.\n` +
+              `Contracts with imports (e.g. OpenZeppelin): flatten to one file first, then audit and compile that exact flattened text.\n` +
               `Code compiled elsewhere: only with acknowledgeUnaudited: true after the user explicitly accepts an unaudited deploy.`,
           }],
         };

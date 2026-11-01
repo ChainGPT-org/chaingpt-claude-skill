@@ -201,6 +201,7 @@ export async function handleAaSessionTool(
         ``,
         `Then verify: chaingpt_aa_session_status chain=${args.chain} account=${account} permissionId=${permissionId}`,
         `Agent usage:  chaingpt_agent_wallet_4337_sign_and_send (policy gate + chain caps both apply).`,
+        `Earlier sessions for this agent stay live until revoked (chaingpt_aa_session_build_revoke); each has its own caps.`,
       ];
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }

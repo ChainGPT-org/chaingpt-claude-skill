@@ -102,6 +102,7 @@ describe('Tier-2 audit-before-mainnet-deploy binding', () => {
     expect(bytecodeAudited(BYTECODE.toUpperCase().replace('0X', '0x'))).toBe(true);
     const ok = await handleDeployTool('chaingpt_deploy_build_tx', { bytecode: BYTECODE, network: 'ethereum', acknowledgeMainnet: true });
     expect(ok.content[0].text).not.toContain('not compiled here from source audited');
+    expect(ok.content[0].text).toContain('Gas estimate failed'); // reached the RPC step: the gate let it through
     vi.restoreAllMocks();
   });
 });

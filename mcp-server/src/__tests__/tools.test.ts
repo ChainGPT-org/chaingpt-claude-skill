@@ -502,6 +502,19 @@ describe('handleAuditTool', () => {
     expect(result.content[0].text).toContain('Score: 85/100');
   });
 
+  it('only a default full audit records a deploy-gate receipt', async () => {
+    const mock = getAuditorMock();
+    mock.auditSmartContractBlob.mockResolvedValue({ data: { bot: 'OK' } });
+    const { recordCompile, bytecodeAudited } = await import('../lib/audit-receipts.js');
+    const custom = 'contract CustomOnly {}', full = 'contract FullAudit {}';
+    recordCompile(custom, '0xc0de01');
+    recordCompile(full, '0xc0de02');
+    await handleAuditTool('chaingpt_audit_contract', { sourceCode: custom, auditInstructions: 'Reply OK' });
+    await handleAuditTool('chaingpt_audit_contract', { sourceCode: full });
+    expect(bytecodeAudited('0xc0de01')).toBe(false);
+    expect(bytecodeAudited('0xc0de02')).toBe(true);
+  });
+
   it('handles follow-up questions with session', async () => {
     const mock = getAuditorMock();
     mock.auditSmartContractBlob.mockResolvedValue({

@@ -72,6 +72,11 @@ describe('smart-sessions encoders', () => {
     expect(getPermissionId(buildSession({ ...caps(), validUntil: FUTURE + 60 }))).not.toBe(a);
   });
 
+  it('default salt ignores address case (same grant, same permissionId)', () => {
+    const checksummed = getPermissionId(buildSession({ ...caps(), tokenCaps: [{ token: USDC as Hex, cap: 100_000_000n }] }));
+    expect(checksummed).toBe(getPermissionId(buildSession({ ...caps(), tokenCaps: [{ token: USDC.toLowerCase() as Hex, cap: 100_000_000n }] })));
+  });
+
   it('refuses expiries beyond a year, including millisecond timestamps', () => {
     expect(() => buildSession({ ...caps(), validUntil: Date.now() + 86_400_000 })).toThrow(/SECONDS, not milliseconds/);
     expect(() => buildSession({ ...caps(), validUntil: Math.floor(Date.now() / 1000) + 400 * 86_400 })).toThrow(/within 365 days/);

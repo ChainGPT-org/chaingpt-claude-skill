@@ -138,7 +138,7 @@ export function buildSession(caps) {
         sessionValidatorInitData: encodeAbiParameters([{ type: 'uint256' }, { type: 'address[]' }], [1n, [caps.agentAddress]]),
         // Default salt from the grant's own contents: re-grants of the same caps stay idempotent, while a different
         // grant to the same agent gets its own permissionId instead of colliding with the earlier one.
-        salt: caps.salt ?? keccak256(encodeAbiParameters([{ type: 'uint48' }, { type: 'uint48' }, { type: 'string' }], [caps.validUntil, caps.validAfter ?? 0, JSON.stringify(actions)])),
+        salt: caps.salt ?? keccak256(encodeAbiParameters([{ type: 'uint48' }, { type: 'uint48' }, { type: 'string' }], [caps.validUntil, caps.validAfter ?? 0, JSON.stringify(actions).toLowerCase()])),
         userOpPolicies: timePolicies,
         erc7739Policies: { allowedERC7739Content: [], erc1271Policies: [] },
         actions,

@@ -188,7 +188,7 @@ export function buildSession(caps: SessionCaps): Session {
     // grant to the same agent gets its own permissionId instead of colliding with the earlier one.
     salt: caps.salt ?? keccak256(encodeAbiParameters(
       [{ type: 'uint48' }, { type: 'uint48' }, { type: 'string' }],
-      [caps.validUntil, caps.validAfter ?? 0, JSON.stringify(actions)],
+      [caps.validUntil, caps.validAfter ?? 0, JSON.stringify(actions).toLowerCase()], // case-insensitive: hex only
     )),
     userOpPolicies: timePolicies,
     erc7739Policies: { allowedERC7739Content: [], erc1271Policies: [] },

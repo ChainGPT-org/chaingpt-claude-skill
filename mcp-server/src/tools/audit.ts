@@ -127,7 +127,8 @@ export async function handleAuditTool(
       });
 
       const botResponse = (response as any)?.data?.bot ?? JSON.stringify(response);
-      if (!isFollowUp && (response as any)?.data?.bot) recordAudit(String(args.sourceCode));
+      // Only the default full security audit counts as the deploy gate's audit; custom instructions could ask for anything.
+      if (!isFollowUp && !args.auditInstructions && (response as any)?.data?.bot) recordAudit(String(args.sourceCode));
       return { content: [{ type: 'text', text: botResponse }] };
     }
 
