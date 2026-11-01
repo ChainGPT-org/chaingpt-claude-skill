@@ -46,28 +46,6 @@ checks. Example READMEs include formatting and test commands.
 | **boot** | Spawns `mcp-server/launch.mjs`, completes the MCP `initialize` handshake, and asserts ≥142 unique `chaingpt_*` tools with valid metadata and no agent-wallet tools (a planted `.env` must not enable them). The child receives fixture credentials and isolated application state. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
 | **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~1–3 min | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
-## Manual live verification — Solana agent wallet (devnet, ~5 min, free)
-
-The autonomous Solana send path can't run in CI (it moves coins). Verify it on devnet:
-
-```bash
-export CHAINGPT_AGENT_WALLET_ENABLED=true   # the agent wallet is off by default
-export SOLANA_RPC_URL=https://api.devnet.solana.com
-export CHAINGPT_SOLANA_KEYSTORE_FILE=/tmp/sol-test/keystore.json
-export CHAINGPT_AGENT_POLICY_FILE=/tmp/sol-test/policy.json
-export CHAINGPT_ACTIVITY_FILE=/tmp/sol-test/activity.jsonl
-```
-
-1. `chaingpt_agent_wallet_solana_init` → note the address.
-2. Airdrop 1 devnet SOL: `solana airdrop 1 <address> -u devnet` (or a web faucet).
-3. As administrator, configure policy: `{"version":1,"killSwitch":false,"solana":{"enabled":true,"allowedPrograms":["11111111111111111111111111111111"],"maxTxLamports":"10000000","requireMemo":true},"assetLimits":[{"chain":"solana-devnet","asset":"SOL","allowedRecipients":["<agent address>"],"maxTxAmount":"1000000","maxDailyAmount":"3000000"}]}`. Replace the placeholder with the actual dedicated test-wallet address.
-4. Pin `solana.genesisHashes.devnet` to the full devnet genesis hash obtained independently from a trusted reference RPC. Never infer cluster identity from an RPC URL label.
-5. `chaingpt_solana_build_transfer_tx` — 0.001 SOL to the agent's own address, network=devnet.
-6. `chaingpt_agent_wallet_solana_sign_and_send txBase64=<…> memo=devnet-e2e network=devnet operationId=devnet-self-transfer-1`
-7. Assert: confirmed signature on solscan (?cluster=devnet), `activity.jsonl` gained a `chain:"solana"` entry, and `chaingpt_agent_wallet_status` shows the Solana 24h window.
-
-Mainnet refusal proofs (free, no funds): an unfunded mainnet wallet + any Jupiter tx → simulation fails → refusal (fail-closed proof). An off-allowlist program → deterministic refusal.
-
 ## Manual live verification — ERC-4337 session keys (Base Sepolia)
 
 The on-chain-refusal claim ships only after this loop passes. It is required before the agent wallet can be considered for re-enabling. Start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment:
@@ -236,8 +214,8 @@ If you add a capability and don't add a test, **someone else will break it withi
 
 `signing_safety.test.ts` covers durable reservations, exclusive filesystem locks, retained uncertain
 operations, strict ledger/policy validation, native/token isolation and fee budgets.
-`signing_handlers.test.ts` faults EVM broadcasts after acceptance and Solana confirmation polling;
-it asserts reservation persistence precedes broadcast and a repeated operation never signs again.
+`signing_handlers.test.ts` checks that an ERC-4337 receipt proves inclusion of the reserved user operation
+before its reservation is released.
 Plan tests cover durable in-flight claims, immutable records and refusal to overwrite/delete
 unreconciled plans. x402 tests sign the original typed data with a fixture key, preserve its nonce
 and verify both valid and tampered authorizations. Facilitator tests check the actual JSON wire body.

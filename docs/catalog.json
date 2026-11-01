@@ -1,5 +1,5 @@
 {
-  "tools": 155,
+  "tools": 149,
   "skills": 24,
   "templates": 11,
   "solidityBlocks": 47,
@@ -22,20 +22,10 @@
       "chaingpt_agent_wallet_status",
       "chaingpt_agent_wallet_balances",
       "chaingpt_agent_wallet_policy",
-      "chaingpt_agent_wallet_sign_and_send",
       "chaingpt_agent_wallet_serve_ui"
     ],
     "agent_wallet_4337": [
       "chaingpt_agent_wallet_4337_sign_and_send"
-    ],
-    "agent_wallet_solana": [
-      "chaingpt_agent_wallet_solana_init",
-      "chaingpt_agent_wallet_solana_address",
-      "chaingpt_agent_wallet_solana_sign_and_send"
-    ],
-    "agent_wallet_tron": [
-      "chaingpt_agent_wallet_tron_address",
-      "chaingpt_agent_wallet_tron_sign_and_send"
     ],
     "aggregators": [
       "chaingpt_dex_1inch_quote",

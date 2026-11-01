@@ -11,7 +11,7 @@ This plugin builds real-money transactions. Its optional agent wallet can also s
 
 ## Scope — what counts as critical here
 
-1. Anything that lets a prompt-injected agent **exceed the policy gate**: per-tx caps, daily velocity caps, allowlists, the kill switch, the Solana lamport caps, the ERC-4337 session gates.
+1. Anything that lets a prompt-injected agent **exceed its limits**: the on-chain ERC-4337 session caps, or the local policy (per-tx and daily caps, allowlists, kill switch).
 2. Anything that exposes **key material**: the AES-256-GCM keystores, the keychain passphrase path, signatures over attacker-chosen payloads.
 3. Anything that makes a custody-free tool **sign or broadcast** instead of returning unsigned payloads.
 4. Localhost dashboard auth bypass (token, session, Host/Origin checks).

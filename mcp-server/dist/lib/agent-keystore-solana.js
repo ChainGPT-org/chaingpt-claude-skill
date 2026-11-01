@@ -78,7 +78,7 @@ export function loadSolanaKeypair() {
     const file = readSolanaKeystoreFile();
     if (!file) {
         throw new Error(`Solana keystore not found at ${solanaKeystorePath()}. ` +
-            `Call chaingpt_agent_wallet_solana_init first.`);
+            `Nothing to export.`);
     }
     const plain = decryptSecret(file, pass);
     let keypair;

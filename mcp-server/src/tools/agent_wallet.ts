@@ -56,7 +56,7 @@ import { BLUE_CHIPS } from '../lib/agent-blue-chips.js';
  *   3. Default policy: killSwitch=true → refuses every signing operation
  *      until the admin explicitly relaxes the rules.
  *
- *   4. Every chaingpt_agent_wallet_sign_and_send call:
+ *   4. Every chaingpt_agent_wallet_4337_sign_and_send call:
  *        a. Loads the policy file (fresh).
  *        b. Runs checkPolicy() — pure code, deterministic, ignores LLM context.
  *        c. Refuses if any rule fails. The agent CAN be prompt-injected into
@@ -828,7 +828,7 @@ async function renderDashboard(res: ServerResponse, address: string, chains: str
   // Activity
   const activity = readActivity(20);
   const activityRows = activity.length === 0
-    ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
+    ? `<div class="subtle" style="padding:12px">No transactions yet. When the agent runs <code>chaingpt_agent_wallet_4337_sign_and_send</code> and the policy allows it, entries will appear here.</div>`
     : activity.map((a) => {
         const isSolana = a.chain.startsWith('solana');
         const solCluster = isSolana && a.chain !== 'solana' ? `?cluster=${a.chain.slice('solana-'.length)}` : '';

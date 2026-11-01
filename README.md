@@ -6,18 +6,18 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-The prepared local checkout exposes 142 MCP tools by default (155 with the optional agent wallet) across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend, agent‑wallet signing), **perps** (Hyperliquid + legacy Drift; hosted Drift data unavailable), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an optional **agent wallet** (off by default; localhost admin dashboard + local signing policy, requires host isolation). 142 tools are listed by default; the 13 agent‑wallet tools appear only when `CHAINGPT_AGENT_WALLET_ENABLED=true`. Every other tool is custody‑free: it returns an unsigned transaction you sign in your own wallet. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
+The prepared local checkout exposes 142 MCP tools by default (149 with the optional agent wallet) across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend), **perps** (Hyperliquid + legacy Drift; hosted Drift data unavailable), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an optional **agent wallet** (off by default; localhost admin dashboard + local signing policy, requires host isolation). 142 tools are listed by default; the 13 agent‑wallet tools appear only when `CHAINGPT_AGENT_WALLET_ENABLED=true`. Every other tool is custody‑free: it returns an unsigned transaction you sign in your own wallet. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
 
 [![npm version](https://img.shields.io/badge/version-1.23.2-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [Testing and coverage](TESTING.md)
 [![Live-API smoke](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml/badge.svg)](https://github.com/ChainGPT-org/chaingpt-claude-skill/actions/workflows/smoke.yml)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-155-blueviolet?style=flat-square)](#-mcp-server--155-tools)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-149-blueviolet?style=flat-square)](#-mcp-server--149-tools)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-skill-blueviolet?style=flat-square)](https://code.claude.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?style=flat-square)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
-[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--155-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
+[Quickstart](#-quickstart) · [Why this exists](#-why-this-exists) · [How it works](#-how-it-works) · [Security model](#-security-model) · [MCP tools](#-mcp-server--149-tools) · [Agent Wallet](#-the-agent-wallet-dashboard) · [vs alternatives](#-how-this-compares) · [Docs](https://docs.chaingpt.org/dev-docs-b2b-saas-api-and-sdk)
 
 </div>
 
@@ -52,8 +52,6 @@ loads this exact local directory for the session.
 
 ## 👀 60-second tour
 
-![Agent wallet refuses an over-cap transfer](docs/demo/agent-wallet-refusal.gif)
-
 > The agent tries to overspend; the policy gate refuses in code. (The agent wallet is off by default; it needs host isolation from the agent to be a hard boundary. See the security model.)
 
 
@@ -71,15 +69,15 @@ You:    prepare a daily $100 ETH DCA for approval
 Claude: → chaingpt_strategy_dca_plan → save_plan
         Each scheduled tick prepares a fresh quote and unsigned swap.
         You confirm and sign externally, then the journal records the hash.
-        Direct agent-wallet transfers use durable claims and operation IDs.
+        Autonomous steps run only through a capped ERC-4337 session key.
 ```
 
 ```text
 You:    (prompt injection, or just a bad idea) send 5 ETH to 0xattacker
-Claude: → chaingpt_agent_wallet_sign_and_send   (only if the operator enabled the agent wallet)
-        ⛔ Policy refused this transaction.
-        Reason: To-address not in allowedToAddresses (5 entries).
-        No MCP tool can relax these rules; OS isolation keeps the agent out of the policy file.
+Claude: → chaingpt_agent_wallet_4337_sign_and_send   (only if the operator enabled the agent wallet)
+        ⛔ Refused: the smart account's on-chain session caps do not allow it.
+        The caps were granted by the account owner's wallet; the agent's
+        session key cannot raise them, from the plugin or from the shell.
 ```
 
 That last refusal is the product: the MCP surface does not expose policy editing; signatures are checked under the host-isolation assumptions, with durable native and token budgets. See [Security model](#-security-model).
@@ -89,7 +87,7 @@ That last refusal is the product: the MCP surface does not expose policy editing
 | You are | Start here | Your 3 sections |
 |---|---|---|
 | **A trader who wants reviewed execution** | "prepare a daily $100 ETH DCA for approval" | [Agent Wallet](#-the-agent-wallet-dashboard) · `skills/scheduled-autonomy` · [Security model](#-security-model) |
-| **An agent builder** | `/agents` → `web3-researcher` / `defi-trader` | [MCP tools](#-mcp-server--155-tools) · `agents/` + `hooks/` · x402 + ERC-8004 skills |
+| **An agent builder** | `/agents` → `web3-researcher` / `defi-trader` | [MCP tools](#-mcp-server--149-tools) · `agents/` + `hooks/` · x402 + ERC-8004 skills |
 | **A Solidity dev** | "generate and audit an ERC-20" | [Templates](#-10-project-templates) · [Contract patterns](#-45-smart-contract-patterns) · deploy skill |
 
 ## 🆕 What's new
@@ -181,7 +179,7 @@ In a fresh Claude Code session:
 /mcp
 ```
 
-You should see `chaingpt` listed with **142 tools** (155 with the agent wallet enabled).
+You should see `chaingpt` listed with **142 tools** (149 with the agent wallet enabled).
 
 ### Step 7 — Open the dashboard
 
@@ -333,7 +331,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
          │
          ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  MCP Server — 155 tools (the runtime)                                  │
+│  MCP Server — 149 tools (the runtime)                                  │
 │                                                                        │
 │  ChainGPT AI       │  Web3 toolkit    │  Mainnet execution             │
 │  • chat / NFT      │  • wallet scan   │  • EVM swap (OO/1inch/CoW)    │
@@ -365,7 +363,7 @@ Four cooperating layers. Each does one thing well. Claude routes between them au
 
 3. **Templates + Patterns** (`templates/` + `patterns/`, 11 template files + 45+ Solidity patterns) — production‑ready scaffolds (Next.js chatbot, NFT marketplace, DeFi dashboard, React Native wallet, Nuxt news app, …) and Solidity examples (ERC‑20 variants, ERC‑4626 vaults, UUPS upgradeable, Governor, role‑based access, timelocks, …). Claude composes from these instead of regenerating boilerplate from scratch.
 
-4. **MCP Server** (`mcp-server/`, 155 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
+4. **MCP Server** (`mcp-server/`, 149 tools) — the runtime. A `@modelcontextprotocol/sdk` server that exposes every state‑changing capability as an MCP tool. Direct API calls, on‑chain reads via public RPC, custody‑free transaction building. Claude doesn't *write code that calls* APIs — Claude calls them directly through the MCP layer.
 
 **Plus a mock server** (`mock-server/`) — a full drop‑in replacement for the ChainGPT API at `http://localhost:3001`. Realistic responses, simulated latency, credit tracking. Build and CI without burning a single credit.
 
@@ -453,9 +451,9 @@ from an agent that has host shell/file/browser access.
 
 <br/>
 
-## 🔌 MCP Server — 155 Tools
+## 🔌 MCP Server — 149 Tools
 
-The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 155 tools across the categories below (142 listed by default; the 13 agent‑wallet tools need `CHAINGPT_AGENT_WALLET_ENABLED=true`). Detailed sections follow.
+The MCP server gives Claude **direct API and on‑chain access** — not just code generation. 149 tools across the categories below (142 listed by default; the 7 agent‑wallet tools need `CHAINGPT_AGENT_WALLET_ENABLED=true`). Detailed sections follow.
 
 | Category | Tools |
 | --- | ---: |
@@ -475,10 +473,10 @@ The MCP server gives Claude **direct API and on‑chain access** — not just co
 | Base and Mini Apps | 6 |
 | ERC-8004 | 3 |
 | Portfolio, strategies and plans | 13 |
-| Agent wallet signers and administration | 13 |
+| Agent wallet (ERC-4337 session signer and administration) | 7 |
 | Tron builders and reads | 12 |
 | Overview dashboard | 1 |
-| **Total** | **155** |
+| **Total** | **149** |
 
 Generated inventory: [catalog.json](docs/catalog.json). Check with `node scripts/check-catalog.mjs`.
 
@@ -612,7 +610,7 @@ Hyperliquid provides live mainnet data and supports **signed EIP‑712 L1 action
 
 ### Tron (TVM) — 14 tools
 
-Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as the EVM agent wallet** (only the address encoding differs), so there is no separate keystore. Custody‑free builders return an UNSIGNED tx (sign in TronLink); the optional agent wallet (off by default) can sign behind a fail‑closed `tron` policy. OpenOcean/1inch/Moralis don't support Tron, so DEX routing is SunSwap‑direct. See [reference/tron.md](reference/tron.md).
+Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as the EVM agent wallet** (only the address encoding differs), so there is no separate keystore. Custody‑free builders return an UNSIGNED tx (sign in TronLink); there is no autonomous Tron signer. OpenOcean/1inch/Moralis don't support Tron, so DEX routing is SunSwap‑direct. See [reference/tron.md](reference/tron.md).
 
 | Tool | What it does |
 |---|---|
@@ -621,7 +619,6 @@ Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as
 | `chaingpt_tron_build_transfer_tx` · `_build_trc20_transfer_tx` | Unsigned TRX + TRC‑20 transfers (custody‑free, mainnet‑ack‑gated) |
 | `chaingpt_tron_dex_sunswap_quote` | SunSwap swap quote (V2 `getAmountsOut`) |
 | `chaingpt_tron_lend_justlend_account` · `_lend_justlend_build_tx` | JustLend liquidity read + unsigned approve/supply/withdraw/borrow/repay |
-| `chaingpt_agent_wallet_tron_address` · `_sign_and_send` | Agent's Tron address + autonomous build→sign→broadcast under the `tron` policy gate |
 
 ### Portfolio + strategy plans + backtest (7 tools)
 
@@ -632,15 +629,15 @@ Non‑EVM chain (TVM). The agent's Tron account uses the **same secp256k1 key as
 | `chaingpt_strategy_save_plan` · `_load_plan` · `_list_plans` · `_delete_plan` | Persist strategy plans to `~/.chaingpt-mcp/plans/` |
 | `chaingpt_backtest_grid` | Replay a buy/sell ladder against historical CoinGecko prices; reports realized P&L from grid spreads vs buy‑and‑hold |
 
-### Agent wallet (13 tools, off by default)
+### Agent wallet (7 tools, off by default)
 
-Hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true` is set in the launch environment. 7 EVM tools below, plus 3 Solana, 2 Tron and 1 ERC-4337 signer tools. See [the dashboard section](#-the-agent-wallet-dashboard) for the threat model and admin flow.
+Hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true` is set in the launch environment. The only signer is the ERC-4337 session key: it acts through a smart account whose spending caps the owner grants on-chain (`chaingpt_aa_session_build_grant`), so a compromised agent cannot raise them. Direct EOA, Solana and Tron signing was removed in 1.24; move funds left on an old agent address with `node scripts/export-agent-key.mjs` (run it yourself). See [the dashboard section](#-the-agent-wallet-dashboard) for the threat model and admin flow.
 
 | Tool | What it does |
 |---|---|
 | `chaingpt_agent_wallet_init` | AES‑256‑GCM encrypted keystore, scrypt KDF |
 | `chaingpt_agent_wallet_address` · `_status` · `_balances` · `_policy` | Read‑only views |
-| `chaingpt_agent_wallet_sign_and_send` | EVM signer; Solana, Tron and ERC-4337 have dedicated signers. Policy gate runs deterministically; refuses with reason on any violation. |
+| `chaingpt_agent_wallet_4337_sign_and_send` | Session-key userOp through the smart account; local policy plus on-chain session caps both apply |
 | `chaingpt_agent_wallet_serve_ui` | Start the localhost admin dashboard on 127.0.0.1:8787 |
 
 ### Optional API keys
@@ -818,7 +815,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 
 | | **This skill** | Goat SDK (Crossmint) | Coinbase AgentKit | MetaMask Snaps + MCP | Heurist |
 |---|---|---|---|---|---|
-| **Surface** | 155 MCP tools across multiple categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
+| **Surface** | 149 MCP tools across multiple categories incl. perps + prediction markets + cross‑chain + agent wallet | Plugin per protocol (extensible) | EVM swap + on‑chain + Base‑native | Wallet + LLM bridge | Image gen + LLM marketplace |
 | **Custody model** | User‑sovereign default + optional bounded agent EOA (off by default) with admin policy gate | User‑sovereign | User wallet (CDP) or smart wallet | MetaMask signs everything | N/A (no signing) |
 | **Mainnet safety** | Mandatory `acknowledgeMainnet: true` + audit‑before‑deploy gate | Per‑plugin | Default mainnet | MetaMask UI confirmation | N/A |
 | **AI enrichment** | DexScreener + GoPlus + News + AI signal composed into one call | None native | None native | None native | Image + LLM only |
@@ -833,7 +830,7 @@ There are several Web3 + AI agent toolkits in flight. They aim at the same outco
 | **Test harness** | 6 layers + manual live smoke + human-reviewed repairs | Per‑plugin | Examples only | Snap testing | None |
 | **License** | MIT | MIT | Apache‑2 | MIT | Various |
 
-**Where this wins:** breadth (155 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
+**Where this wins:** breadth (149 tools), AI‑enriched composed tools (the DexScreener + GoPlus + News + AI signal combo), mainnet safety guard rails, and the agent‑wallet admin dashboard.
 
 **Where Goat / AgentKit win:** if you want pluggable per‑protocol extensions over a fixed core surface, Goat's plugin model is cleaner. If you're Coinbase‑native (CDP, Base, Smart Wallet end‑to‑end), AgentKit is the obvious choice.
 
@@ -888,7 +885,7 @@ chaingpt-claude-skill/
 ├── templates/                        # 11 template files (+ composition guide)
 ├── patterns/                         # 45+ Solidity patterns (6 files)
 ├── migration/                        # Platform migration guides (3 files)
-├── mcp-server/                       # MCP server — 155 tools, offline regression tests
+├── mcp-server/                       # MCP server — 149 tools, offline regression tests
 ├── mock-server/                      # Mock API for zero-credit dev — 26 tests
 ├── scripts/                          # validate.sh + test-all.sh + demo launcher
 └── examples/                         # Working code — JS + Python
@@ -902,7 +899,7 @@ chaingpt-claude-skill/
 
 ### Shipped (1.0 → 1.9)
 - [x] Complete API reference for all 7 ChainGPT products
-- [x] **155 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), Tron (TRC‑20 · SunSwap · JustLend · agent‑wallet signing), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
+- [x] **149 MCP tools** across ChainGPT AI, EVM + Solana DEX (OpenOcean · 1inch v6 · CoW · Jupiter), DeFi (Aave · Lido · EigenLayer · Pendle · Morpho), Tron (TRC‑20 · SunSwap · JustLend), perps (Hyperliquid · Drift), prediction markets (Polymarket), cross‑chain (Across), Solana lending (Marginfi · Kamino), multi‑protocol portfolio snapshot, strategy plan persistence + backtest
 - [x] **Agent wallet (off by default)** — encrypted keystore + admin policy gate (a hard boundary only with OS isolation from the agent) + localhost admin dashboard (assets / policy / activity / settings tabs, kill switch, 9 policy templates including 🚨 unrestricted)
 - [x] **Custody‑free signing** — every state‑changing tool outside the optional agent wallet returns an unsigned tx / EIP‑712 intent; those tools never see a private key. `acknowledgeMainnet: true` gate on every mainnet write
 - [x] 11 template files including multi‑product compositions
