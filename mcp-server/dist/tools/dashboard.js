@@ -667,6 +667,11 @@ function createHandler(port) {
             }
             // Logout
             if (url === '/logout' && method === 'POST') {
+                if (!checkOrigin(req, port)) {
+                    res.writeHead(403, { 'content-type': 'text/plain' });
+                    res.end('Origin check failed');
+                    return;
+                }
                 const sid = parseCookies(req.headers.cookie)[COOKIE];
                 if (sid)
                     sessions.delete(sid);
@@ -745,8 +750,9 @@ function createHandler(port) {
 // ── Server lifecycle ───────────────────────────────────────────────
 async function startServer(port) {
     if (runningServer && runningPort === port) {
-        // Re-issue a fresh token but reuse server
+        // Re-issue a fresh token but reuse server; a rotated token must also end sessions opened with the old one.
         adminToken = provisionAdminToken();
+        sessions.clear();
         return { url: `http://127.0.0.1:${port}`, token: adminToken, alreadyRunning: true };
     }
     if (runningServer && runningPort !== port) {
@@ -755,6 +761,7 @@ async function startServer(port) {
         runningPort = null;
     }
     adminToken = provisionAdminToken();
+    sessions.clear();
     const handler = createHandler(port);
     const server = createServer(handler);
     await new Promise((resolveListen, rejectListen) => {

@@ -1,4 +1,5 @@
 import { SmartContractAuditor } from '@chaingpt/smartcontractauditor';
+import { recordAudit } from '../lib/audit-receipts.js';
 let _auditor = null;
 function getClient() {
     if (!_auditor) {
@@ -107,6 +108,8 @@ export async function handleAuditTool(name, args) {
                 ...(args.sessionId ? { sdkUniqueId: args.sessionId } : {}),
             });
             const botResponse = response?.data?.bot ?? JSON.stringify(response);
+            if (!isFollowUp && response?.data?.bot)
+                recordAudit(String(args.sourceCode));
             return { content: [{ type: 'text', text: botResponse }] };
         }
         if (name === 'chaingpt_audit_history') {
