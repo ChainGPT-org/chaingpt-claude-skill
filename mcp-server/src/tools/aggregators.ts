@@ -315,17 +315,24 @@ export async function handleAggregatorTool(
         };
       }
 
+      // The order is assembled from the quote, so it must still be the order that was asked for.
+      if (String(q.sellToken).toLowerCase() !== String(sellToken).toLowerCase()
+        || String(q.buyToken).toLowerCase() !== String(buyToken).toLowerCase()
+        || BigInt(q.sellAmount) + BigInt(q.feeAmount ?? 0) > sellAmount) {
+        throw new Error('CoW quote does not match the requested tokens or sell amount; refusing to build the order.');
+      }
+
       // Apply slippage to buyAmount: buyAmountMin = buyAmount * (10000 - slippage) / 10000
       const buyAmountMin = (BigInt(q.buyAmount) * BigInt(10_000 - slippageBps)) / 10_000n;
 
       const order = {
         sellToken: q.sellToken,
         buyToken: q.buyToken,
-        receiver: q.receiver ?? from,
+        receiver: from, // never a quote-supplied receiver
         sellAmount: q.sellAmount,
         buyAmount: buyAmountMin.toString(),
         validTo,
-        appData: q.appData ?? '0x0000000000000000000000000000000000000000000000000000000000000000',
+        appData: '0x0000000000000000000000000000000000000000000000000000000000000000', // as quoted: no hooks
         feeAmount: q.feeAmount,
         kind: 'sell',
         partiallyFillable: false,

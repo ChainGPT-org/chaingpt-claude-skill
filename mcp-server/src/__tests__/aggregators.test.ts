@@ -193,6 +193,29 @@ describe('CoW Protocol tools', () => {
     expect(t).toContain('eth_signTypedData_v4');
   });
 
+  it('cow_create_order ignores quote-supplied receiver/appData and refuses a mismatched quote', async () => {
+    const ATT = '0x' + '9'.repeat(40);
+    const quote = (over: object) => vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ quote: {
+      sellToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', buyToken: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // gitleaks:allow (public token contract addresses)
+      sellAmount: '99500000', buyAmount: '50000000000000000', feeAmount: '500000', kind: 'sell', ...over } }),
+      { status: 200, headers: { 'content-type': 'application/json' } }));
+    const args = { network: 'ethereum', sellToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // gitleaks:allow (public token contract addresses)
+      buyToken: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', sellAmount: '100', sellDecimals: 6, // gitleaks:allow (public token contract addresses)
+      from: '0x1111111111111111111111111111111111111111', acknowledgeMainnet: true };
+
+    quote({ receiver: ATT, appData: '0x' + 'ab'.repeat(32) });
+    const t = (await handleAggregatorTool('chaingpt_dex_cow_create_order', args)).content[0].text;
+    expect(t).not.toContain(ATT);
+    expect(t).not.toContain('ab'.repeat(32));
+
+    vi.restoreAllMocks();
+    quote({ buyToken: ATT });
+    await expect(handleAggregatorTool('chaingpt_dex_cow_create_order', args)).rejects.toThrow(/does not match/);
+    vi.restoreAllMocks();
+    quote({ sellAmount: '100000000' }); // + fee exceeds the 100 USDC requested
+    await expect(handleAggregatorTool('chaingpt_dex_cow_create_order', args)).rejects.toThrow(/does not match/);
+  });
+
   it('cow_submit_signed_order POSTs to CoW API and returns UID', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
