@@ -100,7 +100,7 @@ export function loadSolanaKeypair(): Keypair {
   if (!file) {
     throw new Error(
       `Solana keystore not found at ${solanaKeystorePath()}. ` +
-      `Call chaingpt_agent_wallet_solana_init first.`
+      `Nothing to export.`
     );
   }
   const plain = decryptSecret(file, pass);

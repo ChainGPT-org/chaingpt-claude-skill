@@ -2,7 +2,7 @@ import { readReservations } from './signing-journal.js';
 /**
  * Activity log for agent-initiated transactions.
  *
- * Every time chaingpt_agent_wallet_sign_and_send broadcasts a tx (after the
+ * Every time an agent-wallet signer broadcasts a tx (after the
  * policy check passes), we append an entry here. The dashboard reads this
  * to render the Activity tab.
  *

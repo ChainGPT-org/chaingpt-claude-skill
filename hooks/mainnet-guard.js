@@ -7,7 +7,7 @@
  * this hook forces Claude Code's permission prompt for the moments that
  * move (or arm) real funds:
  *
- *   1. chaingpt_agent_wallet_sign_and_send  — signs + broadcasts autonomously
+ *   1. chaingpt_agent_wallet_*sign_and_send — the agent-wallet signer (ERC-4337 session key)
  *   2. any tx-building / order tool called WITH acknowledgeMainnet: true
  *      (the unsigned tx is about to be handed to a wallet for signing)
  *
@@ -36,9 +36,6 @@ process.stdin.on('end', () => {
 
     // Catch-all: ANY agent-wallet signer (including chains added later) asks; specific branches below only refine the reason.
     const isAgentSend = /chaingpt_agent_wallet_\w*sign_and_send$/.test(tool);
-    const isAgentTronSend = /chaingpt_agent_wallet_tron_sign_and_send$/.test(tool);
-    // NOTE: the EVM regex does NOT match the solana tool name — both tests are required.
-    const isAgentSolanaSend = /chaingpt_agent_wallet_solana_sign_and_send$/.test(tool);
     const isAgent4337Send = /chaingpt_agent_wallet_4337_sign_and_send$/.test(tool);
     const isSubmitUserOp = /chaingpt_aa_submit_userop$/.test(tool);
     const hasAck = input && input.acknowledgeMainnet === true;
@@ -55,15 +52,6 @@ process.stdin.on('end', () => {
     } else if (isSubmitUserOp) {
       ask = true;
       why = `A SIGNED userOperation is about to be submitted to a bundler (${(input.bundlerUrl || '?').slice(0, 60)}). Confirm the signed payload is the grant/op you intended.`;
-    } else if (isAgentSolanaSend) {
-      ask = true;
-      why = `Agent wallet is about to SIGN AND BROADCAST a Solana transaction autonomously: memo=${input.memo || '(none)'}, tx=${String(input.txBase64 || '').length} base64 chars. The Solana policy gate (program allowlist + lamport caps) has its own checks; this prompt is the human layer on top.`;
-    } else if (isAgentTronSend) {
-      ask = true;
-      const what = input.kind === 'trc20_transfer' ? `${input.amount || '?'} ${input.token || '?'} (TRC-20) to ${input.to || '?'}`
-        : input.kind === 'contract_call' ? `contract call ${input.functionSelector || '?'} on ${input.contract || '?'} with ${input.callValueTrx || '0'} TRX, args=${String(input.parameter || '(none)').slice(0, 260)}`
-        : `${input.amount || '?'} TRX to ${input.to || '?'}`;
-      why = `Agent wallet is about to SIGN AND BROADCAST a Tron transaction autonomously on ${input.network || 'mainnet'}: ${what}, memo=${input.memo || '(none)'}. The Tron policy gate has its own checks; this prompt is the human layer on top.`;
     } else if (isAgentSend) {
       ask = true;
       const v = input.valueWei ? `${input.valueWei} wei` : 'contract call (no native value)';

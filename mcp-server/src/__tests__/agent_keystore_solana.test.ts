@@ -80,6 +80,6 @@ describe('Solana keystore', () => {
   });
 
   it('missing keystore gives the init hint', () => {
-    expect(() => loadSolanaKeypair()).toThrow(/chaingpt_agent_wallet_solana_init/);
+    expect(() => loadSolanaKeypair()).toThrow(/Solana keystore not found/);
   });
 });

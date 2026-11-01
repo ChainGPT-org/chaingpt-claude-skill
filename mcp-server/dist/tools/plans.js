@@ -357,7 +357,7 @@ async function handlePlanToolUnlocked(name, args) {
                     lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${when})`);
                     lines.push(`    ${JSON.stringify(detail)}`);
                     if (args.claim === true)
-                        lines.push(`    operationId=${journal[String(s.id)].operationId} (pass unchanged to sign_and_send)`);
+                        lines.push(`    operationId=${journal[String(s.id)].operationId} (pass unchanged to chaingpt_agent_wallet_4337_sign_and_send)`);
                 }
                 if (due.length > limit)
                     lines.push(`(+${due.length - limit} more due — raise limit)`);

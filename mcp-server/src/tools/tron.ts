@@ -247,7 +247,7 @@ function unsignedTxBlock(label: string, tx: { txID: string; raw_data_hex: string
     `txID:          ${tx.txID}`,
     ...extra,
     '',
-    'This is an UNSIGNED transaction. Sign it in TronLink, or autonomously via chaingpt_agent_wallet_tron_sign_and_send (policy-fenced).',
+    'This is an UNSIGNED transaction. Sign it in TronLink.',
     `raw_data_hex:  ${tx.raw_data_hex}`,
   ].join('\n'));
 }

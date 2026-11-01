@@ -36,14 +36,13 @@ afterAll(() => {
 });
 
 describe('Agent wallet tool definitions', () => {
-  it('exposes 7 agent-wallet tools', () => {
+  it('exposes 6 agent-wallet tools (no direct EOA signer)', () => {
     expect(agentWalletTools.map((t) => t.name)).toEqual([
       'chaingpt_agent_wallet_init',
       'chaingpt_agent_wallet_address',
       'chaingpt_agent_wallet_status',
       'chaingpt_agent_wallet_balances',
       'chaingpt_agent_wallet_policy',
-      'chaingpt_agent_wallet_sign_and_send',
       'chaingpt_agent_wallet_serve_ui',
     ]);
   });
@@ -390,74 +389,6 @@ describe('Policy validation (admin UI input)', () => {
     // SECURITY: backup must NOT leak to 0644 (the prior copyFileSync behavior)
     const mode = statSync(path + '.bak').mode & 0o777;
     expect(mode).toBe(0o600);
-  });
-});
-
-describe('sign_and_send end-to-end gate', () => {
-  beforeEach(() => resetState());
-
-  it('refuses when wallet not initialized', async () => {
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
-      chain: 'base',
-      to: '0x1111111111111111111111111111111111111111',
-      valueWei: '100',
-    });
-    expect(r.content[0].text).toContain('not initialized');
-  });
-
-  it('first-run policy refuses signing before network access', async () => {
-    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
-    // New default has killSwitch OFF but an allowlist of DEX/lending routers.
-    // 0x1111… is not in it, so the send is still refused — by the allowlist gate.
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
-      chain: 'base',
-      to: '0x1111111111111111111111111111111111111111',
-      valueWei: '100',
-    });
-    expect(r.content[0].text).toContain('Policy refused');
-    expect(r.content[0].text).toMatch(/kill switch/i);
-  });
-
-  it('engaging the kill switch refuses everything regardless of allowlist', async () => {
-    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
-    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: true }));
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
-      chain: 'base',
-      to: '0x6352a56caadc4f1e25cd6c75970fa768a3304e64', // an allowlisted router
-      valueWei: '100',
-    });
-    expect(r.content[0].text).toContain('Policy refused');
-    expect(r.content[0].text).toMatch(/kill switch/i);
-  });
-
-  it('refuses for unknown chain even after wallet init', async () => {
-    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
-    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: false }));
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
-      chain: 'nonsense-chain',
-      to: '0x1111111111111111111111111111111111111111',
-    });
-    expect(r.content[0].text).toContain('Unknown or non-EVM chain');
-  });
-
-  it('refuses for malformed to-address', async () => {
-    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
-    writeFileSync(process.env.CHAINGPT_AGENT_POLICY_FILE!, JSON.stringify({ version: 1, killSwitch: false }));
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_sign_and_send', {
-      chain: 'base',
-      to: 'not-an-address',
-    });
-    expect(r.content[0].text).toContain('Invalid to-address');
-  });
-
-  it('status surfaces policy state + passphrase env state', async () => {
-    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
-    const r = await handleAgentWalletTool('chaingpt_agent_wallet_status', {});
-    const t = r.content[0].text;
-    expect(t).toContain('Agent wallet status');
-    expect(t).toContain('Policy digest');
-    expect(t).toMatch(/Kill switch:\s+ON/i); // balanced default has killSwitch off
-    expect(t).toContain('Passphrase env:  set');
   });
 });
 

@@ -1,7 +1,11 @@
 # Wallet signing contract and migration
 
-Version 1.23 changes the signing API. Unsigned builders remain available for external wallets.
-No release or funded-chain acceptance is implied by the offline tests.
+Version 1.24 keeps a single autonomous signer: `chaingpt_agent_wallet_4337_sign_and_send`, an ERC-4337
+session key acting through the user's smart account within caps the account owner grants on-chain.
+Direct EOA, Solana and Tron signing was removed, because a locally held key cannot be bounded against an
+agent that runs as the same OS user. Move funds left on an old agent address with
+`node scripts/export-agent-key.mjs` (run it yourself, in a terminal). Unsigned builders remain available
+for external wallets. No funded-chain acceptance is implied by the offline tests.
 
 ## Enable deliberately
 
@@ -19,19 +23,15 @@ Restricted signing supports:
 
 | Surface | Supported autonomous operations |
 | --- | --- |
-| EVM / ERC-4337 inner calls | Native transfers to non-contract recipients; exact ERC-20 `transfer` and bounded `approve` |
-| Solana | One direct SOL or SPL `transferChecked`, optionally with ComputeBudget instructions; no lookup tables or opaque CPIs |
-| Tron | Native TRX or structured TRC-20 transfers; generic contract calls require external signing |
+| ERC-4337 inner calls | Native transfers to non-contract recipients; exact ERC-20 `transfer` and bounded `approve` |
 
 DEX, lending and other opaque protocol transactions must use the unsigned builder and external
 signing until a reviewed adapter can bind their complete asset effects. Existing `unrestricted`
 mode remains an explicit administrator opt-out from per-operation limits. It does not provide
 bounded spending and is not the suggested workaround for an unsupported protocol.
 
-Solana signing also requires administrator-verified `solana.genesisHashes` pins for each enabled
-cluster. Compare the RPC genesis hash with the pin on signing calls, including custom RPC overrides.
-A URL or a tool argument alone is not proof of cluster identity. Read-only address/balance views do
-not require pins.
+Policy files may still contain `solana` and `tron` sections and Solana/Tron asset rules; they are
+validated for compatibility but no signer uses them.
 
 ## Independent native and asset budgets
 
@@ -78,8 +78,6 @@ contracts and existing approvals; these limits bind signed intent, not arbitrary
 
 Every agent signer requires `operationId`: 1–180 safe characters, unique to one logical action.
 Use the same id and same intent for every retry. A reused id with a changed intent is refused.
-EVM endpoint fallback broadcasts identical bytes with the same nonce and hash. Solana signs the
-exact simulated message once. A stale blockhash fails safely and needs reconciliation.
 
 Before signing, the process takes an exclusive filesystem lock and fsyncs a reservation under
 `signing-reservations/`, beside the activity ledger. It persists signed bytes and the expected

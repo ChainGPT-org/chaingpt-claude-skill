@@ -40,11 +40,9 @@ import { baseTools, handleBaseTool } from './tools/base.js';
 import { miniappTools, handleMiniappTool } from './tools/miniapp.js';
 import { erc8004Tools, handleErc8004Tool } from './tools/erc8004.js';
 import { dashboardTools, handleDashboardTool } from './tools/dashboard.js';
-import { agentWalletSolanaTools, handleAgentWalletSolanaTool } from './tools/agent_wallet_solana.js';
 import { aaSessionTools, handleAaSessionTool } from './tools/aa_sessions.js';
 import { agentWallet4337Tools, handleAgentWallet4337Tool } from './tools/agent_wallet_4337.js';
 import { tronTools, handleTronTool } from './tools/tron.js';
-import { agentWalletTronTools, handleAgentWalletTronTool } from './tools/agent_wallet_tron.js';
 import { recordToolUse } from './lib/usage.js';
 import { toolArgsValidator } from './lib/tool-args.js';
 const API_KEY = process.env.CHAINGPT_API_KEY;
@@ -91,13 +89,11 @@ const TOOLS = [
     ...erc8004Tools,
     ...planTools,
     ...(AGENT_WALLET_ENABLED ? agentWalletTools : []),
-    ...(AGENT_WALLET_ENABLED ? agentWalletSolanaTools : []),
     ...(AGENT_WALLET_ENABLED ? agentWallet4337Tools : []),
     ...aaSessionTools,
     ...aaTools,
     ...solanaTools,
     ...tronTools,
-    ...(AGENT_WALLET_ENABLED ? agentWalletTronTools : []),
     ...dashboardTools,
 ];
 const argsError = toolArgsValidator(TOOLS);
@@ -218,10 +214,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // ORDER: sub-prefixes must route before the generic agent-wallet prefix.
         if (name.startsWith('chaingpt_agent_wallet_4337'))
             return await handleAgentWallet4337Tool(name, args);
-        if (name.startsWith('chaingpt_agent_wallet_solana'))
-            return await handleAgentWalletSolanaTool(name, args);
-        if (name.startsWith('chaingpt_agent_wallet_tron'))
-            return await handleAgentWalletTronTool(name, args);
         if (name.startsWith('chaingpt_agent_wallet'))
             return await handleAgentWalletTool(name, args);
         if (name.startsWith('chaingpt_dashboard'))
