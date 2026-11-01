@@ -75,7 +75,7 @@ export const aggregatorTools = [
                 amountIn: { type: 'string' },
                 decimalsIn: { type: 'number' },
                 from: { type: 'string', description: 'Signer / from address (0x…).' },
-                slippageBps: { type: 'number', description: 'Max slippage in basis points. Default 100 (1%).', default: 100 },
+                slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in basis points. Default 100 (1%).', default: 100 },
                 acknowledgeMainnet: { type: 'boolean' },
             },
             required: ['network', 'inToken', 'outToken', 'amountIn', 'decimalsIn', 'from'],
@@ -98,7 +98,7 @@ export const aggregatorTools = [
                 sellAmount: { type: 'string', description: 'Decimal amount of sellToken.' },
                 sellDecimals: { type: 'number' },
                 from: { type: 'string', description: 'Order owner (0x…).' },
-                slippageBps: { type: 'number', description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
+                slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
                 validForMinutes: { type: 'number', description: 'How long the order is valid. Default 30.', default: 30 },
                 acknowledgeMainnet: { type: 'boolean' },
             },
@@ -253,11 +253,11 @@ export async function handleAggregatorTool(name, args) {
             const sellDecimals = Number(args.sellDecimals);
             const sellAmount = rawAmount(String(args.sellAmount), sellDecimals);
             const slippageBps = Number(args.slippageBps ?? 100);
-            if (!Number.isFinite(slippageBps) || slippageBps < 0 || slippageBps > 10000) {
+            if (!Number.isFinite(slippageBps) || !Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps > 5000) {
                 return {
                     content: [{
                             type: 'text',
-                            text: `slippageBps must be between 0 and 10000 (got ${args.slippageBps}). 100 = 1%; 10000 = 100% (max).`,
+                            text: `slippageBps must be an integer between 0 and 5000 (got ${args.slippageBps}). 100 = 1%; 5000 = 50% (max).`,
                         }],
                 };
             }
@@ -287,16 +287,22 @@ export async function handleAggregatorTool(name, args) {
                         }],
                 };
             }
+            // The order is assembled from the quote, so it must still be the order that was asked for.
+            if (String(q.sellToken).toLowerCase() !== String(sellToken).toLowerCase()
+                || String(q.buyToken).toLowerCase() !== String(buyToken).toLowerCase()
+                || BigInt(q.sellAmount) + BigInt(q.feeAmount ?? 0) > sellAmount) {
+                throw new Error('CoW quote does not match the requested tokens or sell amount; refusing to build the order.');
+            }
             // Apply slippage to buyAmount: buyAmountMin = buyAmount * (10000 - slippage) / 10000
             const buyAmountMin = (BigInt(q.buyAmount) * BigInt(10_000 - slippageBps)) / 10000n;
             const order = {
                 sellToken: q.sellToken,
                 buyToken: q.buyToken,
-                receiver: q.receiver ?? from,
+                receiver: from, // never a quote-supplied receiver
                 sellAmount: q.sellAmount,
                 buyAmount: buyAmountMin.toString(),
                 validTo,
-                appData: q.appData ?? '0x0000000000000000000000000000000000000000000000000000000000000000',
+                appData: '0x0000000000000000000000000000000000000000000000000000000000000000', // as quoted: no hooks
                 feeAmount: q.feeAmount,
                 kind: 'sell',
                 partiallyFillable: false,

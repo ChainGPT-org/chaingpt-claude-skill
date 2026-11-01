@@ -2,6 +2,16 @@ import { createPublicClient, http, encodeFunctionData, parseUnits, formatUnits, 
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from 'viem/chains';
 import { fallback } from 'viem';
 import { CHAINS, rpcEndpoints } from '../lib/chains.js';
+import { fetchErc20Decimals } from '../lib/agent-erc20.js';
+// The caller's decimals scale the amount (amount × 10^decimals); a wrong value moves 10^n× the intended
+// funds in a tx the user may sign without noticing. Use the token's own decimals() and refuse a mismatch.
+async function checkedDecimals(network, token, claimed) {
+    const onChain = await fetchErc20Decimals(network, token);
+    if (Number(claimed) !== onChain) {
+        throw new Error(`decimals ${String(claimed)} does not match ${token} on ${network} (decimals() returns ${onChain}). Re-check the token and amount.`);
+    }
+    return onChain;
+}
 /**
  * Tier-3d DeFi protocols on MAINNET. Custody-free.
  *
@@ -351,7 +361,7 @@ export async function handleDefiTool(name, args) {
                 return { content: [{ type: 'text', text: MAINNET_REFUSAL('supply', network) }] };
             }
             const asset = String(args.asset);
-            const decimals = Number(args.decimals);
+            const decimals = await checkedDecimals(network, asset, args.decimals);
             const amount = parseUnits(String(args.amount), decimals);
             const from = String(args.from);
             const onBehalfOf = (args.onBehalfOf || from);
@@ -391,7 +401,7 @@ export async function handleDefiTool(name, args) {
                 return { content: [{ type: 'text', text: MAINNET_REFUSAL('borrow', network) }] };
             }
             const asset = String(args.asset);
-            const decimals = Number(args.decimals);
+            const decimals = await checkedDecimals(network, asset, args.decimals);
             const amount = parseUnits(String(args.amount), decimals);
             const from = String(args.from);
             const onBehalfOf = (args.onBehalfOf || from);
@@ -432,7 +442,7 @@ export async function handleDefiTool(name, args) {
                 return { content: [{ type: 'text', text: MAINNET_REFUSAL('repay', network) }] };
             }
             const asset = String(args.asset);
-            const decimals = Number(args.decimals);
+            const decimals = String(args.amount) === 'max' ? 0 : await checkedDecimals(network, asset, args.decimals);
             const amountInput = String(args.amount);
             const amount = amountInput === 'max' ? maxUint() : parseUnits(amountInput, decimals);
             const from = String(args.from);
@@ -473,7 +483,7 @@ export async function handleDefiTool(name, args) {
                 return { content: [{ type: 'text', text: MAINNET_REFUSAL('withdraw', network) }] };
             }
             const asset = String(args.asset);
-            const decimals = Number(args.decimals);
+            const decimals = String(args.amount) === 'max' ? 0 : await checkedDecimals(network, asset, args.decimals);
             const amountInput = String(args.amount);
             const amount = amountInput === 'max' ? maxUint() : parseUnits(amountInput, decimals);
             const from = String(args.from);
@@ -543,7 +553,7 @@ export async function handleDefiTool(name, args) {
             }
             const strategy = String(args.strategy);
             const token = String(args.token);
-            const decimals = Number(args.decimals);
+            const decimals = await checkedDecimals('ethereum', token, args.decimals);
             const amount = parseUnits(String(args.amount), decimals);
             const data = encodeFunctionData({
                 abi: EIGEN_DEPOSIT_ABI,

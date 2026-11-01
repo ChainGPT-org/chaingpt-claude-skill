@@ -1,4 +1,5 @@
 import { httpJson } from '../lib/http.js';
+import { assertPublicUrl } from '../lib/public-url.js';
 import { X402_VERSION, X402_TOKENS, chainIdForNetwork, buildTransferWithAuthorizationTypedData, encodeXPaymentHeader, decodeBase64Header, parseAccepts, formatAtomic, freshNonce, X402_NETWORK_CHAINID, } from '../lib/x402.js';
 import { isAddress, verifyTypedData } from 'viem';
 /**
@@ -36,7 +37,8 @@ export const x402Tools = [
                 payTo: { type: 'string', description: 'Recipient address if not using `requirements`.' },
                 amount: { type: 'string', description: 'Human amount (e.g. "0.01") if not using `requirements`. Converted via token decimals.' },
                 maxAmountRequired: { type: 'string', description: 'Atomic amount override (takes precedence over `amount`).' },
-                validForSeconds: { type: 'number', description: 'Authorization validity window from now (default 600s).' },
+                maxAtomicAmount: { type: 'string', pattern: '^[0-9]+$', description: 'Your budget in atomic units. REQUIRED with `requirements` (the server sets the price there); a higher price is refused.' },
+                validForSeconds: { type: 'number', minimum: 1, maximum: 3600, description: 'Authorization validity window from now (default 600s, max 3600).' },
                 authorization: { type: 'object', description: 'Exact authorization returned by the unsigned call; REQUIRED with signature. Includes original nonce and validity bounds.' },
                 signature: { type: 'string', description: 'Optional 0x signature of the typed data; if present, returns the final X-PAYMENT header.' },
             },
@@ -73,6 +75,7 @@ export const x402Tools = [
                 method: { type: 'string', enum: ['GET', 'POST'], description: 'Default GET.', default: 'GET' },
                 body: { type: 'string', description: 'Request body for POST (sent as application/json).' },
                 from: { type: 'string', description: "Payer address (0x…). Enables building the unsigned typed data on a 402." },
+                maxAtomicAmount: { type: 'string', pattern: '^[0-9]+$', description: 'Your budget in atomic token units. Required to build a payment for a 402: a price above it is refused.' },
                 xPaymentHeader: { type: 'string', description: 'Base64 X-PAYMENT header from chaingpt_x402_build_payment (after signing) — completes the paid request.' },
                 maxBodyChars: { type: 'number', description: 'Truncate the response body in the output. Default 4000.', default: 4000 },
             },
@@ -155,10 +158,9 @@ async function handleDecode(args) {
 }
 async function handleX402Fetch(args) {
     const url = String(args.url ?? '');
-    if (!/^https:\/\//.test(url))
-        throw new Error('url must be https://');
+    await assertPublicUrl(url, { httpsOnly: true });
     const method = String(args.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET';
-    const maxBodyChars = Math.max(200, Number(args.maxBodyChars ?? 4000));
+    const maxBodyChars = Math.min(100_000, Math.max(200, Number(args.maxBodyChars ?? 4000)));
     const headers = { accept: 'application/json' };
     if (args.body !== undefined)
         headers['content-type'] = 'application/json';
@@ -168,8 +170,13 @@ async function handleX402Fetch(args) {
         method,
         headers,
         body: args.body !== undefined ? String(args.body) : undefined,
+        // Never follow: the https/public-host check covers this URL only, and X-PAYMENT must not travel on.
+        redirect: 'manual',
         signal: AbortSignal.timeout(30_000),
     });
+    if (res.status >= 300 && res.status < 400) {
+        return `HTTP ${res.status} redirect from ${url} to ${res.headers.get('location') ?? '(no Location)'} — not followed. Call x402_fetch on the target if you trust it.`;
+    }
     const bodyText = await res.text();
     if (res.status !== 402) {
         const paid = args.xPaymentHeader ? ' (paid via X-PAYMENT)' : '';
@@ -202,7 +209,7 @@ async function handleX402Fetch(args) {
     lines.push(`Valid for: ${req.maxTimeoutSeconds ?? 600}s`);
     lines.push('');
     if (!args.from) {
-        lines.push('Pass `from` (the payer wallet address) to get the UNSIGNED EIP-3009 typed data to sign.');
+        lines.push('Pass `from` (the payer wallet address) and `maxAtomicAmount` (your budget) to get the UNSIGNED EIP-3009 typed data to sign.');
         lines.push('Flow: this tool (with from) → sign typed data in your wallet → chaingpt_x402_build_payment');
         lines.push('(same requirements + authorization + signature) → re-call this tool with xPaymentHeader=<the header>.');
         lines.push('');
@@ -210,8 +217,12 @@ async function handleX402Fetch(args) {
         lines.push(JSON.stringify(req, null, 2));
         return lines.join('\n');
     }
+    if (args.maxAtomicAmount === undefined) {
+        lines.push(`Pass maxAtomicAmount (your budget in atomic units, e.g. ${req.maxAmountRequired} to accept this price) to build the payment.`);
+        return lines.join('\n');
+    }
     // Build the unsigned payment for this exact challenge (custody-free — user signs).
-    const built = await handleBuildPayment({ from: String(args.from), requirements: req });
+    const built = await handleBuildPayment({ from: String(args.from), requirements: req, maxAtomicAmount: args.maxAtomicAmount });
     lines.push(built);
     lines.push('');
     lines.push(`After signing: chaingpt_x402_build_payment from=${args.from} requirements=<above> authorization=<original> signature=<sig>`);
@@ -229,7 +240,10 @@ async function handleBuildPayment(args) {
     let token;
     if (req?.asset && req.extra?.name && req.extra?.version) {
         const known = Object.values(X402_TOKENS).find((t) => t.address.toLowerCase() === req.asset.toLowerCase());
-        token = { address: req.asset, name: req.extra.name, version: req.extra.version, decimals: known?.decimals ?? 6 };
+        token = { address: req.asset, name: req.extra.name, version: req.extra.version, decimals: known?.decimals ?? 0 };
+        // Unknown token: show raw atomic units rather than guess decimals (a wrong guess misstates the price 10^n×).
+        if (!known)
+            token.name = `${token.name} (unrecognised token: amounts shown in atomic units)`;
     }
     else {
         token = resolveToken(network, String(args.symbol ?? 'USDC'));
@@ -253,6 +267,15 @@ async function handleBuildPayment(args) {
     }
     if (req && req.scheme !== 'exact')
         throw new Error('Only the exact EIP-3009 scheme is supported.');
+    // The paying server chooses the price in `requirements`; the caller must state what it is willing to pay.
+    if (req && !args.authorization) {
+        if (!/^[0-9]+$/.test(String(args.maxAtomicAmount ?? ''))) {
+            throw new Error(`The server asks for ${req.maxAmountRequired} atomic units of ${req.asset}. Pass maxAtomicAmount (your budget, atomic units) to build this payment.`);
+        }
+        if (/^[0-9]+$/.test(String(req.maxAmountRequired)) && BigInt(req.maxAmountRequired) > BigInt(args.maxAtomicAmount)) {
+            throw new Error(`Price ${req.maxAmountRequired} exceeds maxAtomicAmount ${args.maxAtomicAmount}; refusing to build the payment.`);
+        }
+    }
     if (!/^[0-9]+$/.test(atomic) || BigInt(atomic) <= 0n)
         throw new Error('Payment amount must be a positive atomic integer.');
     const now = Math.floor(Date.now() / 1000);
@@ -261,7 +284,8 @@ async function handleBuildPayment(args) {
     const original = args.authorization;
     if (original && (typeof original !== 'object' || String(original.from).toLowerCase() !== from.toLowerCase() || String(original.to).toLowerCase() !== payTo.toLowerCase() || String(original.value) !== atomic || !/^0x[0-9a-fA-F]{64}$/.test(original.nonce) || !/^[0-9]+$/.test(String(original.validAfter)) || !/^[0-9]+$/.test(String(original.validBefore))))
         throw new Error('Authorization does not match the payer, recipient and amount.');
-    const validBefore = original ? Number(original.validBefore) : now + Number(args.validForSeconds ?? req?.maxTimeoutSeconds ?? 600);
+    // The server's maxTimeoutSeconds must not stretch a payment authorization beyond an hour.
+    const validBefore = original ? Number(original.validBefore) : now + Math.min(3600, Number(args.validForSeconds ?? req?.maxTimeoutSeconds ?? 600));
     const validAfter = original ? Number(original.validAfter) : 0;
     if (!Number.isSafeInteger(validBefore) || !Number.isSafeInteger(validAfter) || validBefore <= now || validAfter > now || validAfter < 0)
         throw new Error('Invalid or expired payment validity window.');

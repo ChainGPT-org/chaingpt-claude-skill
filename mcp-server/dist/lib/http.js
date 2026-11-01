@@ -23,6 +23,9 @@ function requestDiagnostics(url, headers) {
             safe.username = '[redacted]';
             safe.password = '[redacted]';
         }
+        // Keys embedded in the path (e.g. /v2/<key> RPC/bundler URLs): long opaque segments that are not 0x hex.
+        safe.pathname = safe.pathname.split('/').map(seg => seg.length >= 20 && /^[A-Za-z0-9_-]+$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg) && !/^0x[0-9a-f]+$/i.test(seg)
+            ? '[redacted]' : seg).join('/');
         for (const name of new Set(safe.searchParams.keys())) {
             if (credentialName.test(name)) {
                 authenticated = true;
@@ -61,7 +64,7 @@ export async function httpJson(url, opts = {}) {
                 throw new Error('Authenticated HTTP failure');
             }
             const text = await safeText(res);
-            throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
+            throw new Error(`HTTP ${res.status} ${res.statusText} for ${diagnostics.url}${text ? ` — ${text.slice(0, 200)}` : ''}`);
         }
         return (await res.json());
     }
