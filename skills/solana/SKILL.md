@@ -25,7 +25,7 @@ This skill exposes a small foundation for building **unsigned Solana transaction
 
 Identical to the rest of the plugin: **custody-free**. The plugin builds the transaction; the user signs it elsewhere. There is no MCP tool that accepts a `secretKey`, `mnemonic`, or `seedPhrase` parameter, and a unit test asserts this surface contract so future additions cannot accidentally break it.
 
-If the user wants policy-gated signing (agent wallet pattern), the existing **agent wallet** skill provides that for EVM. A Solana counterpart is queued as a follow-up to this foundation.
+If the user wants policy-gated signing, the **agent wallet** skill covers EVM, Solana, Tron and ERC-4337 signers. It is disabled by default (`CHAINGPT_AGENT_WALLET_ENABLED=true` in the launch environment enables it).
 
 ## Mainnet safety gate
 

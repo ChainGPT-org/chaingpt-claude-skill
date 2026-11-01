@@ -5,6 +5,10 @@ No release or funded-chain acceptance is implied by the offline tests.
 
 ## Enable deliberately
 
+The agent wallet is off by default: its tools are hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true`
+is set in the MCP server launch environment (a `.env` file cannot enable it). Turn it on only where the
+agent is isolated from the wallet files, keychain and dashboard token.
+
 A new policy has `killSwitch: true`, Solana/Tron disabled and ERC-4337 disabled.
 Existing policy files are not silently rewritten. Every load validates the full schema;
 string booleans, negative limits, unknown fields and malformed asset rules fail closed.

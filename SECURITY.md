@@ -1,13 +1,13 @@
 # Security Policy
 
-This plugin builds and (opt-in) signs real-money transactions. We treat security reports as the highest-priority work in the repo.
+This plugin builds real-money transactions. Its optional agent wallet can also sign them, but it is disabled by default (`CHAINGPT_AGENT_WALLET_ENABLED=true` in the MCP server launch environment turns it on). We treat security reports as the highest-priority work in the repo.
 
 ## Reporting a vulnerability
 
-- **Private disclosure:** open a [GitHub Security Advisory](https://github.com/ChainGPT-org/chaingpt-claude-skill/security/advisories/new) (preferred), or email security@chaingpt.org.
+- **Private disclosure:** open a [GitHub Security Advisory](https://github.com/ChainGPT-org/chaingpt-claude-skill/security/advisories/new) (preferred), or report through the [Help Center](https://help.chaingpt.org/) or support@chaingpt.org, the channels named on the [bug bounty page](https://docs.chaingpt.org/bug-bounty).
 - Please include: affected tool/file, reproduction steps, and impact (can it move funds? leak a key? bypass a policy gate?).
 - We aim to acknowledge within 48 hours and to ship a fix release for fund-safety issues within 7 days.
-- No bounty program is published for this repo yet; serious findings will be credited in the release notes (or kept anonymous on request).
+- This repository is excluded from ChainGPT's bug bounty payments (see the [bug bounty page](https://docs.chaingpt.org/bug-bounty)). Reports are still reviewed and fixed, and serious findings are credited in the release notes (or kept anonymous on request).
 
 ## Scope — what counts as critical here
 
