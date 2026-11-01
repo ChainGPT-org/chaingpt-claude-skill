@@ -236,6 +236,24 @@ describe('durable scheduled claims', () => {
     await handlePlanTool('chaingpt_strategy_mark_step', { name: 'claim-test', stepId: 1, txHash: 'fixture-hash' });
     expect((await handlePlanTool('chaingpt_strategy_due_steps', { name: 'claim-test' })).content[0].text).toContain('Plan is COMPLETE');
   });
+  it('delete + re-save of a finished plan reuses step operationIds (signer dedupe still applies)', async () => {
+    const claimId = async (name: string) =>
+      (await handlePlanTool('chaingpt_strategy_due_steps', { name, claim: true })).content[0].text.match(/operationId=(plan:[a-f0-9]+)/)?.[1];
+    const step = { id: 1, atUnix: 1, action: 'buy', usd: 10 };
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [step] } });
+    const original = await claimId('resave');
+    expect(original).toMatch(/^plan:/);
+    await handlePlanTool('chaingpt_strategy_mark_step', { name: 'resave', stepId: 1, txHash: 'fixture-hash' });
+    expect((await handlePlanTool('chaingpt_strategy_delete_plan', { name: 'resave', confirm: true })).content[0].text).toContain('Deleted');
+
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [step] } });
+    expect(await claimId('resave')).toBe(original);
+
+    // A materially different step is a different action and gets a different id.
+    rmSync(TMP_DIR, { recursive: true, force: true });
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [{ ...step, usd: 20 }] } });
+    expect(await claimId('resave')).not.toBe(original);
+  });
   it('allows only one concurrent claim writer', async () => {
     await handlePlanTool('chaingpt_strategy_save_plan', { name: 'race', payload: { steps: [{ id: 1, atUnix: 1 }] } });
     const results = await Promise.allSettled([1, 2].map(() => handlePlanTool('chaingpt_strategy_due_steps', { name: 'race', claim: true })));
