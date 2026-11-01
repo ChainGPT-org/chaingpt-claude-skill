@@ -43,7 +43,7 @@ checks. Example READMEs include formatting and test commands.
 | **mock-test** | 61 Vitest cases against the mock-server's Express app via Supertest | ~10s | localhost | [`mock-server/src/__tests__/`](mock-server/src/__tests__/) |
 | **examples** | JS and Python syntax checks; Go vet and offline Cargo check when those toolchains are installed | varies | module downloads disabled | [`examples/`](examples/) |
 | **patterns** | `solc` compile every ```` ```solidity ```` block under `patterns/*.md` (47 blocks) with `@openzeppelin/contracts` + `-upgradeable` resolved from `node_modules`. Catches OZ-import bitrot, version-drift NatSpec errors, and event/return-type collisions. | ~10s | none | [`scripts/check-patterns.mjs`](scripts/check-patterns.mjs) |
-| **boot** | Spawns `mcp-server/launch.mjs`, completes the MCP `initialize` handshake, and asserts ≥155 unique `chaingpt_*` tools with valid metadata. The child receives fixture credentials and isolated application state. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
+| **boot** | Spawns `mcp-server/launch.mjs`, completes the MCP `initialize` handshake, and asserts ≥142 unique `chaingpt_*` tools with valid metadata and no agent-wallet tools (a planted `.env` must not enable them). The child receives fixture credentials and isolated application state. | ~2s | none | [`scripts/mcp-boot-smoke.mjs`](scripts/mcp-boot-smoke.mjs) |
 | **smoke** | ~39 live-API cases hitting DexScreener, GoPlus, OpenOcean, Across, Hyperliquid, Polymarket, Morpho, Pendle, Drift, Jupiter, Marginfi, Kamino, etc. Catches drift between our wiring and what upstreams actually return. | ~1–3 min | **yes** | [`mcp-server/src/smoke-test.ts`](mcp-server/src/smoke-test.ts) |
 
 ## Manual live verification — Solana agent wallet (devnet, ~5 min, free)
@@ -51,6 +51,7 @@ checks. Example READMEs include formatting and test commands.
 The autonomous Solana send path can't run in CI (it moves coins). Verify it on devnet:
 
 ```bash
+export CHAINGPT_AGENT_WALLET_ENABLED=true   # the agent wallet is off by default
 export SOLANA_RPC_URL=https://api.devnet.solana.com
 export CHAINGPT_SOLANA_KEYSTORE_FILE=/tmp/sol-test/keystore.json
 export CHAINGPT_AGENT_POLICY_FILE=/tmp/sol-test/policy.json
@@ -69,7 +70,7 @@ Mainnet refusal proofs (free, no funds): an unfunded mainnet wallet + any Jupite
 
 ## Manual live verification — ERC-4337 session keys (Base Sepolia)
 
-The on-chain-refusal claim ships only after this loop passes (tag gate for v1.21.0):
+The on-chain-refusal claim ships only after this loop passes. It is required before the agent wallet can be considered for re-enabling. Start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment:
 
 1. Create + fund a Biconomy Nexus 1.x account on Base Sepolia (Biconomy SDK or dashboard; outside the plugin). Deploy/choose a test ERC-20.
 2. `chaingpt_agent_wallet_init` (if needed) → the agent EOA is the session key.

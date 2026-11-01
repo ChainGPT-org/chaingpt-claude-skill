@@ -5,6 +5,10 @@ No release or funded-chain acceptance is implied by the offline tests.
 
 ## Enable deliberately
 
+The agent wallet is off by default: its tools are hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true`
+is set in the MCP server launch environment (a `.env` file cannot enable it). Turn it on only where the
+agent is isolated from the wallet files, keychain and dashboard token.
+
 A new policy has `killSwitch: true`, Solana/Tron disabled and ERC-4337 disabled.
 Existing policy files are not silently rewritten. Every load validates the full schema;
 string booleans, negative limits, unknown fields and malformed asset rules fail closed.
@@ -130,6 +134,5 @@ passphrase and RPC hosts come from the launch environment. An env passphrase is 
 process the agent starts, so prefer the keychain where the agent has shell access. Host compromise defeats the local policy; ERC-4337 on-chain session-cap
 support remains beta until the published live acceptance loop exists.
 
-Audit-before-deploy and protocol risk checks are workflow requirements. The unsigned deployment
-builder's acknowledgment flag does not prove that its bytecode passed an audit. Solidity example
+Protocol risk checks are workflow requirements. For deploys, a mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true` is passed. Only the default full audit counts (custom `auditInstructions` do not). That binds the audit run to the bytecode; it does not judge the audit's findings. Solidity example
 compilation proves compilation only.
