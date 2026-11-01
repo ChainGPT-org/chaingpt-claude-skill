@@ -800,6 +800,17 @@ describe('Admin dashboard HTTP endpoints', () => {
     expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
     _stopUiForTests();
 
+    // A symlink planted at the token path is replaced, never followed.
+    const { symlinkSync, lstatSync, readFileSync: rf } = await import('node:fs');
+    const decoy = join(TMP, 'decoy-in-project.txt');
+    writeFileSync(decoy, 'untouched');
+    rmSync(tokenFile, { force: true });
+    symlinkSync(decoy, tokenFile);
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 6, chains: ['ethereum'] });
+    expect(lstatSync(tokenFile).isSymbolicLink()).toBe(false);
+    expect(rf(decoy, 'utf8')).toBe('untouched');
+    _stopUiForTests();
+
     // Unwritable token path (a directory) → no dashboard, no token anywhere.
     const blocked = join(TMP, 'token-is-a-dir');
     mkdirSync(blocked, { recursive: true });
@@ -840,7 +851,10 @@ describe('Admin dashboard HTTP endpoints', () => {
       blockedToAddresses: [], maxTxValueWei: '100000000000000000', maxTxGas: '1000000',
       blockedSelectors: [], requireMemo: false, notes: 'notes-only edit',
     };
-    const res = await post('policy=' + encodeURIComponent(JSON.stringify(formPolicy)) + '&mode=form');
+    const { policyDigest } = await import('../lib/agent-policy.js');
+    const formSave = (p: object, digest = policyDigest(loadPolicy())) =>
+      post('policy=' + encodeURIComponent(JSON.stringify(p)) + '&mode=form&baseDigest=' + digest);
+    const res = await formSave(formPolicy);
     expect(res.status).toBe(200);
     const after = loadPolicy();
     expect(after.notes).toBe('notes-only edit');
@@ -848,15 +862,28 @@ describe('Admin dashboard HTTP endpoints', () => {
     expect(after.maxDailyTxCount).toBe(3);
     expect(after.tron).toEqual(before.tron);
 
-    // A form save cannot smuggle non-form fields (e.g. lift the daily cap to unlimited).
-    const smuggled = { ...formPolicy, maxDailySpendWei: '0', maxDailyTxCount: 0 };
-    expect((await post('policy=' + encodeURIComponent(JSON.stringify(smuggled)) + '&mode=form')).status).toBe(200);
+    // A form save cannot smuggle non-form fields (e.g. raise the daily caps).
+    const smuggled = { ...formPolicy, maxDailySpendWei: '1000000000000000000000', maxDailyTxCount: 1000 };
+    expect((await formSave(smuggled)).status).toBe(200);
     expect(loadPolicy().maxDailySpendWei).toBe('300000000000000000');
     expect(loadPolicy().maxDailyTxCount).toBe(3);
+
+    // A stale tab (page loaded before the kill switch was engaged) cannot switch it back off.
+    const staleDigest = policyDigest(loadPolicy());
+    await fetch(`${base}/api/killswitch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `cg_admin_sid=${sid}`, origin: base },
+      body: 'set=on',
+    });
+    const stale = await formSave({ ...formPolicy, killSwitch: false }, staleDigest);
+    expect(stale.status).toBe(400);
+    expect(await stale.text()).toContain('Policy changed since this page loaded');
+    expect(loadPolicy().killSwitch).toBe(true);
 
     // The served page's form handler marks its submission as mode=form.
     const dash = await (await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } })).text();
     expect(dash).toContain("m.name = 'mode'; m.value = 'form'");
+    expect(dash).toContain("d.name = 'baseDigest'");
   }, 20_000);
 });
 

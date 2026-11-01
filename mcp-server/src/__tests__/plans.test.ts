@@ -249,6 +249,12 @@ describe('durable scheduled claims', () => {
     await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [step] } });
     expect(await claimId('resave')).toBe(original);
 
+    // Re-saving with a string step id ("1" vs 1) is the same step.
+    await handlePlanTool('chaingpt_strategy_mark_step', { name: 'resave', stepId: 1, txHash: 'fixture-hash' });
+    await handlePlanTool('chaingpt_strategy_delete_plan', { name: 'resave', confirm: true });
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [{ ...step, id: '1' }] } });
+    expect(await claimId('resave')).toBe(original);
+
     // A materially different step is a different action and gets a different id.
     rmSync(TMP_DIR, { recursive: true, force: true });
     await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [{ ...step, usd: 20 }] } });

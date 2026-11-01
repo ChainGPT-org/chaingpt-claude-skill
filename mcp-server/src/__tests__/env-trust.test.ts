@@ -1,13 +1,7 @@
-/**
- * Bounty F: a .env in the launch directory must not steer wallet secrets, paths or RPC hosts,
- * and an env passphrase must not override the OS keychain.
- */
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('node:child_process', () => ({ execFileSync: vi.fn(() => 'keychain-secret-value\n') }));
+/** Bounty F: a .env in the launch directory must not steer wallet secrets, paths or RPC hosts. */
+import { describe, it, expect } from 'vitest';
 
 import { applyDotenvCredentials } from '../lib/dotenv-credentials.js';
-import { resolvePassphrase } from '../lib/agent-secret.js';
 
 describe('working-directory .env', () => {
   const planted = [
@@ -36,18 +30,5 @@ describe('working-directory .env', () => {
     const env: NodeJS.ProcessEnv = { CHAINGPT_API_KEY: 'from-launch-env' };
     applyDotenvCredentials(planted, env);
     expect(env.CHAINGPT_API_KEY).toBe('from-launch-env');
-  });
-});
-
-describe('passphrase precedence', () => {
-  it('OS keychain wins over CHAINGPT_AGENT_WALLET_PASSPHRASE', () => {
-    const saved = { ...process.env };
-    process.env.CHAINGPT_AGENT_WALLET_PASSPHRASE = 'env-passphrase-should-lose';
-    delete process.env.CHAINGPT_DISABLE_KEYCHAIN;
-    try {
-      expect(resolvePassphrase()).toEqual({ value: 'keychain-secret-value', source: 'keychain' });
-    } finally {
-      process.env = saved;
-    }
   });
 });

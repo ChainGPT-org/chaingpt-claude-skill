@@ -94,7 +94,7 @@ That last refusal is the product: the MCP surface does not expose policy editing
 
 ## 🆕 What's new
 
-**[v1.22](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.22.0)** Tron (TVM) integration — non-EVM chain at EVM/Solana parity (14 tools, reuses the EVM key, fail-closed `tron` policy, SunSwap + JustLend) · **[v1.19](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights (autonomous self-heal is now disabled) · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a durable execution claims) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
+**[v1.23](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.23.0)** security release: agent wallet off by default, bounty fixes · **v1.22** Tron (TVM) integration — non-EVM chain at EVM/Solana parity (14 tools, reuses the EVM key, fail-closed `tron` policy, SunSwap + JustLend) · **[v1.21](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.21.0)** Solana signing parity (Ed25519 agent wallet, simulation-priced lamport caps) · **[v1.18](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.18.0)** local-only usage insights (autonomous self-heal is now disabled) · **[v1.17](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.17.0)** scheduled autonomy (set-and-forget DCA with a durable execution claims) · **[v1.16](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases/tag/v1.16.0)** daily velocity caps, shipped subagents, mainnet-guard hook · [all releases](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 
 ## ⚡ Quickstart — full step‑by‑step
 
@@ -225,7 +225,7 @@ The keystore is AES‑256‑GCM encrypted with a passphrase. You have two ways t
 > initialize the agent wallet
 ```
 
-**Option B — env var fallback (headless hosts with no keychain only):** set `CHAINGPT_AGENT_WALLET_PASSPHRASE` (min 16 chars) in the MCP server's launch environment. A project `.env` file is ignored for this variable, and the keychain wins when both exist. Any process the agent starts inherits this variable and can read it, so do not use Option B where the agent has shell access; use the keychain or a separately isolated signer.
+**Option B — env var (headless hosts with no keychain):** set `CHAINGPT_AGENT_WALLET_PASSPHRASE` (min 16 chars) in the MCP server's launch environment. A project `.env` file is ignored for this variable. Any process the agent starts inherits this variable and can read it, so do not use Option B where the agent has shell access; use the keychain or a separately isolated signer.
 
 Either way, Claude calls `chaingpt_agent_wallet_init` and prints the new EOA address (and tells you which passphrase source it used). First-run policy has signing disabled (`killSwitch: true`, all chain opt-ins off). Review [wallet safety and migration](docs/wallet-safety.md), configure limits and recipients, then enable the intended chain before funding.
 

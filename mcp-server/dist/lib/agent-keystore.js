@@ -74,8 +74,8 @@ export function decryptSecret(f, pass) {
     }
 }
 /**
- * Resolve the keystore passphrase exactly as init does: existing keychain
- * entry → env var → auto-provision into the keychain. Throws with setup
+ * Resolve the keystore passphrase exactly as init does: env var → existing
+ * keychain entry → auto-provision into the keychain. Throws with setup
  * guidance when no source is available. Shared by both keystore inits so
  * one admin secret covers both chains.
  */

@@ -325,7 +325,8 @@ async function handlePlanToolUnlocked(name, args) {
                 for (const step of due.slice(0, limit)) {
                     // Derived from the plan name + step content, NOT the random planId: deleting a finished
                     // plan and re-saving it must map its steps onto the same ids, which the signer refuses to sign twice.
-                    const operationId = `plan:${operationFingerprint({ name: plan.name, step })}`;
+                    // The id is normalised like the journal key; any other change to the step is a different action.
+                    const operationId = `plan:${operationFingerprint({ name: plan.name, step: { ...step, id: String(step.id) } })}`;
                     journal[String(step.id)] = { ts: new Date().toISOString(), status: 'claimed', operationId };
                 }
                 durableJson(path, plan);

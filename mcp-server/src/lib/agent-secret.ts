@@ -4,13 +4,13 @@
  * The keystore is AES-256-GCM encrypted with a passphrase. Where that
  * passphrase comes from is resolved here, in priority order:
  *
- *   1. OS keychain                                — auto-managed secret.
+ *   1. CHAINGPT_AGENT_WALLET_PASSPHRASE env var  — explicit override for hosts
+ *      with no keychain (headless/CI). Real launch environment only: a
+ *      working-directory .env cannot set it (lib/dotenv-credentials). Any process
+ *      the agent starts inherits it, so prefer the keychain.
+ *   2. OS keychain                                — auto-managed secret.
  *      macOS Keychain (`security`) or Linux libsecret (`secret-tool`).
  *      Generated once at init, read back on every load. Never in LLM context.
- *   2. CHAINGPT_AGENT_WALLET_PASSPHRASE env var  — fallback for hosts with no
- *      keychain (headless/CI). Real launch environment only: a working-directory
- *      .env cannot set it (lib/dotenv-credentials). Any process the agent starts
- *      inherits it, so prefer the keychain.
  *
  * Why a keychain instead of "auto-generate and write a .passphrase file":
  *   writing the passphrase to disk next to the keystore is taping the key to
@@ -129,16 +129,17 @@ function keychainSet(value: string): void {
 }
 
 /**
- * Resolve the keystore passphrase. The OS keychain wins; the env var is only a
- * fallback for hosts without one (an env value is inherited by every process the
- * agent spawns, so it must not override a keychain secret).
+ * Resolve the keystore passphrase. Env var wins; otherwise the keychain.
+ * The env var is read from the real launch environment only: a working-directory
+ * .env cannot set it (lib/dotenv-credentials). Whoever controls the launch
+ * environment controls the keystore path too, so precedence is not a boundary.
  * Returns the value plus where it came from (for status display).
  */
 export function resolvePassphrase(): { value: string | null; source: SecretSource } {
-  const kc = keychainGet();
-  if (kc) return { value: kc, source: 'keychain' };
   const env = process.env[ENV_VAR]?.trim();
   if (env) return { value: env, source: 'env' };
+  const kc = keychainGet();
+  if (kc) return { value: kc, source: 'keychain' };
   return { value: null, source: 'none' };
 }
 

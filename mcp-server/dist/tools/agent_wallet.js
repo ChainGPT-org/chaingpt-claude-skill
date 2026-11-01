@@ -3,7 +3,7 @@ import { withSigningLock, operationFingerprint, findOperation, reserveOperation,
 import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
-import { writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createWalletClient, createPublicClient, http as viemHttp, keccak256 } from 'viem';
 import QRCode from 'qrcode';
@@ -622,6 +622,10 @@ if (formPolicyForm) {
     // mode=form: the server merges these fields over the saved policy instead of replacing it
     const m = document.createElement('input'); m.type = 'hidden'; m.name = 'mode'; m.value = 'form';
     f.appendChild(m);
+    // baseDigest: the policy this page shows; the server refuses the save if it changed meanwhile
+    const d = document.createElement('input'); d.type = 'hidden'; d.name = 'baseDigest';
+    d.value = (document.querySelector('.digest') || {}).textContent || '';
+    f.appendChild(d);
     document.body.appendChild(f); f.submit();
   });
 }
@@ -644,6 +648,7 @@ document.addEventListener('click', async function(e) {
     var data = await r.json();
     if (!r.ok || !data.ok) throw new Error(data.error || ('HTTP ' + r.status));
     applyPolicyToForm(data.policy);
+    document.querySelectorAll('.digest').forEach(function(el) { el.textContent = data.digest; });
     toast('Applied ' + data.emoji + ' ' + data.name + ' — saved + live · digest ' + data.digest, 'ok');
   } catch (err) {
     toast('Template apply failed: ' + err.message, 'err');
@@ -1504,8 +1509,10 @@ async function handleAgentWalletToolUnlocked(name, args) {
             try {
                 const tokenPath = adminTokenPath();
                 mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
-                writeFileSync(tokenPath, adminToken, { mode: 0o600 });
-                chmodSync(tokenPath, 0o600); // mode above applies only when the file is created
+                // Fresh exclusive temp file + rename: never follows a symlink planted at the token path.
+                const tmp = `${tokenPath}.${process.pid}.${generateToken().slice(0, 8)}.tmp`;
+                writeFileSync(tmp, adminToken, { mode: 0o600, flag: 'wx' });
+                renameSync(tmp, tokenPath);
             }
             catch (e) {
                 adminToken = null;
@@ -1589,6 +1596,11 @@ async function handleAgentWalletToolUnlocked(name, args) {
                         // The form editor only knows a subset of the policy; replacing the whole file with it
                         // silently dropped daily caps and the asset/Solana/Tron/4337 sections.
                         if (fields.mode === 'form' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            // A stale tab must not silently undo a newer change (e.g. re-disable an engaged kill switch).
+                            if (fields.baseDigest !== policyDigest(loadPolicy())) {
+                                renderDashboard(res, file.address, chains, { kind: 'err', msg: 'Policy changed since this page loaded. Reload, then save again.' });
+                                return;
+                            }
                             const formOnly = Object.fromEntries(Object.entries(parsed).filter(([k]) => FORM_POLICY_FIELDS.has(k)));
                             parsed = { ...loadPolicy(), ...formOnly };
                         }
