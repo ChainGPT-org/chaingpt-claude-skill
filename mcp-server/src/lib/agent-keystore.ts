@@ -109,8 +109,8 @@ export function decryptSecret(
 }
 
 /**
- * Resolve the keystore passphrase exactly as init does: env var → existing
- * keychain entry → auto-provision into the keychain. Throws with setup
+ * Resolve the keystore passphrase exactly as init does: existing keychain
+ * entry → env var → auto-provision into the keychain. Throws with setup
  * guidance when no source is available. Shared by both keystore inits so
  * one admin secret covers both chains.
  */
@@ -126,9 +126,9 @@ export function resolveOrProvisionPassphrase(): { pass: string; source: SecretSo
       source = 'keychain';
     } else {
       throw new Error(
-        'No keystore passphrase available. Either set CHAINGPT_AGENT_WALLET_PASSPHRASE ' +
-        '(min 16 chars) in your shell BEFORE starting the MCP server, or run on a host with ' +
-        'an OS keychain (macOS Keychain / Linux libsecret) so one can be auto-generated.'
+        'No keystore passphrase available. Run on a host with an OS keychain (macOS Keychain / ' +
+        'Linux libsecret) so one is auto-generated, or set CHAINGPT_AGENT_WALLET_PASSPHRASE (min 16 chars) ' +
+        'in the MCP server launch environment (a .env file is ignored; processes the agent starts inherit it).'
       );
     }
   }
