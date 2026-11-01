@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createPublicClient, http, fallback, getAddress, type Address } from 'viem';
-import { assertPublicUrl } from '../lib/public-url.js';
+import { publicFetch } from '../lib/public-url.js';
 import { rpcEndpoints } from '../lib/chains.js';
 
 /**
@@ -101,9 +101,8 @@ async function loadAgentCard(tokenURI: string): Promise<any | null> {
     let url = tokenURI;
     if (url.startsWith('ipfs://')) url = `https://ipfs.io/ipfs/${url.slice('ipfs://'.length)}`;
     if (/^https?:\/\//.test(url)) {
-      // tokenURI is attacker-chosen: public hosts only, and no redirects that could bounce inward.
-      await assertPublicUrl(url);
-      const res = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+      // tokenURI is attacker-chosen: public hosts only (checked at connect time), and a redirect is never followed.
+      const res = await publicFetch(url, { signal: AbortSignal.timeout(15_000) });
       return res.ok ? await res.json() : null;
     }
   } catch { /* ignore */ }

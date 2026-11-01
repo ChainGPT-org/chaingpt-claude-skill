@@ -1,5 +1,5 @@
 import { httpJson } from '../lib/http.js';
-import { assertPublicUrl } from '../lib/public-url.js';
+import { publicFetch } from '../lib/public-url.js';
 import { X402_VERSION, X402_TOKENS, chainIdForNetwork, buildTransferWithAuthorizationTypedData, encodeXPaymentHeader, decodeBase64Header, parseAccepts, formatAtomic, freshNonce, X402_NETWORK_CHAINID, } from '../lib/x402.js';
 import { isAddress, verifyTypedData } from 'viem';
 /**
@@ -158,7 +158,6 @@ async function handleDecode(args) {
 }
 async function handleX402Fetch(args) {
     const url = String(args.url ?? '');
-    await assertPublicUrl(url, { httpsOnly: true });
     const method = String(args.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET';
     const maxBodyChars = Math.min(100_000, Math.max(200, Number(args.maxBodyChars ?? 4000)));
     const headers = { accept: 'application/json' };
@@ -166,14 +165,13 @@ async function handleX402Fetch(args) {
         headers['content-type'] = 'application/json';
     if (args.xPaymentHeader)
         headers['X-PAYMENT'] = String(args.xPaymentHeader);
-    const res = await fetch(url, {
+    // publicFetch never follows redirects: the https/public-host check covers this URL only, and X-PAYMENT must not travel on.
+    const res = await publicFetch(url, {
         method,
         headers,
         body: args.body !== undefined ? String(args.body) : undefined,
-        // Never follow: the https/public-host check covers this URL only, and X-PAYMENT must not travel on.
-        redirect: 'manual',
         signal: AbortSignal.timeout(30_000),
-    });
+    }, { httpsOnly: true });
     if (res.status >= 300 && res.status < 400) {
         return `HTTP ${res.status} redirect from ${url} to ${res.headers.get('location') ?? '(no Location)'} — not followed. Call x402_fetch on the target if you trust it.`;
     }

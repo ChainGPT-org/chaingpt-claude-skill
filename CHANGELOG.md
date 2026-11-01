@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+### Security
+- `x402_fetch` and ERC-8004 agent-card fetches now check the host's addresses at connect time and connect only to an address that passed. A DNS server that answers with a public address for the check and a private one for the connection is refused. TLS certificate and Host checks still use the URL's hostname; redirects are still never followed.
+
 ## [1.23.1] - 2026-11-01
 ### Security and correctness (tool inputs)
 - Every tool call is validated against its inputSchema before it runs (the MCP server previously ignored schemas): a Polymarket `side: "buy"` no longer builds a SELL order, and Hyperliquid `isBuy: "false"` is rejected instead of read as true.
