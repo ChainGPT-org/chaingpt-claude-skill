@@ -7,6 +7,9 @@ import { describe, it, expect, vi } from 'vitest';
 
 import './_setup.js';
 
+// Offline: the builders verify caller-supplied decimals against the token's decimals() via RPC.
+vi.mock('../lib/agent-erc20.js', () => ({ fetchErc20Decimals: vi.fn(async () => 6) }));
+
 import { defiTools, handleDefiTool } from '../tools/defi.js';
 
 describe('Tier-3d DeFi tool definitions', () => {
@@ -121,5 +124,14 @@ describe('Tier-3d build_tx handlers (post-ack)', () => {
       acknowledgeMainnet: true,
     });
     expect(r.content[0].text).toContain('full debt (uint256 max)');
+  });
+});
+
+describe('caller-supplied decimals are checked on-chain', () => {
+  it('aave_supply_tx refuses decimals that do not match the token (USDC is 6, not 18)', async () => {
+    await expect(handleDefiTool('chaingpt_defi_aave_supply_tx', {
+      network: 'ethereum', asset: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', amount: '100', decimals: 18,
+      from: '0x' + '1'.repeat(40), acknowledgeMainnet: true,
+    })).rejects.toThrow(/decimals 18 does not match/);
   });
 });

@@ -87,7 +87,7 @@ export const aggregatorTools: Tool[] = [
         amountIn: { type: 'string' },
         decimalsIn: { type: 'number' },
         from: { type: 'string', description: 'Signer / from address (0x…).' },
-        slippageBps: { type: 'number', description: 'Max slippage in basis points. Default 100 (1%).', default: 100 },
+        slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in basis points. Default 100 (1%).', default: 100 },
         acknowledgeMainnet: { type: 'boolean' },
       },
       required: ['network', 'inToken', 'outToken', 'amountIn', 'decimalsIn', 'from'],
@@ -112,7 +112,7 @@ export const aggregatorTools: Tool[] = [
         sellAmount: { type: 'string', description: 'Decimal amount of sellToken.' },
         sellDecimals: { type: 'number' },
         from: { type: 'string', description: 'Order owner (0x…).' },
-        slippageBps: { type: 'number', description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
+        slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
         validForMinutes: { type: 'number', description: 'How long the order is valid. Default 30.', default: 30 },
         acknowledgeMainnet: { type: 'boolean' },
       },
@@ -279,11 +279,11 @@ export async function handleAggregatorTool(
       const sellDecimals = Number(args.sellDecimals);
       const sellAmount = rawAmount(String(args.sellAmount), sellDecimals);
       const slippageBps = Number(args.slippageBps ?? 100);
-      if (!Number.isFinite(slippageBps) || slippageBps < 0 || slippageBps > 10000) {
+      if (!Number.isFinite(slippageBps) || !Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps > 5000) {
         return {
           content: [{
             type: 'text',
-            text: `slippageBps must be between 0 and 10000 (got ${args.slippageBps}). 100 = 1%; 10000 = 100% (max).`,
+            text: `slippageBps must be an integer between 0 and 5000 (got ${args.slippageBps}). 100 = 1%; 5000 = 50% (max).`,
           }],
         };
       }
