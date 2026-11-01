@@ -95,7 +95,9 @@ export const polymarketTools = [
         inputSchema: {
             type: 'object',
             properties: {
-                maker: { type: 'string', description: 'Wallet placing the order (0x… on Polygon).' },
+                maker: { type: 'string', description: 'Wallet placing the order (0x… on Polygon). For proxy/Safe wallets, the proxy (funder) address.' },
+                signer: { type: 'string', pattern: '^0x[0-9a-fA-F]{40}$', description: 'EOA that signs, when it differs from maker (proxy/Safe wallets). Default: maker.' },
+                signatureType: { type: 'integer', enum: [0, 1, 2], description: '0 = EOA (default), 1 = Polymarket proxy (email/Magic), 2 = Gnosis Safe proxy.' },
                 tokenId: { type: 'string', description: 'CLOB token id from chaingpt_pm_market.' },
                 side: { type: 'string', enum: ['BUY', 'SELL'], description: 'BUY = buying outcome tokens, SELL = selling them.' },
                 price: { type: 'string', description: 'Decimal probability 0..1, e.g. "0.42" for 42%.' },
@@ -301,7 +303,12 @@ export async function handlePolymarketTool(name, args) {
             const expirationSec = Number(args.expirationSec ?? 0);
             const feeRateBps = Number(args.feeRateBps ?? 0);
             const negRisk = Boolean(args.negRisk ?? false);
-            const order = buildOrder({ maker, tokenId, side, price, size, expirationSec, feeRateBps });
+            const signer = args.signer ? String(args.signer) : undefined;
+            const signatureType = args.signatureType;
+            if (signer && signer.toLowerCase() !== maker.toLowerCase() && !signatureType) {
+                return { content: [{ type: 'text', text: 'A signer different from maker means a proxy or Safe wallet: pass signatureType 1 (Polymarket proxy) or 2 (Gnosis Safe).' }] };
+            }
+            const order = buildOrder({ maker, tokenId, side, price, size, expirationSec, feeRateBps, signer, signatureType });
             const typed = orderTypedData(order, negRisk);
             const usdcCost = (Number(price) * Number(size)).toFixed(4);
             const lines = [
