@@ -784,4 +784,64 @@ describe('Admin dashboard HTTP endpoints', () => {
 
     _stopUiForTests();
   }, 20_000);
+
+  it('form-editor save keeps policy fields the form does not render (daily caps, chain sections)', async () => {
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 3, chains: ['ethereum'] });
+    const base = `http://127.0.0.1:${PORT + 3}`;
+    const sid = await adminLogin(base);
+    const post = (body: string) => fetch(`${base}/api/policy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `cg_admin_sid=${sid}`, origin: base },
+      body,
+    });
+
+    // Admin sets daily caps + a Tron section through the raw JSON editor (full replace).
+    const full = {
+      version: 1, killSwitch: false, allowedChains: [1], maxTxValueWei: '100000000000000000',
+      maxDailySpendWei: '300000000000000000', maxDailyTxCount: 3,
+      tron: { enabled: true, maxTxSun: '1000000', maxDailySpendSun: '5000000' },
+    };
+    expect((await post('policy=' + encodeURIComponent(JSON.stringify(full)))).status).toBe(200);
+    const before = loadPolicy();
+    expect(before.maxDailySpendWei).toBe('300000000000000000');
+
+    // Form editor save (what the browser sends): only the form's fields, plus mode=form.
+    const formPolicy = {
+      version: 1, killSwitch: false, unrestricted: false, allowedChains: [1], allowedToAddresses: [],
+      blockedToAddresses: [], maxTxValueWei: '100000000000000000', maxTxGas: '1000000',
+      blockedSelectors: [], requireMemo: false, notes: 'notes-only edit',
+    };
+    const res = await post('policy=' + encodeURIComponent(JSON.stringify(formPolicy)) + '&mode=form');
+    expect(res.status).toBe(200);
+    const after = loadPolicy();
+    expect(after.notes).toBe('notes-only edit');
+    expect(after.maxDailySpendWei).toBe('300000000000000000');
+    expect(after.maxDailyTxCount).toBe(3);
+    expect(after.tron).toEqual(before.tron);
+
+    // A form save cannot smuggle non-form fields (e.g. lift the daily cap to unlimited).
+    const smuggled = { ...formPolicy, maxDailySpendWei: '0', maxDailyTxCount: 0 };
+    expect((await post('policy=' + encodeURIComponent(JSON.stringify(smuggled)) + '&mode=form')).status).toBe(200);
+    expect(loadPolicy().maxDailySpendWei).toBe('300000000000000000');
+    expect(loadPolicy().maxDailyTxCount).toBe(3);
+
+    // The served page's form handler marks its submission as mode=form.
+    const dash = await (await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } })).text();
+    expect(dash).toContain("m.name = 'mode'; m.value = 'form'");
+  }, 20_000);
 });
+
+/** Log in to the admin dashboard with the token from its 0600 file (the human-side path). */
+async function adminLogin(base: string): Promise<string> {
+  const { readFileSync } = await import('node:fs');
+  const token = readFileSync(process.env.CHAINGPT_ADMIN_TOKEN_FILE || join(TMP, '.admin-token'), 'utf8').trim();
+  const r = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: `token=${token}`,
+    redirect: 'manual',
+  });
+  expect(r.status).toBe(302);
+  return r.headers.get('set-cookie')!.match(/cg_admin_sid=([a-f0-9]+)/)![1];
+}

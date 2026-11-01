@@ -42,6 +42,12 @@ function adminTokenPath(): string {
   return process.env.CHAINGPT_ADMIN_TOKEN_FILE?.trim()
     || join(dirname(policyPath()), '.admin-token');
 }
+
+// Fields the dashboard Form editor renders. A form save may only change these.
+const FORM_POLICY_FIELDS = new Set([
+  'version', 'killSwitch', 'unrestricted', 'allowedChains', 'allowedToAddresses', 'blockedToAddresses',
+  'maxTxValueWei', 'maxTxGas', 'blockedSelectors', 'requireMemo', 'notes',
+]);
 import {
   loadCustomChains,
   addCustomChain,
@@ -668,6 +674,9 @@ if (formPolicyForm) {
     f.method = 'POST'; f.action = '/api/policy';
     const i = document.createElement('input'); i.type = 'hidden'; i.name = 'policy'; i.value = JSON.stringify(policy);
     f.appendChild(i);
+    // mode=form: the server merges these fields over the saved policy instead of replacing it
+    const m = document.createElement('input'); m.type = 'hidden'; m.name = 'mode'; m.value = 'form';
+    f.appendChild(m);
     document.body.appendChild(f); f.submit();
   });
 }
@@ -1659,6 +1668,14 @@ async function handleAgentWalletToolUnlocked(
             catch (e: any) {
               renderDashboard(res, file.address, chains, { kind: 'err', msg: `Invalid JSON: ${e?.message ?? e}` });
               return;
+            }
+            // The form editor only knows a subset of the policy; replacing the whole file with it
+            // silently dropped daily caps and the asset/Solana/Tron/4337 sections.
+            if (fields.mode === 'form' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              const formOnly = Object.fromEntries(
+                Object.entries(parsed as Record<string, unknown>).filter(([k]) => FORM_POLICY_FIELDS.has(k)),
+              );
+              parsed = { ...loadPolicy(), ...formOnly };
             }
             const validation = validatePolicyInput(parsed);
             if (!validation.ok || !validation.policy) {
