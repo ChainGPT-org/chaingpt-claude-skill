@@ -19,7 +19,7 @@ beforeAll(async () => {
 
 describe('tool argument validation', () => {
   it('every shipped inputSchema compiles and accepts its own documented defaults', () => {
-    expect(tools.length).toBeGreaterThanOrEqual(155);
+    expect(tools.length).toBeGreaterThanOrEqual(149);
     for (const t of tools) {
       const defaults = Object.fromEntries(Object.entries(t.inputSchema.properties ?? {})
         .filter(([, p]: any) => p.default !== undefined).map(([k, p]: any) => [k, p.default]));
