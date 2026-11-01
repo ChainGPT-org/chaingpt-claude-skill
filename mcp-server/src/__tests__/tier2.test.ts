@@ -78,6 +78,34 @@ describe('Tier-2 mainnet safety gate', () => {
   });
 });
 
+describe('Tier-2 audit-before-mainnet-deploy binding', () => {
+  const BYTECODE = '0x6080604052348015600f57600080fd5b50603f80601d6000396000f3fe6080604052600080fdfea2';
+  const SOURCE = 'contract A {}';
+
+  it('refuses a mainnet build for bytecode not compiled here from audited source', async () => {
+    const r = await handleDeployTool('chaingpt_deploy_build_tx', { bytecode: BYTECODE, network: 'ethereum', acknowledgeMainnet: true });
+    expect(r.content[0].text).toContain('not compiled here from source audited in this session');
+  });
+
+  it('accepts audited bytecode, and unaudited only with acknowledgeUnaudited', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -1, message: 'mocked' } }),
+      { status: 200, headers: { 'content-type': 'application/json' } }));
+    const other = BYTECODE + '00';
+    const forced = await handleDeployTool('chaingpt_deploy_build_tx', { bytecode: other, network: 'ethereum', acknowledgeMainnet: true, acknowledgeUnaudited: true });
+    expect(forced.content[0].text).not.toContain('not compiled here from source audited');
+
+    const { recordAudit, recordCompile, bytecodeAudited } = await import('../lib/audit-receipts.js');
+    recordCompile(SOURCE, BYTECODE);
+    expect(bytecodeAudited(BYTECODE)).toBe(false); // compiled but not audited
+    recordAudit(SOURCE + '\n');                     // whitespace-trimmed match
+    expect(bytecodeAudited(BYTECODE.toUpperCase().replace('0X', '0x'))).toBe(true);
+    const ok = await handleDeployTool('chaingpt_deploy_build_tx', { bytecode: BYTECODE, network: 'ethereum', acknowledgeMainnet: true });
+    expect(ok.content[0].text).not.toContain('not compiled here from source audited');
+    vi.restoreAllMocks();
+  });
+});
+
 describe('Tier-2 compile path (real solc)', () => {
   it('compiles a minimal contract and returns bytecode + ABI', async () => {
     const source = `// SPDX-License-Identifier: MIT

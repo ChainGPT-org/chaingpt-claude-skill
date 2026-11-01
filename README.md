@@ -395,9 +395,8 @@ Mainnet hooks request human confirmation for every agent signer, signed-order su
 settlement. Hook parsing errors deny the call. Keep confirmation enabled in scheduled environments.
 A host that does not execute Claude Code hooks must provide its own equivalent approval boundary.
 
-Audit-before-deploy, token-risk checks and Aave health checks are **workflow instructions**.
-The unsigned deployment builder checks acknowledgment; it does not verify an audit receipt tied to
-bytecode. Pattern compilation does not establish a security audit. ERC-4337 on-chain session-cap
+Token-risk checks and Aave health checks are **workflow instructions**. Audit-before-deploy is
+enforced per session: a mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true` is passed. That binds the audit run to the bytecode; it does not judge the audit's findings. Pattern compilation does not establish a security audit. ERC-4337 on-chain session-cap
 support remains beta until the documented grant/over-cap/expiry/revoke live loop is published.
 
 ### Privacy and upstream data

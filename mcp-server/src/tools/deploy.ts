@@ -1,4 +1,5 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { bytecodeAudited, recordCompile } from '../lib/audit-receipts.js';
 import {
   createPublicClient,
   http,
@@ -164,6 +165,12 @@ export const deployTools: Tool[] = [
             'You must pass acknowledgeMainnet=true to build a tx targeting a mainnet network. ' +
             'This is the safety prompt — confirm the user actually wants to deploy to a real chain.',
         },
+        acknowledgeUnaudited: {
+          type: 'boolean',
+          description:
+            'Mainnet only: required when this exact bytecode was not compiled with chaingpt_deploy_compile from a source ' +
+            'that chaingpt_audit_contract audited in this session. Only set it after the user explicitly accepts deploying unaudited code.',
+        },
       },
       required: ['bytecode'],
     },
@@ -251,6 +258,7 @@ export async function handleDeployTool(
         evmVersion: args.evmVersion as string | undefined,
       });
 
+      recordCompile(source, result.bytecode);
       const ctorEntry = result.abi.find((x: any) => x.type === 'constructor');
       const lines = [
         `Compiled contract: ${result.contractName}`,
@@ -281,6 +289,7 @@ export async function handleDeployTool(
         return { content: [{ type: 'text', text: `Unknown network: ${network}` }] };
       }
       const isMainnet = NETWORK_IS_MAINNET[network];
+      const audited = bytecodeAudited(bytecode);
 
       // Mainnet safety gate for build_tx
       if (name === 'chaingpt_deploy_build_tx' && isMainnet && args.acknowledgeMainnet !== true) {
@@ -296,6 +305,18 @@ export async function handleDeployTool(
               `  3. Confirm the constructor args match what you intend.\n` +
               `  4. Confirm the from-address is the wallet you actually control.\n` +
               `Then re-call with acknowledgeMainnet: true.`,
+          }],
+        };
+      }
+      if (name === 'chaingpt_deploy_build_tx' && isMainnet && !audited && args.acknowledgeUnaudited !== true) {
+        return {
+          content: [{
+            type: 'text',
+            text:
+              `⚠ Mainnet deploy refused: this bytecode was not compiled here from source audited in this session.\n` +
+              `  1. chaingpt_audit_contract sourceCode=<the exact source>\n` +
+              `  2. chaingpt_deploy_compile source=<the same source>, then pass that bytecode here.\n` +
+              `Code compiled elsewhere: only with acknowledgeUnaudited: true after the user explicitly accepts an unaudited deploy.`,
           }],
         };
       }
@@ -350,6 +371,7 @@ export async function handleDeployTool(
 
       const native = CHAINS[network]?.native ?? 'ETH';
       const lines: string[] = [];
+      lines.push(`Audit:           ${audited ? '✓ this bytecode was compiled here from source audited here' : '⚠ NOT audited in this session (no matching chaingpt_audit_contract + chaingpt_deploy_compile)'}`);
       lines.push(`Network:         ${chainNameForNetwork(network)} ${isMainnet ? '(mainnet)' : '(testnet)'}`);
       lines.push(`Chain ID:        ${NETWORK_TO_CHAIN_ID[network]}`);
       lines.push(`From:            ${from ?? '(not provided — estimate uses default)'}`);

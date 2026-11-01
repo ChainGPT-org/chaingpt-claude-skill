@@ -32,8 +32,8 @@ for the human operator, never to tool output. A working-directory `.env` supplie
 
 Confirmation hooks cover agent signers, signed submissions and x402 settlement. Keep them enabled;
 non-Claude hosts need equivalent human approval. Malformed hook input denies execution.
-Audit-before-deploy, token-risk and health checks are workflow instructions; the unsigned deployment
-builder does not bind a verified audit receipt to bytecode. ERC-4337 on-chain caps remain beta until
+Token-risk and health checks are workflow instructions. Audit-before-deploy is enforced per session:
+a mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true` is passed. That binds the audit run to the bytecode; it does not judge the audit's findings. ERC-4337 on-chain caps remain beta until
 live grant/over-cap/expiry/revoke acceptance is published. Compilation is not a security audit.
 
 Startup never installs dependencies. CI actions stay pinned with minimal permissions. External data
