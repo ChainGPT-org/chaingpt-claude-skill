@@ -35,6 +35,9 @@ const uiRes = await mod.handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', 
   chains: ['ethereum', 'base', 'arbitrum'],
 });
 console.log(uiRes.content[0].text);
+// Human-run demo: show the token from its 0600 file (the MCP tool never returns it to the agent).
+const { readFileSync } = await import('node:fs');
+console.log(`\nDemo admin token: ${readFileSync(process.env.CHAINGPT_ADMIN_TOKEN_FILE, 'utf8').trim()}`);
 
 console.log('\n' + '─'.repeat(70));
 console.log(`\n>>> Dashboard running. Open the URL in your browser. <<<`);

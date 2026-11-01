@@ -124,8 +124,10 @@ reviewed executor and approval boundary.
 
 The MCP signing policy assumes the caller cannot edit wallet files, access the OS keychain,
 execute arbitrary host commands or administer the dashboard. A coding agent with host access
-needs OS-level isolation from the signer and secrets. Dashboard tokens returned by administration
-tools are privileged. Host compromise defeats the local policy; ERC-4337 on-chain session-cap
+needs OS-level isolation from the signer and secrets. The wallet admin token is written only to its
+0600 file, never to tool output. A working-directory `.env` supplies API keys only; wallet paths, the
+passphrase and RPC hosts come from the launch environment, and the keychain passphrase wins over the
+env fallback. An env passphrase is inherited by every process the agent starts. Host compromise defeats the local policy; ERC-4337 on-chain session-cap
 support remains beta until the published live acceptance loop exists.
 
 Audit-before-deploy and protocol risk checks are workflow requirements. The unsigned deployment

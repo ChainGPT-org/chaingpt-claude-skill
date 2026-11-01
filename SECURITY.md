@@ -27,7 +27,8 @@ require external signing in restricted mode. Unrestricted mode is an explicit op
 
 The local policy assumes callers cannot edit signer state, execute host commands, retrieve keychain
 secrets or administer the dashboard. No MCP editing tool does not imply OS isolation. Host access
-requires a separate signer security boundary. Dashboard admin tokens are privileged tool outputs.
+requires a separate signer security boundary. The wallet admin token is written only to a 0600 file
+for the human operator, never to tool output. A working-directory `.env` supplies API keys only.
 
 Confirmation hooks cover agent signers, signed submissions and x402 settlement. Keep them enabled;
 non-Claude hosts need equivalent human approval. Malformed hook input denies execution.

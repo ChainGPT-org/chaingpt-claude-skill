@@ -3,7 +3,7 @@ import { withSigningLock, operationFingerprint, findOperation, reserveOperation,
 import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createWalletClient, createPublicClient, http as viemHttp, keccak256 } from 'viem';
 import QRCode from 'qrcode';
@@ -23,6 +23,11 @@ function adminTokenPath() {
     return process.env.CHAINGPT_ADMIN_TOKEN_FILE?.trim()
         || join(dirname(policyPath()), '.admin-token');
 }
+// Fields the dashboard Form editor renders. A form save may only change these.
+const FORM_POLICY_FIELDS = new Set([
+    'version', 'killSwitch', 'unrestricted', 'allowedChains', 'allowedToAddresses', 'blockedToAddresses',
+    'maxTxValueWei', 'maxTxGas', 'blockedSelectors', 'requireMemo', 'notes',
+]);
 import { loadCustomChains, addCustomChain, removeCustomChain, customChainsPath, resolveChainWithCustom, rpcEndpointsWithCustom, mergedChains, } from '../lib/agent-custom-chains.js';
 import { BLUE_CHIPS } from '../lib/agent-blue-chips.js';
 /**
@@ -131,7 +136,7 @@ export const agentWalletTools = [
     {
         name: 'chaingpt_agent_wallet_serve_ui',
         description: 'Start a privileged localhost ADMIN dashboard: address, multi-chain balances, policy editing and kill switch. ' +
-            'It returns a privileged admin token; keep this tool and its browser context outside untrusted agent authority. ' +
+            'The admin login token is written to a 0600 file for the human operator and is never returned to the agent. ' +
             'Returns the URL. 0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
@@ -330,7 +335,7 @@ ${errorBlock}
 <input type="password" name="token" placeholder="Paste admin token" autofocus required />
 <button type="submit">Unlock</button>
 </form>
-<p class="hint">The admin token was printed in the MCP tool output when you ran <code>chaingpt_agent_wallet_serve_ui</code>. It's also stored at <code>~/.chaingpt-mcp/agent-wallet/.admin-token</code> (0600). It rotates every time the UI server is (re)started.</p>
+<p class="hint">Read the admin token from <code>~/.chaingpt-mcp/agent-wallet/.admin-token</code> (0600; or <code>CHAINGPT_ADMIN_TOKEN_FILE</code>). It is never shown to the agent. It rotates every time the UI server is (re)started.</p>
 </div>
 </body></html>`;
 }
@@ -614,6 +619,9 @@ if (formPolicyForm) {
     f.method = 'POST'; f.action = '/api/policy';
     const i = document.createElement('input'); i.type = 'hidden'; i.name = 'policy'; i.value = JSON.stringify(policy);
     f.appendChild(i);
+    // mode=form: the server merges these fields over the saved policy instead of replacing it
+    const m = document.createElement('input'); m.type = 'hidden'; m.name = 'mode'; m.value = 'form';
+    f.appendChild(m);
     document.body.appendChild(f); f.submit();
   });
 }
@@ -1489,16 +1497,20 @@ async function handleAgentWalletToolUnlocked(name, args) {
                 catch { /* ignore */ }
                 runningServer = null;
             }
-            // Rotate admin token on every (re)start, persist to a 0600 file so the
-            // admin can recover it without re-running the tool
+            // Rotate admin token on every (re)start. It goes ONLY to a 0600 file the human reads:
+            // the token unlocks policy edits, so it must never enter the tool result (model context).
             adminToken = generateToken();
             sessions.clear();
             try {
                 const tokenPath = adminTokenPath();
                 mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
                 writeFileSync(tokenPath, adminToken, { mode: 0o600 });
+                chmodSync(tokenPath, 0o600); // mode above applies only when the file is created
             }
-            catch { /* best-effort */ }
+            catch (e) {
+                adminToken = null;
+                throw new Error(`Could not write the admin token file (${adminTokenPath()}): ${e?.message ?? e}. Dashboard not started.`);
+            }
             const handler = async (req, res) => {
                 try {
                     if (!checkHost(req, port)) {
@@ -1573,6 +1585,12 @@ async function handleAgentWalletToolUnlocked(name, args) {
                         catch (e) {
                             renderDashboard(res, file.address, chains, { kind: 'err', msg: `Invalid JSON: ${e?.message ?? e}` });
                             return;
+                        }
+                        // The form editor only knows a subset of the policy; replacing the whole file with it
+                        // silently dropped daily caps and the asset/Solana/Tron/4337 sections.
+                        if (fields.mode === 'form' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            const formOnly = Object.fromEntries(Object.entries(parsed).filter(([k]) => FORM_POLICY_FIELDS.has(k)));
+                            parsed = { ...loadPolicy(), ...formOnly };
                         }
                         const validation = validatePolicyInput(parsed);
                         if (!validation.ok || !validation.policy) {
@@ -1882,13 +1900,9 @@ async function handleAgentWalletToolUnlocked(name, args) {
                         text: [
                             `✓ Agent wallet admin dashboard running at ${url}`,
                             ``,
-                            `╔═════════════════════════════════════════════════════════════╗`,
-                            `║  ADMIN TOKEN (paste once at /login)                         ║`,
-                            `║                                                             ║`,
-                            `║  ${adminToken}  ║`,
-                            `║                                                             ║`,
-                            `║  Also saved to ${adminTokenPath()}`,
-                            `╚═════════════════════════════════════════════════════════════╝`,
+                            `Admin login: the human operator reads the rotated token from ${adminTokenPath()} (0600)`,
+                            `and pastes it at /login. The token is deliberately NOT shown here, and the agent must not`,
+                            `read that file: it unlocks policy edits and the kill switch.`,
                             ``,
                             `What the dashboard does:`,
                             `  • Address + QR code for receiving funds`,

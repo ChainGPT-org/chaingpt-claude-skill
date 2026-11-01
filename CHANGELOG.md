@@ -14,8 +14,14 @@
 - x402 signature assembly preserves and verifies the original authorization; facilitator JSON is encoded once.
 - Clarified host-isolation assumptions, workflow-only audit checks, ERC-4337 beta status and privacy disclosures.
 - Fixed Bash pipefail/SIGPIPE frontmatter checks; added guard and catalog checks.
+- `chaingpt_agent_wallet_serve_ui` no longer returns the admin token in its tool result (model context). The human operator reads it from the 0600 token file; the dashboard refuses to start if that file cannot be written.
+- A working-directory `.env` supplies API credentials only. Keystore/policy/ledger/plan paths, `CHAINGPT_AGENT_WALLET_PASSPHRASE`, `CHAINGPT_DISABLE_KEYCHAIN` and RPC URLs are read from the real launch environment only; ignored keys are reported on stderr.
+- The OS keychain passphrase now takes precedence over `CHAINGPT_AGENT_WALLET_PASSPHRASE` (fallback for hosts without a keychain).
+- Dashboard Form editor saves merge only the form's own fields into the saved policy; daily caps and the asset/Solana/Tron/ERC-4337 sections are no longer dropped.
+- Scheduled plan step operationIds derive from the plan name and step content, so deleting and re-saving a finished plan cannot make the signer execute its steps again.
+- The mainnet guard asks for every `chaingpt_agent_wallet_*sign_and_send` tool, including future chains; Tron prompts show the TRX/TRC-20 amount, token and recipient.
 
-Compatibility: existing policies must be reviewed for supported calls and assetLimits. Read docs/wallet-safety.md before enabling the updated signer. This entry does not claim a live-chain acceptance test or publish a release.
+Compatibility: RPC URLs and file-path overrides in a project `.env` are now ignored; set them in the MCP server launch environment. Existing policies must be reviewed for supported calls and assetLimits. Read docs/wallet-safety.md before enabling the updated signer. This entry does not claim a live-chain acceptance test or publish a release.
 
 ## [1.22.2] - 2026-06-29
 ### Fixed — duplicate hooks-file load error
