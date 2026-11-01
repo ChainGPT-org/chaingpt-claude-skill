@@ -20,6 +20,7 @@ import { initKeystore } from '../lib/agent-keystore.js';
 
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const SCW = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const AGENT = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const FUTURE = Math.floor(Date.now() / 1000) + 86_400;
 const PID = `0x${'ab'.repeat(32)}`;
 
@@ -63,10 +64,18 @@ describe('tool surface', () => {
 });
 
 describe('build_grant (offline, moduleInstalled passed explicitly)', () => {
+  it('does not default to the agent wallet key while the agent wallet is disabled', async () => {
+    const r = await handleAaSessionTool('chaingpt_aa_session_build_grant', {
+      chain: 'base', account: SCW, tokenCaps: [{ token: USDC, cap: '1' }], validUntil: FUTURE, moduleInstalled: true,
+    });
+    expect(r.content[0].text).toContain('The agent wallet is disabled');
+  });
+
   it('emits permissionId + execute-wrapped calldata + the owner recipe, and caches the record', async () => {
     const r = await handleAaSessionTool('chaingpt_aa_session_build_grant', {
       chain: 'base',
       account: SCW,
+      agentAddress: AGENT,
       tokenCaps: [{ token: USDC, cap: '100000000' }],
       validUntil: FUTURE,
       moduleInstalled: true,
@@ -85,6 +94,7 @@ describe('build_grant (offline, moduleInstalled passed explicitly)', () => {
     const r = await handleAaSessionTool('chaingpt_aa_session_build_grant', {
       chain: 'base',
       account: SCW,
+      agentAddress: AGENT,
       tokenCaps: [{ token: USDC, cap: '5000000' }],
       validUntil: FUTURE,
       moduleInstalled: false,
@@ -97,10 +107,10 @@ describe('build_grant (offline, moduleInstalled passed explicitly)', () => {
 
   it('refuses unbounded grants and zero caps (builder guards)', async () => {
     await expect(handleAaSessionTool('chaingpt_aa_session_build_grant', {
-      chain: 'base', account: SCW, tokenCaps: [{ token: USDC, cap: '1' }], validUntil: 0, moduleInstalled: true,
+      chain: 'base', account: SCW, agentAddress: AGENT, tokenCaps: [{ token: USDC, cap: '1' }], validUntil: 0, moduleInstalled: true,
     })).rejects.toThrow(/validUntil/);
     await expect(handleAaSessionTool('chaingpt_aa_session_build_grant', {
-      chain: 'base', account: SCW, tokenCaps: [{ token: USDC, cap: '0' }], validUntil: FUTURE, moduleInstalled: true,
+      chain: 'base', account: SCW, agentAddress: AGENT, tokenCaps: [{ token: USDC, cap: '0' }], validUntil: FUTURE, moduleInstalled: true,
     })).rejects.toThrow(/> 0/);
   });
 });

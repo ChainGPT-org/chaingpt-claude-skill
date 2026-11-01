@@ -61,8 +61,8 @@ export const CONTROLLER_ABI = [
 export function baseRpcEndpoints(chainId: BaseChainId): string[] {
   const network = chainId === 8453 ? 'base' : 'base-sepolia';
   const list = rpcEndpoints(network);
-  // Power-user / reliability override: BASE_RPC_URL (or BASE_SEPOLIA_RPC_URL) wins.
-  const env = chainId === 8453 ? process.env.BASE_RPC_URL : (process.env.BASE_SEPOLIA_RPC_URL ?? process.env.BASE_RPC_URL);
+  // Power-user / reliability override: BASE_RPC_URL (mainnet) or BASE_SEPOLIA_RPC_URL wins. Never cross networks.
+  const env = chainId === 8453 ? process.env.BASE_RPC_URL : process.env.BASE_SEPOLIA_RPC_URL;
   if (env) return [env, ...list];
   if (list.length === 0) return [chainId === 8453 ? 'https://mainnet.base.org' : 'https://sepolia.base.org'];
   return list;

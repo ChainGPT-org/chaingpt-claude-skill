@@ -20,6 +20,7 @@ import {
   classifyAccountId,
 } from '../lib/erc7579.js';
 import { readKeystoreFile } from '../lib/agent-keystore.js';
+import { AGENT_WALLET_ENABLED } from '../lib/agent-wallet-gate.js';
 import { resolveChainWithCustom, rpcEndpointsWithCustom } from '../lib/agent-custom-chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 
@@ -126,9 +127,12 @@ export async function handleAaSessionTool(
     if (name === 'chaingpt_aa_session_build_grant') {
       const { chainId, rpcs } = chainRpcs(String(args.chain));
       const account = String(args.account) as Address;
-      const agentAddress = (args.agentAddress ? String(args.agentAddress) : readKeystoreFile()?.address) as Address | undefined;
+      // Default to the agent wallet's key only while the agent wallet is enabled.
+      const agentAddress = (args.agentAddress ? String(args.agentAddress) : AGENT_WALLET_ENABLED ? readKeystoreFile()?.address : undefined) as Address | undefined;
       if (!agentAddress) {
-        return { content: [{ type: 'text', text: 'No agentAddress given and the agent wallet is not initialized — run chaingpt_agent_wallet_init or pass agentAddress.' }] };
+        return { content: [{ type: 'text', text: AGENT_WALLET_ENABLED
+          ? 'No agentAddress given and the agent wallet is not initialized — run chaingpt_agent_wallet_init or pass agentAddress.'
+          : 'Pass agentAddress (the session key that will act). The agent wallet is disabled, so it is not used as a default.' }] };
       }
       const tokenCaps = (args.tokenCaps as Array<{ token: string; cap: string }>).map((t) => ({
         token: t.token as Address,
