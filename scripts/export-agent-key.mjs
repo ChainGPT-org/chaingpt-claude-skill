@@ -13,12 +13,14 @@
  *   node scripts/export-agent-key.mjs
  */
 import { createInterface } from 'node:readline/promises';
+import { createRequire } from 'node:module';
 
 const dist = new URL('../mcp-server/dist/lib/', import.meta.url);
 const { readKeystoreFile, keystorePath, decryptSecret } = await import(new URL('agent-keystore.js', dist));
 const { resolvePassphrase } = await import(new URL('agent-secret.js', dist));
-const { readSolanaKeystoreFile } = await import(new URL('agent-keystore-solana.js', dist));
+const { readSolanaKeystoreFile, loadSolanaKeypair, solanaKeystorePath } = await import(new URL('agent-keystore-solana.js', dist));
 const { base58Encode } = await import(new URL('tron-address.js', dist));
+const { privateKeyToAccount } = createRequire(new URL('../mcp-server/package.json', import.meta.url))('viem/accounts');
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
   console.error('Refusing: run this yourself in an interactive terminal, not through an agent or a pipe.');
@@ -28,7 +30,7 @@ if (!process.stdin.isTTY || !process.stdout.isTTY) {
 const evm = readKeystoreFile();
 const sol = readSolanaKeystoreFile();
 if (!evm && !sol) {
-  console.log(`No agent-wallet keystore found (looked at ${keystorePath()}). Nothing to export.`);
+  console.log(`No agent-wallet keystore found (looked at ${keystorePath()} and ${solanaKeystorePath()}). Nothing to export.`);
   process.exit(0);
 }
 
@@ -53,12 +55,19 @@ if (!pass) {
 
 if (evm) {
   const key = decryptSecret(evm, pass);
-  console.log(`\nEVM private key (MetaMask/Rabby; also imports into TronLink without the 0x): 0x${key.toString('hex')}`);
+  const hex = `0x${key.toString('hex')}`;
   key.fill(0);
+  // Same integrity check as the signer: the decrypted key must control the recorded address.
+  if (privateKeyToAccount(hex).address.toLowerCase() !== evm.address.toLowerCase()) {
+    console.error('EVM keystore integrity check failed: decrypted key does not match the recorded address. Not printing it.');
+    process.exit(1);
+  }
+  console.log(`\nEVM private key (MetaMask/Rabby; also imports into TronLink without the 0x): ${hex}`);
 }
 if (sol) {
-  const secret = decryptSecret(sol, pass);
-  console.log(`\nSolana secret key, base58 (Phantom/Solflare "import private key"): ${base58Encode(Uint8Array.from(secret))}`);
-  secret.fill(0);
+  const keypair = loadSolanaKeypair(); // verifies the key against the recorded address
+  console.log(`\nSolana secret key, base58 (Phantom/Solflare "import private key"): ${base58Encode(keypair.secretKey)}`);
 }
-console.log('\nMove the funds to your own wallet, then delete ~/.chaingpt-mcp/agent-wallet/ if you no longer need it.');
+console.log('\nMove the funds to your own wallet.' +
+  (sol ? ` Afterwards you may delete ${solanaKeystorePath()} (the retired Solana key).` : '') +
+  ` Keep ${keystorePath()} if you use the ERC-4337 session key, and never delete the signing journal or policy beside it.`);

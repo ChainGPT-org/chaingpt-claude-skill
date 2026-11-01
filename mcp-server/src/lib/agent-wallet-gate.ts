@@ -5,8 +5,8 @@ export const AGENT_WALLET_ENABLED = process.env.CHAINGPT_AGENT_WALLET_ENABLED ==
 
 export const AGENT_WALLET_DISABLED_MESSAGE =
   'The ChainGPT agent wallet is disabled in this release while security reports are reviewed. ' +
-  'Unsigned transaction tools still work: sign them in your own wallet. To move funds out of an ' +
-  'existing agent wallet, restart the MCP server with CHAINGPT_AGENT_WALLET_ENABLED=true set in its ' +
-  'launch environment (not a .env file), withdraw, then remove it again.';
+  'Unsigned transaction tools still work: sign them in your own wallet. To move funds left on an old ' +
+  'agent address, run `node scripts/export-agent-key.mjs` yourself in a terminal and import the key into ' +
+  'your own wallet.';
 
 export const isAgentWalletTool = (name: string) => name.startsWith('chaingpt_agent_wallet');

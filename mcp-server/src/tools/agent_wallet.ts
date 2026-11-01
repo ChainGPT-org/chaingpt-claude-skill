@@ -81,7 +81,7 @@ export const agentWalletTools: Tool[] = [
   {
     name: 'chaingpt_agent_wallet_address',
     description:
-      'Return the agent\'s public EOA address (for receiving funds). Does NOT need the passphrase — reads ' +
+      'Return the agent\'s session-key address (do NOT fund it: funds belong in the smart account). Does NOT need the passphrase — reads ' +
       'only the public field of the keystore file. Returns a warning if not initialized. 0 ChainGPT credits.',
     inputSchema: {
       type: 'object' as const,
@@ -981,17 +981,17 @@ ${o.flashBlock}
 <section id="tab-assets" class="tab-pane active">
   <div class="grid-2">
     <div class="card">
-      <div class="card-head"><h2>Deposit address</h2></div>
+      <div class="card-head"><h2>Session-key address</h2></div>
       <div class="addr-row">
         <span class="addr mono">${escapeHtml(o.address)}</span>
         <button class="copy-btn" data-copy="${escapeHtml(o.address)}">Copy</button>
       </div>
       <div style="margin-top:14px; text-align:center">
         ${o.qrDataUri
-          ? `<img class="qr" alt="QR code for receive address" src="${escapeHtml(o.qrDataUri)}" width="220" height="220"/>`
+          ? `<img class="qr" alt="QR code for the session-key address" src="${escapeHtml(o.qrDataUri)}" width="220" height="220"/>`
           : `<div class="help">(QR rendering unavailable)</div>`}
       </div>
-      <p class="help">EVM-compatible address. Funds can arrive on any of the ${Object.values(CHAINS).filter((c)=>c.chainId!==null).length} supported chains. QR generated locally — never leaves the dashboard.</p>
+      <p class="help">The agent's ERC-4337 session key. <strong>Do not send funds here</strong>: keep them in the smart account, where on-chain session caps apply. Funds sent here can only be recovered with <code>scripts/export-agent-key.mjs</code>.</p>
     </div>
 
     <div class="card">
@@ -1763,7 +1763,7 @@ async function handleAgentWalletToolUnlocked(
             `read that file: it unlocks policy edits and the kill switch.`,
             ``,
             `What the dashboard does:`,
-            `  • Address + QR code for receiving funds`,
+            `  • Session-key address (do not fund it)`,
             `  • Live multi-chain native balances`,
             `  • Active policy + digest`,
             `  • Edit the policy JSON inline (validated server-side, atomic write + .bak)`,

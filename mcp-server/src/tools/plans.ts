@@ -389,7 +389,7 @@ async function handlePlanToolUnlocked(
           const when = ageMin >= 0 ? `${ageMin} min overdue` : `due in ${Math.abs(ageMin)} min (within lookahead)`;
           lines.push(`• Step ${s.id} — scheduled ${new Date(s.atUnix * 1000).toISOString()} (${when})`);
           lines.push(`    ${JSON.stringify(detail)}`);
-          if (args.claim === true) lines.push(`    operationId=${journal[String(s.id)].operationId} (pass unchanged to sign_and_send)`);
+          if (args.claim === true) lines.push(`    operationId=${journal[String(s.id)].operationId} (pass unchanged to chaingpt_agent_wallet_4337_sign_and_send)`);
         }
         if (due.length > limit) lines.push(`(+${due.length - limit} more due — raise limit)`);
         lines.push('');

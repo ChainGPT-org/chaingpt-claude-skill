@@ -6,7 +6,7 @@
 
 **Turn your AI assistant into a Web3 engineering co‑pilot.**
 
-The prepared local checkout exposes 142 MCP tools by default (149 with the optional agent wallet) across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend), **perps** (Hyperliquid + legacy Drift; hosted Drift data unavailable), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an optional **agent wallet** (off by default; localhost admin dashboard + local signing policy, requires host isolation). 142 tools are listed by default; the 13 agent‑wallet tools appear only when `CHAINGPT_AGENT_WALLET_ENABLED=true`. Every other tool is custody‑free: it returns an unsigned transaction you sign in your own wallet. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
+The prepared local checkout exposes 142 MCP tools by default (149 with the optional agent wallet) across **ChainGPT AI products** (chat, NFT, contract gen, audit, news, signals), **EVM + Solana DEX trading** (OpenOcean, 1inch v6, CoW, Jupiter), **DeFi** (Aave V3, Lido, EigenLayer, Pendle, Morpho, Marginfi, Kamino), **Tron (TVM)** (TRC‑20, SunSwap, JustLend), **perps** (Hyperliquid + legacy Drift; hosted Drift data unavailable), **prediction markets** (Polymarket), **cross‑chain bridging** (Across), **x402 agentic payments**, **Base** (Basenames + Mini App scaffolding), **ERC‑8004 trustless‑agent identity**, **multi‑protocol portfolio**, **strategy plan persistence + backtest**, and an optional **agent wallet** (off by default; localhost admin dashboard + local signing policy, requires host isolation). 142 tools are listed by default; the 7 agent‑wallet tools appear only when `CHAINGPT_AGENT_WALLET_ENABLED=true`. Every other tool is custody‑free: it returns an unsigned transaction you sign in your own wallet. 45+ Solidity examples. 11 template files. Manual live-API smoke checks.
 
 [![npm version](https://img.shields.io/badge/version-1.23.2-blue?style=flat-square)](https://github.com/ChainGPT-org/chaingpt-claude-skill/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -211,7 +211,7 @@ The dashboard binds **127.0.0.1 only**, the admin token rotates every time the s
 
 ### Step 8 — Optional: enable the Agent Wallet (only needed for "bounded autonomous" flows)
 
-> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. To withdraw from an existing agent wallet, start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment (a `.env` file cannot enable it), move the funds, then remove the variable.
+> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. Funds left on an old agent address: run `node scripts/export-agent-key.mjs` yourself and import the key into your own wallet (enabling the agent wallet no longer moves them; its only signer is the ERC-4337 session key).
 
 If you want Claude to **sign and broadcast transactions itself** within a policy you set, the Agent Wallet feature ships with the plugin. It's optional — if you just want the AI co‑pilot that returns *unsigned* transactions for you to sign in MetaMask / Rabby / Phantom, **skip this step**.
 
@@ -410,7 +410,7 @@ local authorization material: do not paste journal files into chat or commit the
 
 ## 🖥️ The Agent Wallet Dashboard
 
-> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. To withdraw from an existing agent wallet, start the MCP server with `CHAINGPT_AGENT_WALLET_ENABLED=true` in its launch environment (a `.env` file cannot enable it), move the funds, then remove the variable.
+> **Agent wallet disabled by default (2026-10-31).** Key custody and autonomous signing are switched off while open security reports are reviewed. All other tools work unchanged and return unsigned transactions you sign in your own wallet. Funds left on an old agent address: run `node scripts/export-agent-key.mjs` yourself and import the key into your own wallet (enabling the agent wallet no longer moves them; its only signer is the ERC-4337 session key).
 
 Ships with a real localhost wallet UI for the AI agent — not just a CLI. Encrypted EOA keystore, admin-controlled signing policy with an explicit host-isolation boundary, kill switch, 9 policy templates including 🚨 unrestricted mode, custom EVM chain registration, blue‑chip auto‑scan.
 
