@@ -61,7 +61,7 @@ process.stdin.on('end', () => {
     } else if (isAgentTronSend) {
       ask = true;
       const what = input.kind === 'trc20_transfer' ? `${input.amount || '?'} ${input.token || '?'} (TRC-20) to ${input.to || '?'}`
-        : input.kind === 'contract_call' ? `contract call ${input.functionSelector || '?'} on ${input.contract || '?'} with ${input.callValueTrx || '0'} TRX`
+        : input.kind === 'contract_call' ? `contract call ${input.functionSelector || '?'} on ${input.contract || '?'} with ${input.callValueTrx || '0'} TRX, args=${String(input.parameter || '(none)').slice(0, 260)}`
         : `${input.amount || '?'} TRX to ${input.to || '?'}`;
       why = `Agent wallet is about to SIGN AND BROADCAST a Tron transaction autonomously on ${input.network || 'mainnet'}: ${what}, memo=${input.memo || '(none)'}. The Tron policy gate has its own checks; this prompt is the human layer on top.`;
     } else if (isAgentSend) {

@@ -36,4 +36,10 @@ test('an unknown future agent-wallet signer still asks, and the Tron prompt desc
   const why = JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason;
   assert.match(why, /5000 USDT \(TRC-20\) to TRecipient/);
   assert.doesNotMatch(why, /wei/);
+  const call = spawnSync(process.execPath, ['hooks/mainnet-guard.js'], {
+    input: JSON.stringify({ tool_name: 'mcp__plugin_chaingpt__chaingpt_agent_wallet_tron_sign_and_send',
+      tool_input: { kind: 'contract_call', contract: 'TContract', functionSelector: 'transfer(address,uint256)', parameter: 'abcdef0123' } }),
+    encoding: 'utf8', env: { PATH: process.env.PATH, CHAINGPT_GUARD: 'on' }, timeout: 5000,
+  });
+  assert.match(JSON.parse(call.stdout).hookSpecificOutput.permissionDecisionReason, /args=abcdef0123/);
 });

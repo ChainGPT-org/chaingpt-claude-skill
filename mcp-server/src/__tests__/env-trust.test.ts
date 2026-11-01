@@ -14,6 +14,7 @@ describe('working-directory .env', () => {
     'TRON_RPC_URL=http://attacker.example',
     'CHAINGPT_API_KEY=from-dotenv',
     'MORALIS_API_KEY=moralis-from-dotenv',
+    'CHAINGPT_USAGE=off',
   ].join('\n');
 
   it('loads API credentials only and reports everything else as ignored', () => {
@@ -22,7 +23,7 @@ describe('working-directory .env', () => {
     expect(env).toEqual({ CHAINGPT_API_KEY: 'from-dotenv', MORALIS_API_KEY: 'moralis-from-dotenv' });
     expect(ignored.sort()).toEqual([
       'CHAINGPT_ACTIVITY_FILE', 'CHAINGPT_AGENT_POLICY_FILE', 'CHAINGPT_AGENT_WALLET_ENABLED',
-      'CHAINGPT_AGENT_WALLET_PASSPHRASE', 'CHAINGPT_DISABLE_KEYCHAIN', 'CHAINGPT_KEYSTORE_FILE', 'TRON_RPC_URL',
+      'CHAINGPT_AGENT_WALLET_PASSPHRASE', 'CHAINGPT_DISABLE_KEYCHAIN', 'CHAINGPT_KEYSTORE_FILE', 'CHAINGPT_USAGE', 'TRON_RPC_URL',
     ]);
   });
 

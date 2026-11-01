@@ -362,7 +362,9 @@ async function handlePlanToolUnlocked(
           // Derived from the plan name + step content, NOT the random planId: deleting a finished
           // plan and re-saving it must map its steps onto the same ids, which the signer refuses to sign twice.
           // The id is normalised like the journal key; any other change to the step is a different action.
-          const operationId = `plan:${operationFingerprint({ name: plan.name, step: { ...step, id: String(step.id) } })}`;
+          // Plan-level execution fields (e.g. DCA network / outToken) live beside steps and are part of the action too.
+          const { steps: _steps, ...planParams } = (plan.payload ?? {}) as Record<string, unknown>;
+          const operationId = `plan:${operationFingerprint({ name: plan.name, planParams, step: { ...step, id: String(step.id) } })}`;
           journal[String(step.id)] = { ts: new Date().toISOString(), status: 'claimed', operationId };
         }
         durableJson(path, plan);

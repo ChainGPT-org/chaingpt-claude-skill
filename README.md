@@ -237,7 +237,7 @@ For full wallet management (multi-chain balances, kill switch, 9 policy template
 > open the wallet admin UI
 ```
 
-Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.0.1:8787`. The admin token is **not** shown to Claude: read it yourself from `~/.chaingpt-mcp/agent-wallet/.admin-token` (0600, rotated on every start; separate from the dashboard's 8788 token).
+Claude calls `chaingpt_agent_wallet_serve_ui`. It prints a URL on `http://127.0.0.1:8787`. The admin token is **not** shown to Claude: read it yourself from the token file path the tool reports (default `~/.chaingpt-mcp/agent-wallet/.admin-token`, 0600, rotated on every start; separate from the dashboard's 8788 token).
 
 ### Slash commands you'll use most
 

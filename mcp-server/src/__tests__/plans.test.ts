@@ -255,6 +255,11 @@ describe('durable scheduled claims', () => {
     await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [{ ...step, id: '1' }] } });
     expect(await claimId('resave')).toBe(original);
 
+    // Same step under a different plan-level execution field (e.g. network) is a different action.
+    rmSync(TMP_DIR, { recursive: true, force: true });
+    await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { network: 'base', steps: [step] } });
+    expect(await claimId('resave')).not.toBe(original);
+
     // A materially different step is a different action and gets a different id.
     rmSync(TMP_DIR, { recursive: true, force: true });
     await handlePlanTool('chaingpt_strategy_save_plan', { name: 'resave', payload: { steps: [{ ...step, usd: 20 }] } });

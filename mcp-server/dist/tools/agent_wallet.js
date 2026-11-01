@@ -335,7 +335,7 @@ ${errorBlock}
 <input type="password" name="token" placeholder="Paste admin token" autofocus required />
 <button type="submit">Unlock</button>
 </form>
-<p class="hint">Read the admin token from <code>~/.chaingpt-mcp/agent-wallet/.admin-token</code> (0600; or <code>CHAINGPT_ADMIN_TOKEN_FILE</code>). It is never shown to the agent. It rotates every time the UI server is (re)started.</p>
+<p class="hint">Read the admin token from <code>${escapeHtml(adminTokenPath())}</code> (0600). It is never shown to the agent. It rotates every time the UI server is (re)started.</p>
 </div>
 </body></html>`;
 }

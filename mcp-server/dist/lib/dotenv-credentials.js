@@ -7,7 +7,6 @@ import { readFileSync } from 'node:fs';
 export const DOTENV_ALLOWED_KEYS = new Set([
     'CHAINGPT_API_KEY', 'ETHERSCAN_API_KEY', 'MORALIS_API_KEY', 'ONEINCH_API_KEY', 'JUPITER_API_KEY',
     'GOPLUS_API_KEY', 'TRON_PRO_API_KEY', 'POLY_CLOB_API_KEY', 'POLY_CLOB_SECRET', 'POLY_CLOB_PASSPHRASE',
-    'CHAINGPT_USAGE',
 ]);
 /** Copy allowed keys from `text` (dotenv format) into `env` without overriding; returns ignored keys. */
 export function applyDotenvCredentials(text, env = process.env) {
