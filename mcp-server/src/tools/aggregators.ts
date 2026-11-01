@@ -318,7 +318,7 @@ export async function handleAggregatorTool(
       // The order is assembled from the quote, so it must still be the order that was asked for.
       if (String(q.sellToken).toLowerCase() !== String(sellToken).toLowerCase()
         || String(q.buyToken).toLowerCase() !== String(buyToken).toLowerCase()
-        || BigInt(q.sellAmount) + BigInt(q.feeAmount ?? 0) > sellAmount) {
+        || BigInt(q.sellAmount) + BigInt(q.feeAmount ?? 0) !== sellAmount) {
         throw new Error('CoW quote does not match the requested tokens or sell amount; refusing to build the order.');
       }
 

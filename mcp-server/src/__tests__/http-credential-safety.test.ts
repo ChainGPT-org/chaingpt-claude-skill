@@ -89,7 +89,7 @@ describe('authenticated HTTP diagnostics', () => {
 
   it('redacts keys embedded in the URL path (bundler / RPC style) but keeps addresses', async () => {
     const key = ['fixturePathKey', '0123456789'].join(''); // assembled so secret scanners skip the fixture
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('bad', { status: 404 }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(`unknown key ${key}`, { status: 404 }));
     const error = String(await httpJson(`https://bundler.example.com/v2/${key}/0x${'a'.repeat(40)}`).catch(e => e));
     expect(error).not.toContain(key);
     expect(error).toContain('/v2/[redacted]/0x' + 'a'.repeat(40));

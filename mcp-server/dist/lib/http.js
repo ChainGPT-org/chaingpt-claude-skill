@@ -24,8 +24,12 @@ function requestDiagnostics(url, headers) {
             safe.password = '[redacted]';
         }
         // Keys embedded in the path (e.g. /v2/<key> RPC/bundler URLs): long opaque segments that are not 0x hex.
-        safe.pathname = safe.pathname.split('/').map(seg => seg.length >= 20 && /^[A-Za-z0-9_-]+$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg) && !/^0x[0-9a-f]+$/i.test(seg)
-            ? '[redacted]' : seg).join('/');
+        safe.pathname = safe.pathname.split('/').map(seg => {
+            if (seg.length < 20 || !/^[A-Za-z0-9_-]+$/.test(seg) || !/\d/.test(seg) || !/[A-Za-z]/.test(seg) || /^0x[0-9a-f]+$/i.test(seg))
+                return seg;
+            authenticated = true; // the body may echo the key: omit response details like any keyed request
+            return '[redacted]';
+        }).join('/');
         for (const name of new Set(safe.searchParams.keys())) {
             if (credentialName.test(name)) {
                 authenticated = true;

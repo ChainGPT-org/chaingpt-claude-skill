@@ -732,7 +732,7 @@ You: "I want to long ETH 5x on Hyperliquid but check the funding rate first.
 Claude: → chaingpt_hl_markets
         → chaingpt_hl_funding  (ETH 8h funding rate: -0.0042% → shorts pay longs ✓)
         → chaingpt_hl_orderbook(coin=ETH, depth=20)  (mid: 4218.5)
-        → chaingpt_hl_place_order_payload(asset=ETH, isBuy=true, size=5000,
+        → chaingpt_hl_place_order_payload(asset=1 /* ETH index from hl_markets */, isBuy=true, size=5000,
                                           price=4155.2, leverage=5,
                                           tif=Gtc)
         ✓ EIP-712 intent ready. Paste this into your HL signer to broadcast:

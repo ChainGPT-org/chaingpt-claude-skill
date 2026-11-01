@@ -225,6 +225,9 @@ async function handleX402Fetch(args) {
     const built = await handleBuildPayment({ from: String(args.from), requirements: req, maxAtomicAmount: args.maxAtomicAmount });
     lines.push(built);
     lines.push('');
+    lines.push('--- PaymentRequirements (pass unchanged as `requirements`) ---');
+    lines.push(JSON.stringify(req));
+    lines.push('');
     lines.push(`After signing: chaingpt_x402_build_payment from=${args.from} requirements=<above> authorization=<original> signature=<sig>`);
     lines.push(`→ then re-call chaingpt_x402_fetch url=${url} xPaymentHeader=<X-PAYMENT value> to complete the paid request.`);
     return lines.join('\n');
@@ -291,7 +294,7 @@ async function handleBuildPayment(args) {
     const validAfter = original ? Number(original.validAfter) : 0;
     if (!Number.isSafeInteger(validBefore) || !Number.isSafeInteger(validAfter) || validBefore <= now || validAfter > now || validAfter < 0)
         throw new Error('Invalid or expired payment validity window.');
-    if (!args.signature && validBefore - now > 3600)
+    if (validBefore - now > 3600)
         throw new Error('Payment authorizations are limited to one hour of validity.');
     const nonce = original?.nonce ?? freshNonce();
     const { typedData, digest, authorization } = buildTransferWithAuthorizationTypedData({

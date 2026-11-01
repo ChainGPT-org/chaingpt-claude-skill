@@ -74,6 +74,7 @@ describe('chaingpt_x402_fetch', () => {
     const t = r.content[0].text;
     expect(t).toContain('TransferWithAuthorization');
     expect(t).toContain(PAYER);
+    expect(t).toContain('--- PaymentRequirements (pass unchanged as `requirements`) ---');
     expect(t).toContain('xPaymentHeader');
   });
 
@@ -133,6 +134,8 @@ describe('x402_build_payment server-controlled fields', () => {
     let t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, authorization })).content[0].text;
     expect(t).toContain('Pass maxAtomicAmount');
     t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, authorization, maxAtomicAmount: '10000' })).content[0].text;
+    expect(t).toContain('limited to one hour');
+    t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, authorization, signature: '0x' + '00'.repeat(65) })).content[0].text;
     expect(t).toContain('limited to one hour');
   });
 });

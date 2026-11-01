@@ -12,6 +12,7 @@ process.env.CHAINGPT_KEYSTORE_FILE = join(TMP, 'keystore.json');
 process.env.CHAINGPT_AGENT_POLICY_FILE = join(TMP, 'policy.json');
 process.env.CHAINGPT_ACTIVITY_FILE = join(TMP, 'activity.jsonl');
 process.env.CHAINGPT_SESSIONS_FILE = join(TMP, 'sessions-4337.json');
+delete process.env.CHAINGPT_AGENT_WALLET_ENABLED; // the disabled-wallet case must not depend on the caller's shell
 
 import { aaSessionTools, handleAaSessionTool } from '../tools/aa_sessions.js';
 import { agentWallet4337Tools, handleAgentWallet4337Tool } from '../tools/agent_wallet_4337.js';

@@ -214,6 +214,9 @@ describe('CoW Protocol tools', () => {
     vi.restoreAllMocks();
     quote({ sellAmount: '100000000' }); // + fee exceeds the 100 USDC requested
     await expect(handleAggregatorTool('chaingpt_dex_cow_create_order', args)).rejects.toThrow(/does not match/);
+    vi.restoreAllMocks();
+    quote({ sellAmount: '1', feeAmount: '0' }); // sells far less than requested
+    await expect(handleAggregatorTool('chaingpt_dex_cow_create_order', args)).rejects.toThrow(/does not match/);
   });
 
   it('cow_submit_signed_order POSTs to CoW API and returns UID', async () => {
