@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { encodeFunctionData, parseUnits, formatUnits, type Hex } from 'viem';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 import { httpJson, jsonRpcFallback } from '../lib/http.js';
-import { fetchErc20Decimals } from '../lib/agent-erc20.js';
+import { checkedDecimals, fetchErc20Decimals } from '../lib/agent-erc20.js';
 
 /**
  * Tier-3a DEX trading on mainnet. Custody-free.
@@ -395,9 +395,15 @@ export async function handleDexTool(
       // If decimals omitted, fetch them on-chain — defaulting to 18 silently
       // mis-sizes approvals for 6-decimal tokens like USDC.
       const chain = resolveChain(network);
-      let decimals: number;
-      if (args.decimals !== undefined) {
-        decimals = Number(args.decimals);
+      let decimals = 0;
+      if (String(args.amount) === 'max') {
+        // unlimited approval: no amount to scale, so decimals are not needed
+      } else if (args.decimals !== undefined) {
+        try {
+          decimals = await checkedDecimals(network, token, args.decimals);
+        } catch (e: any) {
+          return { content: [{ type: 'text', text: `Refused: ${e?.message ?? e}` }] };
+        }
       } else {
         try {
           decimals = await fetchErc20Decimals(network, token);

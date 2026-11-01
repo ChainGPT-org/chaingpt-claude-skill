@@ -174,7 +174,7 @@ export function clobHeaders(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   bodyJson: string,
-  maker: string
+  signer: string
 ): Record<string, string> {
   const ts = Math.floor(Date.now() / 1000).toString();
   const message = ts + method + path + bodyJson;
@@ -184,7 +184,7 @@ export function clobHeaders(
   // Polymarket uses base64-URL-safe (replace + → -, / → _).
   const sig = hmac.toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
   return {
-    POLY_ADDRESS: maker,
+    POLY_ADDRESS: signer,
     POLY_SIGNATURE: sig,
     POLY_TIMESTAMP: ts,
     POLY_API_KEY: creds.apiKey,

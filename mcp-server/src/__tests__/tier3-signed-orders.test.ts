@@ -203,4 +203,21 @@ describe('Polymarket handler smoke', () => {
     expect(r.content[0].text).toContain('Polymarket CLOB credentials are required');
     expect(r.content[0].text).toContain('POLY_CLOB_API_KEY');
   });
+
+  it('submit_signed_order sends the API key as owner and the signer as POLY_ADDRESS', async () => {
+    process.env.POLY_CLOB_API_KEY = 'fixture-api-key';
+    process.env.POLY_CLOB_SECRET = Buffer.from('fixture-secret').toString('base64');
+    process.env.POLY_CLOB_PASSPHRASE = 'fixture-passphrase';
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true, orderID: '0x1' }), { status: 200 }));
+    try {
+      const maker = '0x' + 'a'.repeat(40), signer = '0x' + 'b'.repeat(40); // proxy wallet: maker != signer
+      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: { maker, signer, side: 0 } as any, signature: '0x' + 'a'.repeat(130) });
+      const init = spy.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(String(init.body)).owner).toBe('fixture-api-key');
+      expect((init.headers as Record<string, string>).POLY_ADDRESS).toBe(signer);
+    } finally {
+      spy.mockRestore();
+      delete process.env.POLY_CLOB_API_KEY; delete process.env.POLY_CLOB_SECRET; delete process.env.POLY_CLOB_PASSPHRASE;
+    }
+  });
 });

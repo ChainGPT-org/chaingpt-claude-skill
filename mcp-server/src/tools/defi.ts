@@ -11,17 +11,7 @@ import {
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from 'viem/chains';
 import { fallback } from 'viem';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
-import { fetchErc20Decimals } from '../lib/agent-erc20.js';
-
-// The caller's decimals scale the amount (amount × 10^decimals); a wrong value moves 10^n× the intended
-// funds in a tx the user may sign without noticing. Use the token's own decimals() and refuse a mismatch.
-async function checkedDecimals(network: string, token: string, claimed: unknown): Promise<number> {
-  const onChain = await fetchErc20Decimals(network, token);
-  if (Number(claimed) !== onChain) {
-    throw new Error(`decimals ${String(claimed)} does not match ${token} on ${network} (decimals() returns ${onChain}). Re-check the token and amount.`);
-  }
-  return onChain;
-}
+import { checkedDecimals } from '../lib/agent-erc20.js';
 
 /**
  * Tier-3d DeFi protocols on MAINNET. Custody-free.

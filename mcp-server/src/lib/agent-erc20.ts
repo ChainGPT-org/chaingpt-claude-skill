@@ -111,3 +111,13 @@ export function formatTokenAmount(raw: bigint, decimals: number, showDecimals = 
   const fracStr = frac.toString().padStart(decimals, '0').slice(0, showDecimals);
   return `${whole}.${fracStr}`;
 }
+
+// The caller's decimals scale the amount (amount × 10^decimals); a wrong value moves 10^n× the intended
+// funds in a tx the user may sign without noticing. Use the token's own decimals() and refuse a mismatch.
+export async function checkedDecimals(network: string, token: string, claimed: unknown): Promise<number> {
+  const onChain = await fetchErc20Decimals(network, token);
+  if (Number(claimed) !== onChain) {
+    throw new Error(`decimals ${String(claimed)} does not match ${token} on ${network} (decimals() returns ${onChain}). Re-check the token and amount.`);
+  }
+  return onChain;
+}

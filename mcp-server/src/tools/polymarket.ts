@@ -145,7 +145,7 @@ export const polymarketTools: Tool[] = [
       properties: {
         order: { description: 'The order object exactly as returned by chaingpt_pm_place_order_payload.' },
         signature: { type: 'string', description: '0x-prefixed signature from the user\'s wallet (eth_signTypedData_v4 over the typed data).' },
-        owner: { type: 'string', description: 'Owner address (usually = maker).' },
+        owner: { type: 'string', description: 'CLOB API key of the order owner. Defaults to POLY_CLOB_API_KEY (Polymarket expects the API key here, not an address).' },
         orderType: {
           type: 'string',
           enum: ['GTC', 'FOK', 'GTD'],
@@ -367,7 +367,9 @@ export async function handlePolymarketTool(
       }
       const order = args.order as PolymarketOrder;
       const signature = String(args.signature);
-      const owner = (args.owner as string | undefined) ?? order.maker;
+      // Per the CLOB API: body.owner is the owner's API key; the POLY_ADDRESS header is the signing EOA
+      // (differs from maker for proxy wallets).
+      const owner = (args.owner as string | undefined) ?? creds.apiKey;
       const orderType = String(args.orderType ?? 'GTC');
 
       const body = JSON.stringify({
@@ -375,7 +377,7 @@ export async function handlePolymarketTool(
         owner,
         orderType,
       });
-      const headers = clobHeaders(creds, 'POST', '/order', body, owner);
+      const headers = clobHeaders(creds, 'POST', '/order', body, order.signer ?? order.maker);
       // 15s timeout — without it, a hung CLOB endpoint pins the tool indefinitely.
       const ac = new AbortController();
       const t = setTimeout(() => ac.abort(), 15_000);

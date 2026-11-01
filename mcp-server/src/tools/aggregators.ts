@@ -113,7 +113,7 @@ export const aggregatorTools: Tool[] = [
         sellDecimals: { type: 'number' },
         from: { type: 'string', description: 'Order owner (0x…).' },
         slippageBps: { type: 'integer', minimum: 0, maximum: 5000, description: 'Max slippage in bps. Default 100 (1%).', default: 100 },
-        validForMinutes: { type: 'number', description: 'How long the order is valid. Default 30.', default: 30 },
+        validForMinutes: { type: 'number', minimum: 1, maximum: 1440, description: 'How long the order is valid (1-1440 minutes). Default 30.', default: 30 },
         acknowledgeMainnet: { type: 'boolean' },
       },
       required: ['network', 'sellToken', 'buyToken', 'sellAmount', 'sellDecimals', 'from'],
@@ -157,8 +157,10 @@ function formatAmount(raw: string, decimals: number, decimalsToShow = 4): string
 }
 
 function rawAmount(decimal: string, decimals: number): bigint {
-  // Parse "1.5" into raw integer string with `decimals` decimals
+  // Parse "1.5" into raw integer string with `decimals` decimals. Refuse rather than silently truncate or negate.
+  if (!/^\d+(\.\d+)?$/.test(decimal)) throw new Error(`Amount must be a positive decimal number, got "${decimal}".`);
   const [intPart, fracPart = ''] = decimal.split('.');
+  if (fracPart.length > decimals) throw new Error(`Amount "${decimal}" has more than ${decimals} decimal places for this token.`);
   const fracPadded = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
   return BigInt(intPart) * 10n ** BigInt(decimals) + BigInt(fracPadded || '0');
 }

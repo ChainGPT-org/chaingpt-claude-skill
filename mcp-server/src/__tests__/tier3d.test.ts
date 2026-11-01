@@ -8,7 +8,10 @@ import { describe, it, expect, vi } from 'vitest';
 import './_setup.js';
 
 // Offline: the builders verify caller-supplied decimals against the token's decimals() via RPC.
-vi.mock('../lib/agent-erc20.js', () => ({ fetchErc20Decimals: vi.fn(async () => 6) }));
+vi.mock('../lib/http.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/http.js')>()),
+  jsonRpcFallback: vi.fn(async () => '0x' + '0'.repeat(63) + '6'), // decimals() == 6
+}));
 
 import { defiTools, handleDefiTool } from '../tools/defi.js';
 
