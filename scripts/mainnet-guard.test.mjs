@@ -11,10 +11,10 @@ function decision(tool, input = {}, raw) {
   assert.equal(r.status, 0);
   return JSON.parse(r.stdout).hookSpecificOutput?.permissionDecision;
 }
-test('every shipped autonomous signer forces confirmation, including Tron', () => {
+test('every shipped autonomous signer forces confirmation', () => {
   const dir = 'mcp-server/src/tools';
   const names = readdirSync(dir).flatMap(f => [...readFileSync(`${dir}/${f}`, 'utf8').matchAll(/name: '(chaingpt_[^']+sign_and_send)'/g)].map(m => m[1]));
-  assert.equal(names.length, 4);
+  assert.equal(names.length, 1); // only the ERC-4337 session-key signer remains
   for (const name of names) assert.equal(decision(name), 'ask', name);
 });
 test('signed submissions and facilitator settlement force confirmation by default', () => {

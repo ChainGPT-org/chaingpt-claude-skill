@@ -1,38 +1,18 @@
-import { finalizedEvmReceipt } from '../lib/signing-finality.js';
-import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
-import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
 import { writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { createWalletClient, createPublicClient, http as viemHttp, keccak256, type Hex } from 'viem';
+
 import QRCode from 'qrcode';
 import { CHAINS } from '../lib/chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
-import {
-  initKeystore,
-  isKeystoreInitialized,
-  loadAccount,
-  readKeystoreFile,
-  keystorePath,
-  passphraseSource,
-  describeSecretSource,
-} from '../lib/agent-keystore.js';
-import {
-  loadPolicy,
-  checkPolicy,
-  policyPath,
-  policyDigest,
-  validatePolicyInput,
-  savePolicy,
-  type TxIntent,
-  type AgentPolicy,
-} from '../lib/agent-policy.js';
+import { initKeystore, readKeystoreFile, keystorePath, passphraseSource, describeSecretSource } from '../lib/agent-keystore.js';
+import { loadPolicy, checkPolicy, policyPath, policyDigest, validatePolicyInput, savePolicy, type AgentPolicy } from '../lib/agent-policy.js';
 import { POLICY_TEMPLATES, findTemplate } from '../lib/agent-policy-templates.js';
-import { loadTrackedTokens, addTrackedToken, removeTrackedToken, tokensPath, type TrackedToken } from '../lib/agent-tokens.js';
+import { loadTrackedTokens, addTrackedToken, removeTrackedToken, tokensPath } from '../lib/agent-tokens.js';
 import { fetchErc20Balance, fetchErc20Meta, formatTokenAmount } from '../lib/agent-erc20.js';
-import { logActivity, readActivity, activityPath, spendStats } from '../lib/agent-activity.js';
+import { readActivity, activityPath, spendStats } from '../lib/agent-activity.js';
 import { readSolanaKeystoreFile } from '../lib/agent-keystore-solana.js';
 
 // Same dir-derived admin token path, available everywhere it's needed.
@@ -57,7 +37,7 @@ import {
   rpcEndpointsWithCustom,
   mergedChains,
 } from '../lib/agent-custom-chains.js';
-import { BLUE_CHIPS, getBlueChipsForChain } from '../lib/agent-blue-chips.js';
+import { BLUE_CHIPS } from '../lib/agent-blue-chips.js';
 
 /**
  * Tier-5 agent-wallet tools — the agent has its own EOA, and the admin sets
@@ -147,27 +127,6 @@ export const agentWalletTools: Tool[] = [
       type: 'object' as const,
       properties: {},
       required: [],
-    },
-  },
-  {
-    name: 'chaingpt_agent_wallet_sign_and_send',
-    description:
-      'Sign and broadcast an EVM transaction from the agent\'s wallet. Every call: loads the policy file ' +
-      'fresh, runs checkPolicy(), and refuses if any rule fails (kill switch, chain whitelist, address ' +
-      'whitelist, value/fee cap, asset/recipient budgets, selector blocklist and memo requirement). This ' +
-      'is one of the guarded agent signers. Restricted mode accepts canonical transfers and bounded approvals; opaque protocol calls use external signing. 0 credits.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        operationId: { type: 'string', description: 'Stable unique id for ONE logical action. Reuse on retries; never generate a replacement after an uncertain send.' },
-        chain: { type: 'string', enum: SUPPORTED_CHAINS, description: 'EVM chain slug.' },
-        to: { type: 'string', description: 'Destination address (0x…).' },
-        valueWei: { type: 'string', description: 'Native-coin value in wei (string to preserve precision). Default "0".', default: '0' },
-        data: { type: 'string', description: 'Hex calldata (0x… or empty for plain transfer). Default "0x".', default: '0x' },
-        gasLimit: { type: 'string', description: 'Gas limit (units). REQUIRED when the policy sets maxTxGas (the gate refuses auto-estimation so the cap cannot be bypassed); otherwise optional, defaulting to eth_estimateGas + 20% headroom.' },
-        memo: { type: 'string', description: 'Audit-trail memo. Required if policy.requireMemo=true.' },
-      },
-      required: ['operationId', 'chain', 'to'],
     },
   },
   {
@@ -1349,33 +1308,10 @@ async function handleAgentWalletToolUnlocked(
           lines.push(`24h window:      ${spendPart} · ${txPart}`);
         }
       }
-      // Solana surface
-      {
-        const solFile = readSolanaKeystoreFile();
-        const solPolicy = policy.solana;
+      // The Solana and Tron agent signers were retired: autonomy is ERC-4337 session keys with on-chain caps.
+      if (readSolanaKeystoreFile()) {
         lines.push(``);
-        if (!solFile) {
-          lines.push(`Solana wallet:   not initialized (chaingpt_agent_wallet_solana_init)`);
-        } else {
-          lines.push(`Solana address:  ${solFile.address}`);
-          lines.push(`Solana signing:  ${solPolicy?.enabled ? 'ENABLED' : 'disabled (fail closed — set policy.solana.enabled)'}`);
-          if (solPolicy?.enabled) {
-            if (solPolicy.allowedPrograms) lines.push(`  Programs:      ${solPolicy.allowedPrograms.length} allowed`);
-            if (solPolicy.maxTxLamports) lines.push(`  Max/tx:        ${fmtSol(BigInt(solPolicy.maxTxLamports))} SOL`);
-            if (solPolicy.maxDailySpendLamports !== undefined || solPolicy.maxDailyTxCount !== undefined) {
-              const w = spendStats(24, 'solana');
-              if (!w.ok) {
-                lines.push(`  24h window:    LEDGER UNREADABLE — signing will refuse (fail closed)`);
-              } else {
-                const sp = solPolicy.maxDailySpendLamports !== undefined
-                  ? `${fmtSol(w.totalWei)}/${fmtSol(BigInt(solPolicy.maxDailySpendLamports))} SOL spent`
-                  : `${fmtSol(w.totalWei)} SOL spent (no cap)`;
-                const txp = solPolicy.maxDailyTxCount !== undefined ? `${w.txCount}/${solPolicy.maxDailyTxCount} txs` : `${w.txCount} txs (no cap)`;
-                lines.push(`  24h window:    ${sp} · ${txp}`);
-              }
-            }
-          }
-        }
+        lines.push(`Solana wallet:   retired. Move any remaining funds with: node scripts/export-agent-key.mjs`);
       }
       lines.push(``);
       {
@@ -1426,152 +1362,6 @@ async function handleAgentWalletToolUnlocked(
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
-    // ── sign_and_send ───────────────────────────────────────────────
-    if (name === 'chaingpt_agent_wallet_sign_and_send') {
-      if (!isKeystoreInitialized()) {
-        return { content: [{ type: 'text', text: `Agent wallet not initialized. Call chaingpt_agent_wallet_init first.` }] };
-      }
-      const chainSlug = String(args.chain);
-      const chain = resolveChainWithCustom(chainSlug);
-      if (!chain?.chainId) {
-        return { content: [{ type: 'text', text: `Unknown or non-EVM chain: ${chainSlug}` }] };
-      }
-      const to = String(args.to);
-      if (!/^0x[0-9a-fA-F]{40}$/.test(to)) {
-        return { content: [{ type: 'text', text: `Invalid to-address: ${to}` }] };
-      }
-      const valueWei = BigInt(String(args.valueWei ?? '0'));
-      const data = String(args.data ?? '0x');
-      const memo = args.memo ? String(args.memo) : undefined;
-      const gasLimitStr = args.gasLimit ? String(args.gasLimit) : undefined;
-
-      const intent: TxIntent = {
-        chainId: chain.chainId,
-        to,
-        value: valueWei,
-        data,
-        gas: gasLimitStr ? BigInt(gasLimitStr) : undefined,
-        memo,
-      };
-
-      if (typeof args.operationId === 'string') {
-        const prior = findOperation(activityPath(), args.operationId, operationFingerprint({ chain: chain.chainId, to: to.toLowerCase(), value: valueWei.toString(), data, gas: gasLimitStr, memo }));
-        if (prior) {
-          if (prior.hash && prior.state !== 'confirmed') {
-            try {
-              if (await finalizedEvmReceipt(rpcEndpointsWithCustom(chainSlug), prior.hash)) {
-                saveReservation(activityPath(), { ...prior, state: 'confirmed', ts: new Date().toISOString(), signedBytes: undefined });
-                return { content: [{ type: 'text', text: replayMessage({ ...prior, state: 'confirmed' }) }] };
-              }
-            } catch { /* Preserve uncertain outcomes. */ }
-          }
-          return { content: [{ type: 'text', text: replayMessage(prior) }] };
-        }
-      }
-      const policy = loadPolicy();
-      // Velocity caps need the rolling 24h window from the activity ledger.
-      // checkPolicy fails closed if a cap is set and these stats are absent/unreadable.
-      const decision = checkPolicy(intent, policy, spendStats(24, 'evm'));
-      if (!decision.allowed) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `⛔ Policy refused this transaction.`,
-              ``,
-              `Reason:        ${decision.reason}`,
-              `Policy digest: ${decision.policyDigest}`,
-              `Policy file:   ${policyPath()}`,
-              ``,
-              `If this refusal is wrong, an admin must edit the policy file with a text editor.`,
-              `No MCP tool can relax these rules from inside the agent.`,
-            ].join('\n'),
-          }],
-        };
-      }
-
-      const operationId = args.operationId as string;
-      const fingerprint = operationFingerprint({ chain: chain.chainId, to: to.toLowerCase(), value: valueWei.toString(), data, gas: gasLimitStr, memo });
-      const existing = findOperation(activityPath(), operationId, fingerprint);
-      if (existing) return { content: [{ type: 'text', text: replayMessage(existing) }] };
-      let assets = evmAssetSpends(chain.slug, to, data, valueWei, policy);
-      checkAssetLimits(chain.slug, assets, policy, activityPath());
-      const account = loadAccount();
-      const endpoints = rpcEndpointsWithCustom(chainSlug);
-      if (!endpoints.length) throw new Error('No RPC endpoints configured.');
-      const chainConfig = {
-        id: chain.chainId, name: chain.name,
-        nativeCurrency: { name: chain.native, symbol: chain.native, decimals: 18 },
-        rpcUrls: { default: { http: endpoints } },
-      } as any;
-      const wallet = createWalletClient({ account, chain: chainConfig, transport: viemHttp(endpoints[0]) });
-      // Prepare ONCE: fixes nonce, fees and gas before signing or any broadcast.
-      const prepared = await wallet.prepareTransactionRequest({ chain: chainConfig, account, to: to as Hex, value: valueWei, data: data as Hex, gas: intent.gas });
-      const maxFee = prepared.maxFeePerGas ?? prepared.gasPrice;
-      if (prepared.gas === undefined || maxFee === undefined) throw new Error('Could not bound transaction fees.');
-      const cost = valueWei + prepared.gas * maxFee;
-      const code = (data === '0x' || data === '') ? await createPublicClient({ chain: chainConfig, transport: viemHttp(endpoints[0]) }).getBytecode({ address: to as Hex }) : undefined;
-      const currentPolicy = loadPolicy();
-      assets = evmAssetSpends(chain.slug, to, data, valueWei, currentPolicy);
-      if (currentPolicy.unrestricted !== true && code && code !== '0x') throw new Error('Restricted signing refuses opaque contract fallback calls.');
-      const finalDecision = checkPolicy({ ...intent, gas: prepared.gas, value: cost }, currentPolicy, spendStats(24, 'evm'));
-      if (!finalDecision.allowed) throw new Error(finalDecision.reason);
-      checkAssetLimits(chain.slug, assets, currentPolicy, activityPath());
-      const reservation = reserveOperation(activityPath(), { network: chain.slug, policyDigest: finalDecision.policyDigest, operationId, fingerprint, chainClass: 'evm', valueWei: cost.toString(), assets });
-      const raw = await wallet.signTransaction(prepared as any);
-      const hash = keccak256(raw);
-      // Persist signed bytes and hash BEFORE broadcasting. Persistence failure prevents send.
-      saveReservation(activityPath(), { ...reservation, state: 'prepared', hash, signedBytes: raw });
-      try {
-        await jsonRpcFallback(endpoints, 'eth_sendRawTransaction', [raw]);
-      } catch {
-        return { content: [{ type: 'text', text: `Broadcast outcome uncertain for ${hash}. Reservation retained. Reuse operationId ${operationId}; do NOT create another action.` }] };
-      }
-      saveReservation(activityPath(), { ...reservation, state: 'broadcast', hash, signedBytes: raw });
-      try {
-        const receipt = await createPublicClient({ chain: chainConfig, transport: viemHttp(endpoints[0]) }).waitForTransactionReceipt({ hash, confirmations: 2, timeout: 20000 });
-        if (await finalizedEvmReceipt(endpoints, hash)) saveReservation(activityPath(), { ...reservation, state: 'confirmed', hash, ts: new Date().toISOString() });
-        if (receipt.status === 'reverted') return { content: [{ type: 'text', text: `Transaction ${hash} was included but reverted. Its fee reservation remains counted.` }] };
-      } catch { /* Pending reservations remain counted until independently reconciled. */ }
-
-      // Log to activity feed for the dashboard
-      try {
-        logActivity({
-          operationId,
-          ts: new Date().toISOString(),
-          chain: chainSlug,
-          chainId: chain.chainId,
-          from: account.address,
-          to,
-          valueWei: valueWei.toString(),
-          hash,
-          memo,
-          policyDigest: finalDecision.policyDigest,
-        });
-      } catch { /* best-effort */ }
-
-      const explorer = chain.explorer ? `${chain.explorer}/tx/${hash}` : '(no explorer configured)';
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ Transaction broadcast.`,
-            ``,
-            `Hash:           ${hash}`,
-            `Chain:          ${chain.name}`,
-            `From:           ${account.address}`,
-            `To:             ${to}`,
-            `Value:          ${valueWei} wei (${fmtEth(valueWei)} ${chain.native})`,
-            `Memo:           ${memo ?? '(none)'}`,
-            `Explorer:       ${explorer}`,
-            ``,
-            `Policy digest at sign time: ${finalDecision.policyDigest}`,
-          ].join('\n'),
-        }],
-      };
-    }
-
-    // ── serve_ui ────────────────────────────────────────────────────
     if (name === 'chaingpt_agent_wallet_serve_ui') {
       const file = readKeystoreFile();
       if (!file) {
@@ -2007,6 +1797,5 @@ export function _stopUiForTests() {
 export function _runningUiPort() { return runningPort; }
 
 export async function handleAgentWalletTool(name: string, args: Record<string, unknown> | undefined) {
-  if (!name.endsWith('sign_and_send')) return handleAgentWalletToolUnlocked(name, args);
-  return withSigningLock(activityPath(), () => handleAgentWalletToolUnlocked(name, args));
+  return handleAgentWalletToolUnlocked(name, args);
 }
