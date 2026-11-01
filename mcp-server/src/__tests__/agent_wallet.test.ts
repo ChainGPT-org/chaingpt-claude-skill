@@ -623,10 +623,15 @@ describe('Admin dashboard HTTP endpoints', () => {
       port: PORT + 2,
       chains: ['ethereum'],
     });
-    // Pull the admin token out of the printed output
-    const tokenMatch = startResult.content[0].text.match(/[0-9a-f]{48}/);
-    expect(tokenMatch).not.toBeNull();
-    const token = tokenMatch![0];
+    // The admin token is never in the tool result (model context); the human reads the 0600 file.
+    const { readFileSync, statSync } = await import('node:fs');
+    const tokenFile = join(TMP, '.admin-token');
+    const token = readFileSync(tokenFile, 'utf8').trim();
+    expect(token).toMatch(/^[0-9a-f]{48}$/);
+    expect(startResult.content[0].text).not.toContain(token);
+    expect(startResult.content[0].text).not.toMatch(/[0-9a-f]{48}/);
+    expect(startResult.content[0].text).toContain(tokenFile);
+    expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
 
     const base = `http://127.0.0.1:${PORT + 2}`;
 
@@ -784,6 +789,29 @@ describe('Admin dashboard HTTP endpoints', () => {
 
     _stopUiForTests();
   }, 20_000);
+
+  it('serve_ui re-tightens a loosened token file and refuses to start when it cannot write one', async () => {
+    const { chmodSync, statSync, mkdirSync } = await import('node:fs');
+    await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
+    const tokenFile = join(TMP, '.admin-token');
+    writeFileSync(tokenFile, 'stale');
+    chmodSync(tokenFile, 0o644);
+    await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 4, chains: ['ethereum'] });
+    expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
+    _stopUiForTests();
+
+    // Unwritable token path (a directory) → no dashboard, no token anywhere.
+    const blocked = join(TMP, 'token-is-a-dir');
+    mkdirSync(blocked, { recursive: true });
+    process.env.CHAINGPT_ADMIN_TOKEN_FILE = blocked;
+    try {
+      const r = await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 5, chains: ['ethereum'] });
+      expect(r.content[0].text).toMatch(/^Agent wallet error: .*Dashboard not started/);
+      await expect(fetch(`http://127.0.0.1:${PORT + 5}/`)).rejects.toThrow();
+    } finally {
+      delete process.env.CHAINGPT_ADMIN_TOKEN_FILE;
+    }
+  });
 
   it('form-editor save keeps policy fields the form does not render (daily caps, chain sections)', async () => {
     await handleAgentWalletTool('chaingpt_agent_wallet_init', {});
