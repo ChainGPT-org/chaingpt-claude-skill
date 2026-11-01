@@ -18,6 +18,18 @@ import { httpJson } from '../lib/http.js';
  */
 const ACROSS_BASE = 'https://app.across.to/api';
 const ACROSS_CHAINS = ['ethereum', 'base', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche', 'blast', 'linea', 'scroll'];
+// Origin SpokePools from docs.across.to/reference/contract-addresses (checked 2026-11-01). The quote API's
+// spokePoolAddress is what users approve and send funds to, so it must match one of these exactly.
+const SPOKE_POOLS = {
+    ethereum: '0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5',
+    base: '0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64',
+    arbitrum: '0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A',
+    optimism: '0x6f26Bf09B1C792e3228e5467807a900A503c0281',
+    polygon: '0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096',
+    bsc: '0x4e8E101924eDE233C13e2D8622DC8aED2872d505',
+    avalanche: '0xFE9D541c92E4e90437C7152A00244886dE37a658',
+    linea: '0x7E63A5f1a8F0B4d0934B2f2327DAED3F6bb2ee75',
+};
 // Across SpokePool v3 depositV3 ABI
 const SPOKE_POOL_ABI = [
     {
@@ -158,6 +170,12 @@ export async function handleBridgeTool(name, args) {
                     amount: amountRaw.toString(),
                 });
             const quote = await httpJson(url);
+            const pinned = SPOKE_POOLS[String(args.originChain)];
+            if (quote?.spokePoolAddress && quote.spokePoolAddress.toLowerCase() !== pinned?.toLowerCase()) {
+                throw new Error(pinned
+                    ? `Across returned SpokePool ${quote.spokePoolAddress} for ${args.originChain}, not the published ${pinned}. Refusing.`
+                    : `No verified Across SpokePool is pinned for ${args.originChain}; refusing to build an approval or deposit to an unverified address.`);
+            }
             if (!quote || quote.message || !quote.spokePoolAddress) {
                 return {
                     content: [{

@@ -51,6 +51,7 @@ import { agentWallet4337Tools, handleAgentWallet4337Tool } from './tools/agent_w
 import { tronTools, handleTronTool } from './tools/tron.js';
 import { agentWalletTronTools, handleAgentWalletTronTool } from './tools/agent_wallet_tron.js';
 import { recordToolUse } from './lib/usage.js';
+import { toolArgsValidator } from './lib/tool-args.js';
 
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
@@ -69,9 +70,8 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-// List all tools
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+// Every listed tool (the agent wallet only when enabled); also the schema source for argument validation.
+const TOOLS = [
     ...chatTools,
     ...nftTools,
     ...auditTools,
@@ -112,8 +112,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     ...tronTools,
     ...(AGENT_WALLET_ENABLED ? agentWalletTronTools : []),
     ...dashboardTools,
-  ],
-}));
+];
+const argsError = toolArgsValidator(TOOLS);
+
+// List all tools
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 // ChainGPT-product tools are credit-billed and need a real API key. Catching
 // this BEFORE the upstream call turns a cryptic "Invalid API Key" into a
@@ -147,6 +150,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   recordToolUse(name); // local-only counter (see lib/usage.ts privacy model)
 
   try {
+    const invalid = argsError(name, args);
+    if (invalid) return { content: [{ type: 'text', text: invalid }], isError: true };
     if (!API_KEY && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
       return { content: [{ type: 'text', text: API_KEY_SETUP_HELP }] };
     }

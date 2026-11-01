@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+### Security and correctness (tool inputs)
+- Every tool call is validated against its inputSchema before it runs (the MCP server previously ignored schemas): a Polymarket `side: "buy"` no longer builds a SELL order, and Hyperliquid `isBuy: "false"` is rejected instead of read as true.
+- `slippageBps` is an integer 0–5000 (50%) on all DEX/aggregator builders; Aave and EigenLayer builders check caller-supplied `decimals` against the token's `decimals()`.
+- Across bridge quotes must return the published SpokePool for the origin chain; CoW orders must match the requested tokens and amount and never take the quote's receiver or appData.
+- x402: building a payment for a server-set price requires `maxAtomicAmount` (your budget); authorizations are valid for at most one hour; `x402_fetch` never follows redirects and refuses private/loopback hosts.
+- ERC-8004 agent cards are fetched only from public hosts without redirects; HTTP error messages redact key-like URL path segments.
+- `aa_session_build_grant` no longer defaults to the agent wallet key while the wallet is disabled; Base Sepolia reads no longer fall back to the mainnet RPC.
+
+Compatibility: calls with wrongly typed arguments now fail with a message naming the field. x402 payments for a 402 challenge need `maxAtomicAmount`. Bridging from Blast or Scroll is refused until a verified SpokePool is pinned.
+
 ## [1.23.0] - 2026-10-31
 ### Security and compatibility
 - The agent wallet is disabled by default: `chaingpt_agent_wallet_*` tools are hidden and refused unless `CHAINGPT_AGENT_WALLET_ENABLED=true` is set in the real launch environment (a working-directory `.env` cannot enable it). Boot smoke asserts this.

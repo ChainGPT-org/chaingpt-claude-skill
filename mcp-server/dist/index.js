@@ -46,6 +46,7 @@ import { agentWallet4337Tools, handleAgentWallet4337Tool } from './tools/agent_w
 import { tronTools, handleTronTool } from './tools/tron.js';
 import { agentWalletTronTools, handleAgentWalletTronTool } from './tools/agent_wallet_tron.js';
 import { recordToolUse } from './lib/usage.js';
+import { toolArgsValidator } from './lib/tool-args.js';
 const API_KEY = process.env.CHAINGPT_API_KEY;
 if (!API_KEY) {
     // Soft-warn instead of hard-exiting. Tools that genuinely need the key
@@ -56,51 +57,52 @@ if (!API_KEY) {
         'will fail. Other tools (dashboard, decode/build utilities) work. Get a key at https://app.chaingpt.org.');
 }
 const server = new Server({ name: 'chaingpt', version: '1.23.0' }, { capabilities: { tools: {} } });
+// Every listed tool (the agent wallet only when enabled); also the schema source for argument validation.
+const TOOLS = [
+    ...chatTools,
+    ...nftTools,
+    ...auditTools,
+    ...generatorTools,
+    ...newsTools,
+    ...signalsTools,
+    ...utilTools,
+    ...walletTools,
+    ...researchTools,
+    ...riskTools,
+    ...onchainTools,
+    ...intelTools,
+    ...deployTools,
+    ...dexTools,
+    ...defiTools,
+    ...hyperliquidTools,
+    ...polymarketTools,
+    ...strategyTools,
+    ...bridgeTools,
+    ...aggregatorTools,
+    ...yieldTools,
+    ...driftTools,
+    ...portfolioTools,
+    ...solanaLendingTools,
+    ...marginfiSignedTools,
+    ...kaminoSignedTools,
+    ...x402Tools,
+    ...baseTools,
+    ...miniappTools,
+    ...erc8004Tools,
+    ...planTools,
+    ...(AGENT_WALLET_ENABLED ? agentWalletTools : []),
+    ...(AGENT_WALLET_ENABLED ? agentWalletSolanaTools : []),
+    ...(AGENT_WALLET_ENABLED ? agentWallet4337Tools : []),
+    ...aaSessionTools,
+    ...aaTools,
+    ...solanaTools,
+    ...tronTools,
+    ...(AGENT_WALLET_ENABLED ? agentWalletTronTools : []),
+    ...dashboardTools,
+];
+const argsError = toolArgsValidator(TOOLS);
 // List all tools
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-        ...chatTools,
-        ...nftTools,
-        ...auditTools,
-        ...generatorTools,
-        ...newsTools,
-        ...signalsTools,
-        ...utilTools,
-        ...walletTools,
-        ...researchTools,
-        ...riskTools,
-        ...onchainTools,
-        ...intelTools,
-        ...deployTools,
-        ...dexTools,
-        ...defiTools,
-        ...hyperliquidTools,
-        ...polymarketTools,
-        ...strategyTools,
-        ...bridgeTools,
-        ...aggregatorTools,
-        ...yieldTools,
-        ...driftTools,
-        ...portfolioTools,
-        ...solanaLendingTools,
-        ...marginfiSignedTools,
-        ...kaminoSignedTools,
-        ...x402Tools,
-        ...baseTools,
-        ...miniappTools,
-        ...erc8004Tools,
-        ...planTools,
-        ...(AGENT_WALLET_ENABLED ? agentWalletTools : []),
-        ...(AGENT_WALLET_ENABLED ? agentWalletSolanaTools : []),
-        ...(AGENT_WALLET_ENABLED ? agentWallet4337Tools : []),
-        ...aaSessionTools,
-        ...aaTools,
-        ...solanaTools,
-        ...tronTools,
-        ...(AGENT_WALLET_ENABLED ? agentWalletTronTools : []),
-        ...dashboardTools,
-    ],
-}));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 // ChainGPT-product tools are credit-billed and need a real API key. Catching
 // this BEFORE the upstream call turns a cryptic "Invalid API Key" into a
 // 30-second setup fix.
@@ -130,6 +132,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     recordToolUse(name); // local-only counter (see lib/usage.ts privacy model)
     try {
+        const invalid = argsError(name, args);
+        if (invalid)
+            return { content: [{ type: 'text', text: invalid }], isError: true };
         if (!API_KEY && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
             return { content: [{ type: 'text', text: API_KEY_SETUP_HELP }] };
         }

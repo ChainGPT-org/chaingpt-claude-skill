@@ -106,6 +106,19 @@ describe('Bridge handlers', () => {
     expect(t).toContain('SpokePool');
   });
 
+  it('refuses a quote whose SpokePool is not the published one for the origin chain', async () => {
+    const quote = (spokePoolAddress: string) => vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ estimatedFillTimeSec: 4, relayFeeTotal: '1', spokePoolAddress, timestamp: '1' }),
+      { status: 200, headers: { 'content-type': 'application/json' } }));
+    const args = { inputToken: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', outputToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // gitleaks:allow (public token contract addresses)
+      originChain: 'base', destinationChain: 'ethereum', amount: '100', decimals: 6 };
+    quote('0x' + '6'.repeat(40));
+    await expect(handleBridgeTool('chaingpt_bridge_quote', args)).rejects.toThrow(/not the published 0x09aea4b2/);
+    vi.restoreAllMocks();
+    quote('0x' + '6'.repeat(40));
+    await expect(handleBridgeTool('chaingpt_bridge_quote', { ...args, originChain: 'scroll' })).rejects.toThrow(/No verified Across SpokePool/);
+  });
+
   it('build_deposit_tx with ack returns unsigned tx targeting the SpokePool', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
