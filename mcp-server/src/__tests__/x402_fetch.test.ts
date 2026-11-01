@@ -1,5 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import './_setup.js';
+
+// Offline DNS: example hosts resolve to a public documentation address; *.internal.test to loopback.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(async (host: string) => [{ address: host.endsWith('.internal.test') ? '127.0.0.1' : '93.184.215.14', family: 4 }]),
+}));
+
 import { handleX402Tool } from '../tools/x402.js';
 
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -52,9 +58,19 @@ describe('chaingpt_x402_fetch', () => {
     expect(t).toContain('Pass `from`');
   });
 
+  it('asks for a budget before building a payment, and refuses a price above it', async () => {
+    mockFetch(402, JSON.stringify(CHALLENGE));
+    let t = (await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/v1/report', from: PAYER })).content[0].text;
+    expect(t).toContain('Pass maxAtomicAmount');
+    expect(t).not.toContain('TransferWithAuthorization');
+    mockFetch(402, JSON.stringify(CHALLENGE));
+    t = (await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/v1/report', from: PAYER, maxAtomicAmount: '9999' })).content[0].text;
+    expect(t).toMatch(/exceeds maxAtomicAmount 9999/);
+  });
+
   it('builds the unsigned EIP-3009 typed data when `from` is given', async () => {
     mockFetch(402, JSON.stringify(CHALLENGE));
-    const r = await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/v1/report', from: PAYER });
+    const r = await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/v1/report', from: PAYER, maxAtomicAmount: '10000' });
     const t = r.content[0].text;
     expect(t).toContain('TransferWithAuthorization');
     expect(t).toContain(PAYER);
@@ -77,5 +93,34 @@ describe('chaingpt_x402_fetch', () => {
     mockFetch(402, 'not json');
     const r = await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/v1/report' });
     expect(r.content[0].text).toMatch(/not valid x402 JSON/);
+  });
+});
+
+describe('x402_fetch SSRF guards', () => {
+  it('refuses hosts that resolve to loopback/private addresses and literal internal IPs', async () => {
+    for (const url of ['https://metadata.internal.test/latest', 'https://169.254.169.254/latest/meta-data', 'https://[::1]/x']) {
+      const r = await handleX402Tool('chaingpt_x402_fetch', { url });
+      expect(r.content[0].text, url).toMatch(/loopback, private or link-local/);
+    }
+  });
+
+  it('does not follow redirects (the X-PAYMENT header must not travel to another host)', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:8080/admin' } }));
+    const r = await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/pay', xPaymentHeader: 'abc' });
+    expect(r.content[0].text).toMatch(/redirect .* not followed/);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((spy.mock.calls[0][1] as RequestInit).redirect).toBe('manual');
+  });
+});
+
+describe('x402_build_payment server-controlled fields', () => {
+  it('caps the validity window at one hour and shows unknown tokens in atomic units', async () => {
+    const req = { ...CHALLENGE.accepts[0], asset: '0x' + '3'.repeat(40), maxTimeoutSeconds: 10 ** 9, extra: { name: 'Weird', version: '1' } };
+    const t = (await handleX402Tool('chaingpt_x402_build_payment', { from: PAYER, requirements: req, maxAtomicAmount: '10000' })).content[0].text;
+    const expires = Date.parse(/expires:\s+(\S+)/.exec(t)![1]);
+    expect(expires - Date.now()).toBeLessThanOrEqual(3600_000 + 5_000);
+    expect(t).toContain('unrecognised token: amounts shown in atomic units');
+    expect(t).toMatch(/pay:\s+10000 /);
   });
 });
