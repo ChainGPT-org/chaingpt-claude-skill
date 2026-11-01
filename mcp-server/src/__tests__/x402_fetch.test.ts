@@ -6,6 +6,19 @@ vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(async (host: string) => [{ address: host.endsWith('.internal.test') ? '127.0.0.1' : '93.184.215.14', family: 4 }]),
 }));
 
+// The network call is stubbed; the real host checks still run first.
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.mock('../lib/public-url.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/public-url.js')>();
+  return {
+    ...real,
+    publicFetch: async (url: string, init: unknown, opts: { httpsOnly?: boolean }) => {
+      await real.assertPublicUrl(url, opts);
+      return fetchMock(url, init, opts);
+    },
+  };
+});
+
 import { handleX402Tool } from '../tools/x402.js';
 
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -28,12 +41,12 @@ const CHALLENGE = {
 };
 
 function mockFetch(status: number, body: string) {
-  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+  return fetchMock.mockResolvedValue(
     new Response(body, { status, headers: { 'content-type': 'application/json' } })
   );
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); fetchMock.mockReset(); });
 
 describe('chaingpt_x402_fetch', () => {
   it('returns the body on 2xx', async () => {
@@ -106,12 +119,11 @@ describe('x402_fetch SSRF guards', () => {
   });
 
   it('does not follow redirects (the X-PAYMENT header must not travel to another host)', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:8080/admin' } }));
+    fetchMock.mockResolvedValue(new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:8080/admin' } }));
     const r = await handleX402Tool('chaingpt_x402_fetch', { url: 'https://api.example.com/pay', xPaymentHeader: 'abc' });
     expect(r.content[0].text).toMatch(/redirect .* not followed/);
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect((spy.mock.calls[0][1] as RequestInit).redirect).toBe('manual');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][2]).toEqual({ httpsOnly: true });
   });
 });
 

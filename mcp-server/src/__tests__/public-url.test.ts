@@ -5,10 +5,20 @@ vi.mock('node:dns/promises', () => ({
     'public.example': [{ address: '93.184.215.14', family: 4 }],
     'mixed.example': [{ address: '93.184.215.14', family: 4 }, { address: '10.0.0.5', family: 4 }],
     'mapped.example': [{ address: '::ffff:127.0.0.1', family: 6 }],
+    'rebind.example': [{ address: '93.184.215.14', family: 4 }],
+    'rebind6.example': [{ address: '93.184.215.14', family: 4 }],
   } as Record<string, unknown>)[host] ?? [{ address: '127.0.0.1', family: 4 }]),
 }));
 
-import { assertPublicUrl } from '../lib/public-url.js';
+// The connect-time lookup. A rebinding DNS server answered the first query (above) with a public address;
+// by the time the socket connects it answers with a private one.
+vi.mock('node:dns', () => ({
+  lookup: vi.fn((host: string, _opts: unknown, cb: (err: Error | null, addrs: { address: string; family: number }[]) => void) =>
+    cb(null, host === 'rebind6.example' ? [{ address: '::ffff:169.254.169.254', family: 6 }] : [{ address: '10.0.0.5', family: 4 }])),
+}));
+
+import { lookup as connectLookup } from 'node:dns';
+import { assertPublicUrl, publicFetch } from '../lib/public-url.js';
 
 describe('assertPublicUrl', () => {
   it('allows public hosts', async () => {
@@ -26,5 +36,20 @@ describe('assertPublicUrl', () => {
   it('refuses non-http schemes and plain http when https is required', async () => {
     await expect(assertPublicUrl('file:///etc/passwd')).rejects.toThrow(/must be http/);
     await expect(assertPublicUrl('http://public.example/', { httpsOnly: true })).rejects.toThrow(/must be https/);
+  });
+});
+
+describe('publicFetch', () => {
+  it('refuses the connection when DNS rebinds to a private address after the first check', async () => {
+    for (const u of ['http://rebind.example/card.json', 'https://rebind.example/card.json', 'https://rebind6.example/']) {
+      await expect(assertPublicUrl(u), u).resolves.toBeInstanceOf(URL);
+      await expect(publicFetch(u), u).rejects.toThrow(/loopback, private or link-local/);
+    }
+    expect(connectLookup).toHaveBeenCalledWith('rebind.example', expect.objectContaining({ all: true }), expect.any(Function));
+  });
+
+  it('keeps the up-front checks', async () => {
+    await expect(publicFetch('http://127.0.0.1:8545/')).rejects.toThrow(/loopback, private or link-local/);
+    await expect(publicFetch('http://public.example/', {}, { httpsOnly: true })).rejects.toThrow(/must be https/);
   });
 });

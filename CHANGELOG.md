@@ -4,6 +4,7 @@
 ### Security and correctness
 - Mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true`; its output states the audit status.
 - ERC-4337 session grants refuse `validUntil` more than 365 days ahead (catches millisecond timestamps); the default salt is derived from the grant so different grants to one session key get different permission ids.
+- `x402_fetch` and ERC-8004 agent-card fetches now check the host's addresses at connect time and connect only to an address that passed. A DNS server that answers with a public address for the check and a private one for the connection is refused. TLS certificate and Host checks still use the URL's hostname; redirects are still never followed.
 - The read-only dashboard ends existing sessions when its token rotates, and logout checks Origin.
 - Docs, skills and the defi-trader agent describe the agent wallet as off by default (142 tools listed by default), limit "custody-free" to the unsigned builders, and point security reports to the bug bounty page's channels.
 
