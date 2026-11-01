@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.24.0] - 2026-11-01
 ### Breaking: agent wallet is ERC-4337 session keys only
 - Removed `chaingpt_agent_wallet_sign_and_send` (direct EVM EOA signing), the three `chaingpt_agent_wallet_solana_*` tools and the two `chaingpt_agent_wallet_tron_*` tools. A locally held key cannot be bounded against an agent that runs as the same OS user; the remaining autonomous path, `chaingpt_agent_wallet_4337_sign_and_send`, acts through the user's smart account within caps the owner grants on-chain.
 - New `scripts/export-agent-key.mjs`: a human-run, terminal-only script that prints the old EVM/Tron and Solana agent keys after a typed confirmation, so leftover funds can be moved to the owner's wallet.
