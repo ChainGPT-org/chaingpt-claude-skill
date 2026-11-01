@@ -396,7 +396,7 @@ export async function handleDexTool(
       // mis-sizes approvals for 6-decimal tokens like USDC.
       const chain = resolveChain(network);
       let decimals = 0;
-      if (String(args.amount) === 'max') {
+      if (String(args.amount ?? 'max') === 'max') { // same default as amountInput below
         // unlimited approval: no amount to scale, so decimals are not needed
       } else if (args.decimals !== undefined) {
         try {

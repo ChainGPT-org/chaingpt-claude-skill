@@ -142,7 +142,7 @@ function formatAmount(raw, decimals, decimalsToShow = 4) {
 }
 function rawAmount(decimal, decimals) {
     // Parse "1.5" into raw integer string with `decimals` decimals. Refuse rather than silently truncate or negate.
-    if (!/^\d+(\.\d+)?$/.test(decimal))
+    if (!/^(\d+(\.\d+)?|\.\d+)$/.test(decimal) || !/[1-9]/.test(decimal))
         throw new Error(`Amount must be a positive decimal number, got "${decimal}".`);
     const [intPart, fracPart = ''] = decimal.split('.');
     if (fracPart.length > decimals)

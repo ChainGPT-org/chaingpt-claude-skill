@@ -369,7 +369,8 @@ export async function handlePolymarketTool(
       const signature = String(args.signature);
       // Per the CLOB API: body.owner is the owner's API key; the POLY_ADDRESS header is the signing EOA
       // (differs from maker for proxy wallets).
-      const owner = (args.owner as string | undefined) ?? creds.apiKey;
+      // An address here (the old documented value) is ignored: the API wants the key.
+      const owner = typeof args.owner === 'string' && !/^0x[0-9a-fA-F]{40}$/.test(args.owner) ? args.owner : creds.apiKey;
       const orderType = String(args.orderType ?? 'GTC');
 
       const body = JSON.stringify({

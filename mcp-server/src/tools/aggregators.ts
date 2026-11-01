@@ -158,7 +158,7 @@ function formatAmount(raw: string, decimals: number, decimalsToShow = 4): string
 
 function rawAmount(decimal: string, decimals: number): bigint {
   // Parse "1.5" into raw integer string with `decimals` decimals. Refuse rather than silently truncate or negate.
-  if (!/^\d+(\.\d+)?$/.test(decimal)) throw new Error(`Amount must be a positive decimal number, got "${decimal}".`);
+  if (!/^(\d+(\.\d+)?|\.\d+)$/.test(decimal) || !/[1-9]/.test(decimal)) throw new Error(`Amount must be a positive decimal number, got "${decimal}".`);
   const [intPart, fracPart = ''] = decimal.split('.');
   if (fracPart.length > decimals) throw new Error(`Amount "${decimal}" has more than ${decimals} decimal places for this token.`);
   const fracPadded = (fracPart + '0'.repeat(decimals)).slice(0, decimals);

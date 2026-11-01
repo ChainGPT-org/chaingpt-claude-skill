@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createTransaction } from '../lib/tron.js';
 import { assertTronTxMatches, decodeTronRaw } from '../lib/tron-raw.js';
+import { sha256 } from 'viem';
+import { tronToHex } from '../lib/tron-address.js';
 
 const TRANSFER = {"txID": "d3d56d0f721ec3a6ccf771c849f6db30cf91ebbb2701339d706c37c1b214355b", "raw_data_hex": "0a0204ad220880acab38ae4e36e240b283f5be99345a68080112640a2d747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e5472616e73666572436f6e747261637412330a1541d5c4f926122f02bc7518b832fa4f71cde6849768121541c686c48436aec3a1dfce4ac5a4526c39366985ba18c4b7f50770b2c9bdbb9934"};
 const T = { owner: 'TVTWtro2qVLEryGWZybCA5iPd3GokWYfCg', to: 'TU4vEruvZwLLkSfV9bNw12EJTPvNr7Pvaa', amountSun: 16604100n };
@@ -36,6 +38,38 @@ describe('createTransaction checks what the node built', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ ...TRANSFER, raw_data: {}, visible: true }), { status: 200 }));
     await expect(createTransaction('mainnet', { ownerBase58: T.owner, toBase58: T.to, amountSun: T.amountSun })).resolves.toMatchObject({ txID: TRANSFER.txID });
     await expect(createTransaction('mainnet', { ownerBase58: T.owner, toBase58: OTHER, amountSun: T.amountSun })).rejects.toThrow(/recipient/);
+  });
+});
+
+// Minimal protobuf encoder to build hostile node responses (java-tron keeps the LAST copy of a scalar field).
+const varint = (x: bigint) => { const out: number[] = []; do { let b = Number(x & 0x7fn); x >>= 7n; if (x) b |= 0x80; out.push(b); } while (x); return Buffer.from(out); };
+const vf = (n: number, x: bigint) => Buffer.concat([varint(BigInt(n << 3)), varint(x)]);
+const bf = (n: number, b: Buffer) => Buffer.concat([varint(BigInt((n << 3) | 2)), varint(BigInt(b.length)), b]);
+const addr = (a: string) => Buffer.from(tronToHex(a), 'hex');
+const tx = (paramFields: Buffer[], contractExtra: Buffer[] = [], type = 1n) => {
+  const any = Buffer.concat([bf(1, Buffer.from('type.googleapis.com/protocol.TransferContract')), bf(2, Buffer.concat(paramFields))]);
+  const contract = Buffer.concat([vf(1, type), bf(2, any), ...contractExtra]);
+  const raw = Buffer.concat([bf(1, Buffer.from('abcd', 'hex')), vf(8, 1_700_000_060_000n), bf(11, contract), vf(14, 1_700_000_000_000n)]).toString('hex');
+  return { raw_data_hex: raw, txID: sha256(`0x${raw}`).slice(2) };
+};
+const ok = [bf(1, addr(T.owner)), bf(2, addr(T.to)), vf(3, T.amountSun)];
+
+describe('strict decoding refuses fields a hostile node could add', () => {
+  it('accepts a clean hand-built transfer', () => {
+    expect(() => assertTronTxMatches(tx(ok), { kind: 'transfer', ...T })).not.toThrow();
+  });
+  it('refuses a second recipient/amount appended to the parameter (java-tron would use the last one)', () => {
+    expect(() => assertTronTxMatches(tx([...ok, bf(2, addr(OTHER)), vf(3, 999_999_999n)]), { kind: 'transfer', ...T })).toThrow(/duplicate field 2/);
+  });
+  it('refuses TRC-10 token fields on a contract call, a permission id, and a memo', () => {
+    const trig = [bf(1, addr(G.owner)), bf(2, addr(G.contract)), bf(4, Buffer.from(G.dataHex, 'hex')), vf(5, 1_000_000n), vf(6, 1_001_393n)];
+    expect(() => decodeTronRaw(tx(trig, [], 31n).raw_data_hex)).toThrow(/unexpected field 5/);
+    expect(() => decodeTronRaw(tx(ok, [vf(5, 2n)]).raw_data_hex)).toThrow(/contract: unexpected field 5/);
+    const memo = Buffer.concat([Buffer.from(tx(ok).raw_data_hex, 'hex'), bf(10, Buffer.from('hi'))]).toString('hex');
+    expect(() => decodeTronRaw(memo)).toThrow(/raw_data: unexpected field 10/);
+  });
+  it('refuses a value field re-sent with a different wire type', () => {
+    expect(() => decodeTronRaw(tx([...ok.slice(0, 2), bf(3, Buffer.from('00', 'hex'))]).raw_data_hex)).toThrow(/unexpected field 3 \(wire type 2\)/);
   });
 });
 
