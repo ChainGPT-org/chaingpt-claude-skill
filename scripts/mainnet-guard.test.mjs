@@ -26,3 +26,14 @@ test('reads pass and malformed hook input fails closed', () => {
   assert.equal(decision('chaingpt_wallet_balances'), undefined);
   for (const raw of ['{','{}','null','[]',JSON.stringify({ tool_name: 'chaingpt_wallet_balances', tool_input: [] })]) assert.equal(decision('', {}, raw), 'deny');
 });
+test('an unknown future agent-wallet signer still asks, and the Tron prompt describes the token transfer', () => {
+  assert.equal(decision('chaingpt_agent_wallet_newchain_sign_and_send'), 'ask');
+  const r = spawnSync(process.execPath, ['hooks/mainnet-guard.js'], {
+    input: JSON.stringify({ tool_name: 'mcp__plugin_chaingpt__chaingpt_agent_wallet_tron_sign_and_send',
+      tool_input: { kind: 'trc20_transfer', token: 'USDT', amount: '5000', to: 'TRecipient' } }),
+    encoding: 'utf8', env: { PATH: process.env.PATH, CHAINGPT_GUARD: 'on' }, timeout: 5000,
+  });
+  const why = JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason;
+  assert.match(why, /5000 USDT \(TRC-20\) to TRecipient/);
+  assert.doesNotMatch(why, /wei/);
+});

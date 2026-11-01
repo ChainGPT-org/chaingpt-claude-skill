@@ -34,7 +34,9 @@ process.stdin.on('end', () => {
     const tool = String(evt.tool_name || '');
     const input = evt.tool_input || {};
 
-    const isAgentSend = /chaingpt_agent_wallet_(?:tron_)?sign_and_send$/.test(tool);
+    // Catch-all: ANY agent-wallet signer (including chains added later) asks; specific branches below only refine the reason.
+    const isAgentSend = /chaingpt_agent_wallet_\w*sign_and_send$/.test(tool);
+    const isAgentTronSend = /chaingpt_agent_wallet_tron_sign_and_send$/.test(tool);
     // NOTE: the EVM regex does NOT match the solana tool name — both tests are required.
     const isAgentSolanaSend = /chaingpt_agent_wallet_solana_sign_and_send$/.test(tool);
     const isAgent4337Send = /chaingpt_agent_wallet_4337_sign_and_send$/.test(tool);
@@ -56,6 +58,12 @@ process.stdin.on('end', () => {
     } else if (isAgentSolanaSend) {
       ask = true;
       why = `Agent wallet is about to SIGN AND BROADCAST a Solana transaction autonomously: memo=${input.memo || '(none)'}, tx=${String(input.txBase64 || '').length} base64 chars. The Solana policy gate (program allowlist + lamport caps) has its own checks; this prompt is the human layer on top.`;
+    } else if (isAgentTronSend) {
+      ask = true;
+      const what = input.kind === 'trc20_transfer' ? `${input.amount || '?'} ${input.token || '?'} (TRC-20) to ${input.to || '?'}`
+        : input.kind === 'contract_call' ? `contract call ${input.functionSelector || '?'} on ${input.contract || '?'} with ${input.callValueTrx || '0'} TRX`
+        : `${input.amount || '?'} TRX to ${input.to || '?'}`;
+      why = `Agent wallet is about to SIGN AND BROADCAST a Tron transaction autonomously on ${input.network || 'mainnet'}: ${what}, memo=${input.memo || '(none)'}. The Tron policy gate has its own checks; this prompt is the human layer on top.`;
     } else if (isAgentSend) {
       ask = true;
       const v = input.valueWei ? `${input.valueWei} wei` : 'contract call (no native value)';
