@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.23.2] - 2026-11-01
 ### Security and correctness
 - Mainnet `chaingpt_deploy_build_tx` refuses bytecode that was not compiled by `chaingpt_deploy_compile` from source audited by `chaingpt_audit_contract` in the same server session, unless `acknowledgeUnaudited: true`; its output states the audit status.
 - ERC-4337 session grants refuse `validUntil` more than 365 days ahead (catches millisecond timestamps); the default salt is derived from the grant so different grants to one session key get different permission ids.
