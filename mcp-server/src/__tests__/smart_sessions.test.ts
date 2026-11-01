@@ -66,6 +66,17 @@ describe('smart-sessions encoders', () => {
     expect(a).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
+  it('a different grant to the same agent gets a different permissionId by default', () => {
+    const a = getPermissionId(buildSession(caps()));
+    expect(getPermissionId(buildSession({ ...caps(), tokenCaps: [{ token: USDC, cap: 5n }] }))).not.toBe(a);
+    expect(getPermissionId(buildSession({ ...caps(), validUntil: FUTURE + 60 }))).not.toBe(a);
+  });
+
+  it('refuses expiries beyond a year, including millisecond timestamps', () => {
+    expect(() => buildSession({ ...caps(), validUntil: Date.now() + 86_400_000 })).toThrow(/SECONDS, not milliseconds/);
+    expect(() => buildSession({ ...caps(), validUntil: Math.floor(Date.now() / 1000) + 400 * 86_400 })).toThrow(/within 365 days/);
+  });
+
   it('enableSessions calldata round-trips through decodeFunctionData', () => {
     const session = buildSession(caps());
     const data = encodeEnableSessions([session]);

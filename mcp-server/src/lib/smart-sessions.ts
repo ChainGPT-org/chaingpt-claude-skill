@@ -141,10 +141,17 @@ function spendingLimitPolicy(tokens: Address[], caps: bigint[]): PolicyData {
   };
 }
 
+const MAX_SESSION_SECONDS = 365 * 86_400;
+
 /** Assemble the Session struct from human-level caps. Throws on unsafe input. */
 export function buildSession(caps: SessionCaps): Session {
-  if (!caps.validUntil || caps.validUntil <= Math.floor(Date.now() / 1000)) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!caps.validUntil || caps.validUntil <= nowSec) {
     throw new Error('validUntil is required and must be in the future — unbounded session grants are refused by design.');
+  }
+  // Also catches a millisecond timestamp passed as seconds, which would be a grant for tens of thousands of years.
+  if (caps.validUntil > nowSec + MAX_SESSION_SECONDS) {
+    throw new Error(`validUntil must be within ${MAX_SESSION_SECONDS / 86_400} days (unix SECONDS, not milliseconds).`);
   }
   if (!caps.tokenCaps.length && !caps.targets?.length && caps.nativeValueCap === undefined) {
     throw new Error('Grant at least one token cap, target action, or native value cap — an empty session is meaningless.');
@@ -177,7 +184,12 @@ export function buildSession(caps: SessionCaps): Session {
       [{ type: 'uint256' }, { type: 'address[]' }],
       [1n, [caps.agentAddress]]
     ),
-    salt: caps.salt ?? (`0x${'00'.repeat(32)}` as Hex),
+    // Default salt from the grant's own contents: re-grants of the same caps stay idempotent, while a different
+    // grant to the same agent gets its own permissionId instead of colliding with the earlier one.
+    salt: caps.salt ?? keccak256(encodeAbiParameters(
+      [{ type: 'uint48' }, { type: 'uint48' }, { type: 'string' }],
+      [caps.validUntil, caps.validAfter ?? 0, JSON.stringify(actions)],
+    )),
     userOpPolicies: timePolicies,
     erc7739Policies: { allowedERC7739Content: [], erc1271Policies: [] },
     actions,
