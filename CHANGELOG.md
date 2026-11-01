@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.23.1] - 2026-11-01
 ### Security and correctness (tool inputs)
 - Every tool call is validated against its inputSchema before it runs (the MCP server previously ignored schemas): a Polymarket `side: "buy"` no longer builds a SELL order, and Hyperliquid `isBuy: "false"` is rejected instead of read as true.
 - `slippageBps` is an integer 0–5000 (50%) on all DEX/aggregator builders; Aave and EigenLayer builders check caller-supplied `decimals` against the token's `decimals()`.
