@@ -82,7 +82,7 @@ export const aaSessionTools = [
         name: 'chaingpt_aa_session_status',
         description: "Read a session's ON-CHAIN state: account kind, module installed?, permission enabled?, and the " +
             'authoritative remaining per-token allowance straight from the spending-limit policy contract. ' +
-            'Falls back to locally cached grants when args are omitted. Read-only. 0 ChainGPT credits.',
+            'Falls back to grants built on this machine when args are omitted (local records are not proof of signing; the on-chain state is). Read-only. 0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -218,13 +218,13 @@ export async function handleAaSessionTool(name, args) {
                 }
             }
             if (!account || !permissionId || !chainSlugForRpc) {
-                const cached = records.map((r) => `  • ${r.permissionId} on account ${r.account} (chainId ${r.chainId}, created ${r.createdAt})`);
+                const cached = records.map((r) => `  • ${r.permissionId} on account ${r.account} (chainId ${r.chainId}, built ${r.createdAt})`);
                 return {
                     content: [{
                             type: 'text',
                             text: [
                                 'Need chain + account + permissionId (or at least one locally cached grant).',
-                                records.length ? 'Cached grants:' : 'No cached grants on this machine.',
+                                records.length ? 'Grants built on this machine (not proof the owner signed them; status reads the chain):' : 'No grants built on this machine.',
                                 ...cached,
                             ].join('\n'),
                         }],
@@ -260,7 +260,7 @@ export async function handleAaSessionTool(name, args) {
             const rec = records.find((r) => r.permissionId === permissionId);
             if (rec) {
                 lines.push('');
-                lines.push('Granted caps (local record — chain is authoritative):');
+                lines.push('Caps in the grant built here (the Permission line above is what the chain enforces):');
                 for (const t of rec.caps.tokenCaps)
                     lines.push(`  • ${t.cap} base units of ${t.token}`);
                 lines.push(`  • expires ${new Date(rec.caps.validUntil * 1000).toISOString()}`);

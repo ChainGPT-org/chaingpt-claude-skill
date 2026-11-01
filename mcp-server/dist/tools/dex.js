@@ -1,7 +1,7 @@
 import { encodeFunctionData, parseUnits, formatUnits } from 'viem';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 import { httpJson, jsonRpcFallback } from '../lib/http.js';
-import { fetchErc20Decimals } from '../lib/agent-erc20.js';
+import { checkedDecimals, fetchErc20Decimals } from '../lib/agent-erc20.js';
 /**
  * Tier-3a DEX trading on mainnet. Custody-free.
  *
@@ -376,9 +376,17 @@ export async function handleDexTool(name, args) {
             // If decimals omitted, fetch them on-chain — defaulting to 18 silently
             // mis-sizes approvals for 6-decimal tokens like USDC.
             const chain = resolveChain(network);
-            let decimals;
-            if (args.decimals !== undefined) {
-                decimals = Number(args.decimals);
+            let decimals = 0;
+            if (String(args.amount ?? 'max') === 'max') { // same default as amountInput below
+                // unlimited approval: no amount to scale, so decimals are not needed
+            }
+            else if (args.decimals !== undefined) {
+                try {
+                    decimals = await checkedDecimals(network, token, args.decimals);
+                }
+                catch (e) {
+                    return { content: [{ type: 'text', text: `Refused: ${e?.message ?? e}` }] };
+                }
             }
             else {
                 try {
@@ -389,7 +397,7 @@ export async function handleDexTool(name, args) {
                         content: [{
                                 type: 'text',
                                 text: `Could not fetch decimals for ${token} on ${network} (${e?.message ?? e}). ` +
-                                    `Pass an explicit \`decimals\` value (e.g. 6 for USDC, 18 for most ERC-20s) to retry.`,
+                                    `Decimals are always checked on-chain, so restore RPC access for ${network} and retry, or approve the unlimited amount (amount: "max"), which needs no decimals.`,
                             }],
                     };
                 }

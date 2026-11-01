@@ -161,6 +161,17 @@ describe('Tier-3a quote handlers', () => {
     expect(text).toContain('"data"');
   });
 
+  it('chaingpt_dex_approve_tx refuses caller decimals that do not match the token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' + '0'.repeat(63) + '6' }), // decimals() == 6
+      { status: 200, headers: { 'content-type': 'application/json' } }));
+    const res = await handleDexTool('chaingpt_dex_approve_tx', {
+      network: 'base', token: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', owner: '0x1111111111111111111111111111111111111111', // gitleaks:allow (public token contract address)
+      amount: '100', decimals: 18, acknowledgeMainnet: true,
+    });
+    expect(res.content[0].text).toMatch(/Refused: decimals 18 does not match/);
+  });
+
   it('chaingpt_dex_approve_tx REFUSES without acknowledgeMainnet (approvals delegate spend authority)', async () => {
     const res = await handleDexTool('chaingpt_dex_approve_tx', {
       network: 'base',

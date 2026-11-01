@@ -127,7 +127,7 @@ export const polymarketTools = [
             properties: {
                 order: { description: 'The order object exactly as returned by chaingpt_pm_place_order_payload.' },
                 signature: { type: 'string', description: '0x-prefixed signature from the user\'s wallet (eth_signTypedData_v4 over the typed data).' },
-                owner: { type: 'string', description: 'Owner address (usually = maker).' },
+                owner: { type: 'string', description: 'CLOB API key of the order owner. Defaults to POLY_CLOB_API_KEY (Polymarket expects the API key here, not an address).' },
                 orderType: {
                     type: 'string',
                     enum: ['GTC', 'FOK', 'GTD'],
@@ -150,6 +150,13 @@ function formatPct(v, decimals = 1) {
     if (!Number.isFinite(n))
         return 'n/a';
     return `${(n * 100).toFixed(decimals)}%`;
+}
+function clobSalt(salt) {
+    const n = Number(salt);
+    if (!/^\d+$/.test(String(salt)) || !Number.isSafeInteger(n)) {
+        throw new Error('Order salt must be an integer below 2^53 so the CLOB API receives exactly the signed value. Rebuild the order with chaingpt_pm_place_order_payload.');
+    }
+    return n;
 }
 export async function handlePolymarketTool(name, args) {
     if (!args) {
@@ -333,14 +340,18 @@ export async function handlePolymarketTool(name, args) {
             }
             const order = args.order;
             const signature = String(args.signature);
-            const owner = args.owner ?? order.maker;
+            // Per the CLOB API: body.owner is the owner's API key; the POLY_ADDRESS header is the signing EOA
+            // (differs from maker for proxy wallets).
+            // An address here (the old documented value) is ignored: the API wants the key.
+            const owner = typeof args.owner === 'string' && !/^0x[0-9a-fA-F]{40}$/.test(args.owner) ? args.owner : creds.apiKey;
             const orderType = String(args.orderType ?? 'GTC');
             const body = JSON.stringify({
-                order: { ...order, signature },
+                // CLOB wire format: side as "BUY"/"SELL" and salt as a number (the signed uint256 value, kept exact).
+                order: { ...order, salt: clobSalt(order.salt), side: order.side === 0 ? 'BUY' : 'SELL', signature },
                 owner,
                 orderType,
             });
-            const headers = clobHeaders(creds, 'POST', '/order', body, owner);
+            const headers = clobHeaders(creds, 'POST', '/order', body, order.signer ?? order.maker);
             // 15s timeout — without it, a hung CLOB endpoint pins the tool indefinitely.
             const ac = new AbortController();
             const t = setTimeout(() => ac.abort(), 15_000);

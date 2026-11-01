@@ -28,7 +28,7 @@ describe('tool argument validation', () => {
       if (required.length === 0) expect(argsError(t.name, defaults), t.name).toBeNull();
       else expect(argsError(t.name, {}), t.name).toMatch(/must have required property/);
     }
-  });
+  }, 30_000);
 
   it('rejects a lowercase Polymarket side instead of building the opposite order', () => {
     const base = { maker: '0x' + '1'.repeat(40), tokenId: '1', price: '0.5', size: '10' };

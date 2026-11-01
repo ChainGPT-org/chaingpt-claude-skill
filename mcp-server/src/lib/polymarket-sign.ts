@@ -144,8 +144,9 @@ export function buildOrder(opts: {
 
   const isBuy = opts.side === 'BUY';
   return {
-    // Money-touching salt: must come from a CSPRNG, not Math.random().
-    salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(16).toString('hex')).toString(),
+    // Money-touching salt: must come from a CSPRNG, not Math.random(). 48 bits so the CLOB API's numeric
+    // salt (a JSON number) round-trips exactly and matches what was signed.
+    salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
     maker: opts.maker,
     signer: opts.maker,
     taker: '0x0000000000000000000000000000000000000000',
@@ -174,7 +175,7 @@ export function clobHeaders(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   bodyJson: string,
-  maker: string
+  signer: string
 ): Record<string, string> {
   const ts = Math.floor(Date.now() / 1000).toString();
   const message = ts + method + path + bodyJson;
@@ -184,7 +185,7 @@ export function clobHeaders(
   // Polymarket uses base64-URL-safe (replace + → -, / → _).
   const sig = hmac.toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
   return {
-    POLY_ADDRESS: maker,
+    POLY_ADDRESS: signer,
     POLY_SIGNATURE: sig,
     POLY_TIMESTAMP: ts,
     POLY_API_KEY: creds.apiKey,

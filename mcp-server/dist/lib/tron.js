@@ -9,6 +9,8 @@
  * is throttled). See docs/tron/RESEARCH.md §5.
  */
 import { httpJson } from './http.js';
+import { toFunctionSelector } from 'viem';
+import { assertTronTxMatches } from './tron-raw.js';
 const HOSTS = {
     mainnet: 'https://api.trongrid.io',
     shasta: 'https://api.shasta.trongrid.io',
@@ -98,6 +100,7 @@ export async function createTransaction(network, args) {
         throw new Error(`Tron createtransaction failed: ${res.Error}`);
     if (!res.raw_data_hex || !res.txID)
         throw new Error(`Tron createtransaction returned no transaction (recipient activation issue?): ${JSON.stringify(res).slice(0, 200)}`);
+    assertTronTxMatches(res, { kind: 'transfer', owner: args.ownerBase58, to: args.toBase58, amountSun: args.amountSun });
     return res;
 }
 /**
@@ -115,6 +118,12 @@ export async function triggerSmartContract(network, args) {
         call_value: toApiAmount(args.callValueSun ?? 0n),
         visible: true,
     });
+    if (res?.transaction) {
+        assertTronTxMatches(res.transaction, {
+            kind: 'trigger', owner: args.ownerBase58, contract: args.contractBase58, callValueSun: args.callValueSun ?? 0n,
+            dataHex: toFunctionSelector(args.functionSelector).slice(2) + (args.parameter ?? ''), feeLimitSun: args.feeLimitSun,
+        });
+    }
     return res;
 }
 export async function broadcastTransaction(network, signedTx) {
