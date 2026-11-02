@@ -54,7 +54,7 @@ if (!API_KEY) {
     console.error('WARN: CHAINGPT_API_KEY is not set. ChainGPT-product tools (chat/NFT/audit/generator/news) ' +
         'will fail. Other tools (dashboard, decode/build utilities) work. Get a key at https://app.chaingpt.org.');
 }
-const server = new Server({ name: 'chaingpt', version: '1.24.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'chaingpt', version: '1.24.1' }, { capabilities: { tools: {} } });
 // Every listed tool (the agent wallet only when enabled); also the schema source for argument validation.
 const TOOLS = [
     ...chatTools,
