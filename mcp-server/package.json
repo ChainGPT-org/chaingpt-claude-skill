@@ -62,7 +62,7 @@
     "proxy-addr": "2.0.8",
     "body-parser@2": "2.4.0",
     "fast-uri": "3.1.9",
-    "follow-redirects": "1.16.1",
+    "follow-redirects": "1.16.2",
     "hono": "4.13.11",
     "ip-address": "10.7.4",
     "jayson": "5.0.0",
