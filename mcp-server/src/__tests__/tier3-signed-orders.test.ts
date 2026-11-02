@@ -10,7 +10,12 @@ import './_setup.js';
 import { hyperliquidTools, handleHyperliquidTool } from '../tools/hyperliquid.js';
 import { polymarketTools, handlePolymarketTool } from '../tools/polymarket.js';
 import { actionHash, phantomAgentTypedData, buildActionPayload } from '../lib/hyperliquid-sign.js';
-import { buildOrder, orderTypedData, POLYMARKET_CTF_EXCHANGE } from '../lib/polymarket-sign.js';
+import {
+  buildOrder, orderTypedData, type PolymarketOrder,
+  POLYMARKET_CTF_EXCHANGE, POLYMARKET_NEG_RISK_EXCHANGE, POLYMARKET_V2_EXCHANGE,
+} from '../lib/polymarket-sign.js';
+import { hashDomain, hashStruct, recoverTypedDataAddress } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 describe('Hyperliquid signed-order tool definitions', () => {
   it('exposes 3 signed-action tools (place_order, cancel_order, submit_signed_action)', () => {
@@ -150,18 +155,66 @@ describe('Polymarket order-build helper', () => {
     expect(o.takerAmount).toBe('42000000');
   });
 
-  it('typed data uses chainId 137 + CTF Exchange by default', () => {
+  it('CTF books sign against domain version "2"; neg_risk picks the exchange', () => {
     const o = buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.5', size: '10' });
-    const td = orderTypedData(o, false);
-    expect(td.domain.chainId).toBe(137);
-    expect(td.domain.name).toBe('Polymarket CTF Exchange');
-    expect(td.domain.verifyingContract).toBe(POLYMARKET_CTF_EXCHANGE);
+    const td = orderTypedData(o);
+    expect(td.domain).toEqual({ name: 'Polymarket CTF Exchange', version: '2', chainId: 137, verifyingContract: POLYMARKET_CTF_EXCHANGE });
+    expect(orderTypedData(o, { negRisk: true }).domain.verifyingContract).toBe(POLYMARKET_NEG_RISK_EXCHANGE);
   });
 
-  it('negRisk=true uses the Neg-Risk exchange contract', () => {
+  it('v2 books sign against domain version "3" on the single v2 exchange, whatever neg_risk says', () => {
     const o = buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.5', size: '10' });
-    const td = orderTypedData(o, true);
-    expect(td.domain.verifyingContract).not.toBe(POLYMARKET_CTF_EXCHANGE);
+    const td = orderTypedData(o, { bookVersion: 'v2', negRisk: true });
+    expect(td.domain).toMatchObject({ version: '3', verifyingContract: POLYMARKET_V2_EXCHANGE });
+  });
+
+  it('signs the current Order struct: no taker/nonce/feeRateBps/expiration, uint8 side + signatureType', () => {
+    const o = buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.5', size: '10', expirationSec: 2_000_000_000 });
+    const td = orderTypedData(o);
+    expect(td.types.Order.map((f) => f.name)).toEqual(
+      ['salt', 'maker', 'signer', 'tokenId', 'makerAmount', 'takerAmount', 'side', 'signatureType', 'timestamp', 'metadata', 'builder']);
+    expect(td.message).not.toHaveProperty('expiration');
+    expect(o.expiration).toBe('2000000000'); // kept for the POST body
+    expect(Math.abs(Number(o.timestamp) - Date.now())).toBeLessThan(60_000); // unix ms
+  });
+
+  // Vector from Polymarket's own clients (py-clob-client-v2 tests/order_utils/test_exchange_order_builder_v2.py,
+  // also rs-clob-client-v2 tests/order.rs): a POLY_1271 signature on Amoy (80002) whose ERC-7739 wrapper embeds
+  // the exchange's domain separator and the Order struct hash right after the 65-byte inner signature.
+  it('matches the domain separator and Order struct hash in the official client vector', () => {
+    const expected =
+      '0xa3a093c83b6c20c83355c16ce94c92e6e9fcbdeb840618cc74f6c57a42ad145b' +
+      '2b98db73d2c73cbf1f2b6af288566ae81960ddbc3a13921027358a8bff3be6ff1c' +
+      'a440cbd865bc0c6243d7a8df9a8bf48a8827b0a4abbb61c30e96d305423af148' +
+      'd23d42d3ad94e65d78258cecaf8dcbaddac0f73dc085040f2c12bb595dd83804';
+    const domainSeparator = '0x' + expected.slice(2 + 130, 2 + 130 + 64);
+    const structHash = '0x' + expected.slice(2 + 130 + 64, 2 + 130 + 128);
+    const wallet = '0x1111111111111111111111111111111111111111' as const;
+    const order: PolymarketOrder = {
+      salt: '479249096354', maker: wallet, signer: wallet, tokenId: '1234',
+      makerAmount: '100000000', takerAmount: '50000000', side: 0, signatureType: 3,
+      timestamp: '1710000000000', metadata: `0x${'0'.repeat(64)}`, builder: `0x${'0'.repeat(64)}`, expiration: '0',
+    };
+    const td = orderTypedData(order); // the CTF exchange address is the same on Amoy and Polygon
+    const amoyDomain = { ...td.domain, chainId: 80002 };
+    expect(hashDomain({ domain: amoyDomain, types: td.types } as any)).toBe(domainSeparator);
+    expect(hashStruct({ data: td.message, primaryType: 'Order', types: td.types } as any)).toBe(structHash);
+  });
+
+  it('typed data signs and recovers with eth_signTypedData_v4 semantics', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const o = buildOrder({ maker: account.address, tokenId: '1234', side: 'SELL', price: '0.42', size: '10' });
+    const td = orderTypedData(o, { negRisk: true });
+    const signature = await account.signTypedData(td as any);
+    expect(await recoverTypedDataAddress({ ...td, signature } as any)).toBe(account.address);
+  });
+
+  it('rounds size down to 2 decimals and rejects prices finer than any tick', () => {
+    const o = buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.52', size: '10.299' });
+    expect(o.takerAmount).toBe('10290000');
+    expect(o.makerAmount).toBe('5350800'); // 10.29 × 0.52, exact
+    expect(buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.5', size: '0.29' }).takerAmount).toBe('290000');
+    expect(() => buildOrder({ maker: '0xaaa' as any, tokenId: '1', side: 'BUY', price: '0.12345', size: '10' })).toThrow(/more than 4 decimals/);
   });
 });
 
@@ -190,6 +243,30 @@ describe('Polymarket handler smoke', () => {
     expect(t).toContain('Polymarket order');
     expect(t).toContain('"primaryType": "Order"');
     expect(t).toContain('"chainId": 137');
+    expect(t).toContain('"version": "2"');
+  });
+
+  it('place_order_payload uses the v2 domain when bookVersion is v2', async () => {
+    const r = await handlePolymarketTool('chaingpt_pm_place_order_payload', {
+      maker: '0x1111111111111111111111111111111111111111', tokenId: '12345', side: 'BUY', price: '0.42', size: '100',
+      bookVersion: 'v2', acknowledgeMainnet: true,
+    });
+    expect(r.content[0].text).toContain(POLYMARKET_V2_EXCHANGE);
+    expect(r.content[0].text).toContain('"version": "3"');
+  });
+
+  it('submit_signed_order refuses legacy-format orders instead of posting a dead signature', async () => {
+    process.env.POLY_CLOB_API_KEY = 'k'; process.env.POLY_CLOB_SECRET = 'cw=='; process.env.POLY_CLOB_PASSPHRASE = 'p';
+    const spy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const legacy = { salt: '1', maker: '0x' + 'a'.repeat(40), side: 0, taker: '0x' + '0'.repeat(40), nonce: '0', feeRateBps: '0' };
+      const r = await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: legacy as any, signature: '0x' + 'a'.repeat(130) });
+      expect(r.content[0].text).toContain('not in the current Polymarket order format');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      delete process.env.POLY_CLOB_API_KEY; delete process.env.POLY_CLOB_SECRET; delete process.env.POLY_CLOB_PASSPHRASE;
+    }
   });
 
   it('submit_signed_order returns credential-setup hint when env vars unset', async () => {
@@ -223,14 +300,21 @@ describe('Polymarket handler smoke', () => {
     process.env.POLY_CLOB_PASSPHRASE = 'fixture-passphrase';
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true, orderID: '0x1' }), { status: 200 }));
     try {
-      const maker = '0x' + 'a'.repeat(40), signer = '0x' + 'b'.repeat(40); // proxy wallet: maker != signer
-      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: { maker, signer, side: 0, salt: '281474976710655' } as any, signature: '0x' + 'a'.repeat(130) });
+      const maker = ('0x' + 'a'.repeat(40)) as `0x${string}`, signer = ('0x' + 'b'.repeat(40)) as `0x${string}`; // proxy wallet: maker != signer
+      const order = { ...buildOrder({ maker, signer, signatureType: 1, tokenId: '7', side: 'BUY', price: '0.5', size: '10', expirationSec: 2_000_000_000 }), salt: '281474976710655' };
+      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: order as any, signature: '0x' + 'a'.repeat(130), orderType: 'GTD' });
       const init = spy.mock.calls[0][1] as RequestInit;
       const body = JSON.parse(String(init.body));
       expect(body.owner).toBe('fixture-api-key');
       expect(body.order.side).toBe('BUY');
       expect(body.order.salt).toBe(281474976710655); // the signed value, exactly, as a JSON number
       expect((init.headers as Record<string, string>).POLY_ADDRESS).toBe(signer);
+      // Current wire format: signed fields + unsigned expiration, no legacy taker/nonce/feeRateBps.
+      expect(Object.keys(body.order).sort()).toEqual(
+        ['builder', 'expiration', 'maker', 'makerAmount', 'metadata', 'salt', 'side', 'signature', 'signatureType', 'signer', 'takerAmount', 'timestamp', 'tokenId']);
+      expect(body.order.expiration).toBe('2000000000');
+      expect(body.order.signatureType).toBe(1);
+      expect([body.deferExec, body.postOnly, body.orderType]).toEqual([false, false, 'GTD']);
     } finally {
       spy.mockRestore();
       delete process.env.POLY_CLOB_API_KEY; delete process.env.POLY_CLOB_SECRET; delete process.env.POLY_CLOB_PASSPHRASE;

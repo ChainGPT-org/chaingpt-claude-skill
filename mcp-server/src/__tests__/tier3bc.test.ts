@@ -190,6 +190,22 @@ describe('Tier-3c handler smoke tests', () => {
     expect(text).toContain('12345');
   });
 
+  it('v2 markets list position ids and the book shows its signing version', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        question: 'V2 market?', slug: 'v2', version: 'v2', outcomes: '["Yes","No"]', outcomePrices: '[0.5,0.5]',
+        clobTokenIds: null, positionIds: ['111', '222'], active: true,
+      }]), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        version: 'v2', neg_risk: false, tick_size: '0.01', min_order_size: '5', bids: [], asks: [],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const market = (await handlePolymarketTool('chaingpt_pm_market', { slug: 'v2' })).content[0].text;
+    expect(market).toContain('tokenId=111');
+    expect(market).toContain('Market version:  v2');
+    const book = (await handlePolymarketTool('chaingpt_pm_orderbook', { tokenId: '111' })).content[0].text;
+    expect(book).toContain('Book version: v2  neg_risk: false  tick_size: 0.01  min_order_size: 5');
+  });
+
   it('chaingpt_pm_orderbook formats bids and asks', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
