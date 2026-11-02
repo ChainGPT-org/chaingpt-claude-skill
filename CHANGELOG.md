@@ -1,12 +1,15 @@
 # Changelog
 
-## [Unreleased]
+## [1.24.2] - 2026-11-01
 ### Fixed
 - Polymarket orders use the current CLOB order format, checked against Polymarket's docs and `clob-client-v2`. The signed `Order` struct is now salt, maker, signer, tokenId, makerAmount, takerAmount, side (uint8), signatureType (uint8), timestamp (unix ms), metadata and builder. Expiration is no longer signed; it travels in the POST body. CTF books sign against domain version "2" on the new CTF / Neg-Risk exchanges. Books that report `version: "v2"` sign against domain version "3" on `0xe3333700cA9d93003F00f0F71f8515005F6c00Aa`. A test checks the domain separator and struct hash against Polymarket's published client vector.
 - `chaingpt_pm_place_order_payload` takes `bookVersion` ("ctf" or "v2") and no longer takes `feeRateBps`. Sizes are rounded down to 2 decimals and prices finer than 4 decimals are refused. `chaingpt_pm_orderbook` shows the book version, neg_risk, tick size and minimum order size. `chaingpt_pm_market` lists position ids for v2 markets.
 - `chaingpt_pm_submit_signed_order` sends the official client's body shape and refuses legacy-format orders, which can no longer be filled. The API key is still sent as `owner`, the signer as `POLY_ADDRESS`, side as "BUY"/"SELL" and the salt as an exact JSON number.
 
 Not supported yet: deposit-wallet orders (`signatureType` 3), which need an ERC-7739-wrapped signature.
+
+### Security
+- `follow-redirects` 1.16.2 (via axios): custom credential headers are no longer forwarded across redirects (Dependabot high-severity alert).
 
 ## [1.24.1] - 2026-11-01
 ### Fixed
