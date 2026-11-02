@@ -1,12 +1,15 @@
 # Changelog
 
-## [Unreleased]
+## [1.24.1] - 2026-11-01
 ### Fixed
-- Tron unsigned builders decode the node-built transaction and refuse it unless txID, owner, recipient or contract, amount, call data and fee limit match the request.
+- Tron unsigned builders decode the node-built transaction strictly (no duplicate, unknown or TRC-10 fields, memos, permission ids or >24h expiry) and refuse it unless txID, owner, recipient or contract, amount, call data and fee limit match the request.
 - `chaingpt_dex_approve_tx` checks caller-supplied decimals against the token's `decimals()`.
 - 1inch/CoW amounts must be positive decimals within the token's precision (no silent truncation); CoW order lifetime is 1-1440 minutes.
 - Polymarket order submission sends the CLOB API key as `owner` and the signer address as `POLY_ADDRESS`, as the CLOB API expects (fixes proxy-wallet orders).
+- Polymarket submission sends `side` as "BUY"/"SELL" and the salt as an exact JSON number (new salts are 48-bit CSPRNG values); `chaingpt_pm_place_order_payload` accepts `signer` and `signatureType` for proxy and Safe wallets.
 - Session status labels locally recorded grants as built, not signed; the on-chain state is authoritative.
+
+Known limitation: the Polymarket order builder still signs the legacy CLOB order format; migration to Polymarket's V2 order format is in progress.
 
 ## [1.24.0] - 2026-11-01
 ### Breaking: agent wallet is ERC-4337 session keys only
