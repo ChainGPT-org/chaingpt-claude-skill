@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.25.0] - 2026-11-01
 ### Added
 - Polymarket deposit-wallet orders (`signatureType` 3): `maker` is the deposit wallet and `signer` its owner EOA. The owner signs the ERC-7739 `TypedDataSign` envelope; `chaingpt_pm_submit_signed_order` checks that the signature recovers to the owner, wraps it for ERC-1271 as the official client does, and authenticates as the owner. A test reproduces the full signature in Polymarket's published client vector.
 
