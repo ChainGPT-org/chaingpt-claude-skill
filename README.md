@@ -593,7 +593,7 @@ Hyperliquid provides live mainnet data and supports **signed EIP‑712 L1 action
 | Tool | What it does |
 |---|---|
 | `chaingpt_pm_markets` · `_market` · `_orderbook` · `_trades` | Discover markets + read live data |
-| `chaingpt_pm_create_order` · `_create_neg_risk_order` | EIP‑712 signed CTF / Neg‑Risk order intents |
+| `chaingpt_pm_place_order_payload` · `_submit_signed_order` | EIP‑712 order typed data for your wallet to sign, then CLOB submission |
 
 ### Cross‑chain bridging (3 tools)
 

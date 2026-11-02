@@ -1,25 +1,31 @@
 /**
- * Polymarket CLOB v2 order-signing helpers.
+ * Polymarket CLOB order-signing helpers (current order format).
  *
  * Polymarket runs its CLOB (Central Limit Order Book) on Polygon mainnet
- * (chainId 137). Orders are EIP-712-signed against the CTF Exchange contract
- * and submitted to https://clob.polymarket.com/order.
+ * (chainId 137). Orders are EIP-712-signed against an exchange contract and
+ * submitted to https://clob.polymarket.com/order.
  *
- * Reference: https://docs.polymarket.com/quickstart/orderbook-api/place-order/
- *            https://github.com/Polymarket/clob-client (TypeScript SDK)
+ * Reference: https://docs.polymarket.com/developers/CLOB/orders/create-order
+ *            https://github.com/Polymarket/clob-client-v2 (src/config.ts, order-utils/)
  */
 import * as crypto from 'crypto';
-export const POLYMARKET_CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
-export const POLYMARKET_NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
 export const POLYGON_CHAIN_ID = 137;
+// Signing domains by book type. A CTF book's /book response has no `version`;
+// a Polymarket Protocol V2 book returns `version: "v2"` and has a single exchange.
+export const POLYMARKET_CTF_EXCHANGE = '0xE111180000d2663C0091e4f400237545B87B996B';
+export const POLYMARKET_NEG_RISK_EXCHANGE = '0xe2222d279d744050d28e00520010520000310F59';
+export const POLYMARKET_V2_EXCHANGE = '0xe3333700cA9d93003F00f0F71f8515005F6c00Aa';
+const BYTES32_ZERO = `0x${'0'.repeat(64)}`;
 /** Construct the EIP-712 typed-data envelope for a Polymarket order. */
-export function orderTypedData(order, negRisk = false) {
+export function orderTypedData(order, opts = {}) {
+    const { expiration: _unsigned, ...message } = order;
+    const v2 = opts.bookVersion === 'v2'; // v2 books have one exchange; neg_risk does not pick it
     return {
         domain: {
             name: 'Polymarket CTF Exchange',
-            version: '1',
+            version: v2 ? '3' : '2',
             chainId: POLYGON_CHAIN_ID,
-            verifyingContract: negRisk ? POLYMARKET_NEG_RISK_EXCHANGE : POLYMARKET_CTF_EXCHANGE,
+            verifyingContract: v2 ? POLYMARKET_V2_EXCHANGE : opts.negRisk ? POLYMARKET_NEG_RISK_EXCHANGE : POLYMARKET_CTF_EXCHANGE,
         },
         types: {
             EIP712Domain: [
@@ -32,27 +38,24 @@ export function orderTypedData(order, negRisk = false) {
                 { name: 'salt', type: 'uint256' },
                 { name: 'maker', type: 'address' },
                 { name: 'signer', type: 'address' },
-                { name: 'taker', type: 'address' },
                 { name: 'tokenId', type: 'uint256' },
                 { name: 'makerAmount', type: 'uint256' },
                 { name: 'takerAmount', type: 'uint256' },
-                { name: 'expiration', type: 'uint256' },
-                { name: 'nonce', type: 'uint256' },
-                { name: 'feeRateBps', type: 'uint256' },
-                { name: 'side', type: 'uint256' },
-                { name: 'signatureType', type: 'uint256' },
+                { name: 'side', type: 'uint8' },
+                { name: 'signatureType', type: 'uint8' },
+                { name: 'timestamp', type: 'uint256' },
+                { name: 'metadata', type: 'bytes32' },
+                { name: 'builder', type: 'bytes32' },
             ],
         },
         primaryType: 'Order',
-        message: order,
+        message,
     };
 }
 /**
- * Build a Polymarket order from price + size in USDC.
- * Pricing on Polymarket: 1 outcome token = 1 USDC at full resolution.
- * A 50% YES order = 0.50 USDC per outcome token.
- *
- * USDC has 6 decimals. Outcome tokens have 6 decimals (ERC-1155).
+ * Build a Polymarket order from price + size.
+ * 1 outcome token pays 1 USDC at resolution, so a 50% YES order = 0.50 USDC per token.
+ * USDC and outcome tokens both have 6 decimals.
  */
 export function buildOrder(opts) {
     // Reject economically-invalid inputs at the helper boundary so we never
@@ -65,11 +68,15 @@ export function buildOrder(opts) {
     if (!Number.isFinite(price) || price <= 0 || price >= 1) {
         throw new Error(`Polymarket price must be in (0, 1) — quoted as USDC per outcome token (got ${opts.price})`);
     }
-    const sizeUnits = BigInt(Math.round(size * 1_000_000)); // outcome tokens have 6 decimals
     const priceUnits = BigInt(Math.round(price * 1_000_000)); // USDC per token, 6 decimals
+    if (priceUnits % 100n !== 0n) {
+        throw new Error(`Polymarket price ${opts.price} has more than 4 decimals; no market tick allows that.`);
+    }
+    // Sizes carry at most 2 decimals on every tick size: round down, as the official client does.
+    const sizeUnits = (BigInt(Math.round(size * 1_000_000)) / 10000n) * 10000n;
+    // With ≤4-decimal prices and 2-decimal sizes this product is exact.
     const usdcAmount = (sizeUnits * priceUnits) / 1000000n;
-    // Integer division can floor tiny orders to 0 USDC (e.g. 0.001 shares @ 0.01)
-    // — a zero-cost real-money order must never leave this helper.
+    // A zero-cost real-money order must never leave this helper.
     if (usdcAmount === 0n) {
         throw new Error(`Polymarket order rounds to 0 USDC (size ${opts.size} × price ${opts.price}). Increase size or price.`);
     }
@@ -80,15 +87,15 @@ export function buildOrder(opts) {
         salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
         maker: opts.maker,
         signer: opts.signer ?? opts.maker,
-        taker: '0x0000000000000000000000000000000000000000',
         tokenId: opts.tokenId,
         makerAmount: (isBuy ? usdcAmount : sizeUnits).toString(),
         takerAmount: (isBuy ? sizeUnits : usdcAmount).toString(),
-        expiration: String(opts.expirationSec ?? 0),
-        nonce: '0',
-        feeRateBps: String(opts.feeRateBps ?? 0),
         side: isBuy ? 0 : 1,
         signatureType: opts.signatureType ?? 0,
+        timestamp: Date.now().toString(),
+        metadata: BYTES32_ZERO,
+        builder: BYTES32_ZERO,
+        expiration: String(opts.expirationSec ?? 0),
     };
 }
 /** Build HMAC headers for a POST to clob.polymarket.com endpoints. */

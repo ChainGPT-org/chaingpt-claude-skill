@@ -7,9 +7,9 @@ import { buildOrder, clobHeaders, orderTypedData, readCLOBCreds, } from '../lib/
  *   - Gamma API     : https://gamma-api.polymarket.com  (markets list, events, search)
  *   - CLOB API      : https://clob.polymarket.com       (orderbook, last-trade, midpoint)
  *
- * Order placement requires an EIP-712-signed CLOB order (0x v4 limit-order shape
- * with Polymarket-specific extensions). Deferred to a follow-up so the signing
- * scheme can get its own review pass.
+ * Order placement: chaingpt_pm_place_order_payload returns EIP-712 typed data in the
+ * current CLOB order format (see lib/polymarket-sign.ts); the user's wallet signs it and
+ * chaingpt_pm_submit_signed_order posts it.
  *
  * Ties into ChainGPT's existing PredictFi / Foresight AI surface — Polymarket
  * is the canonical onchain prediction market.
@@ -61,8 +61,9 @@ export const polymarketTools = [
     },
     {
         name: 'chaingpt_pm_orderbook',
-        description: 'Get the L2 orderbook for one Polymarket outcome token. The tokenId is the per-outcome ERC-1155 id ' +
-            '(get it from chaingpt_pm_market). Read-only. 0 ChainGPT credits.',
+        description: 'Get the L2 orderbook for one Polymarket outcome token. The tokenId is the per-outcome asset id ' +
+            '(get it from chaingpt_pm_market). Also shows the book version, neg_risk, tick size and minimum order ' +
+            'size that chaingpt_pm_place_order_payload needs. Read-only. 0 ChainGPT credits.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -98,20 +99,26 @@ export const polymarketTools = [
                 maker: { type: 'string', description: 'Wallet placing the order (0x… on Polygon). For proxy/Safe wallets, the proxy (funder) address.' },
                 signer: { type: 'string', pattern: '^0x[0-9a-fA-F]{40}$', description: 'EOA that signs, when it differs from maker (proxy/Safe wallets). Default: maker.' },
                 signatureType: { type: 'integer', enum: [0, 1, 2], description: '0 = EOA (default), 1 = Polymarket proxy (email/Magic), 2 = Gnosis Safe proxy.' },
-                tokenId: { type: 'string', description: 'CLOB token id from chaingpt_pm_market.' },
+                tokenId: { type: 'string', description: 'Outcome asset id from chaingpt_pm_market (the position id on a v2 market).' },
                 side: { type: 'string', enum: ['BUY', 'SELL'], description: 'BUY = buying outcome tokens, SELL = selling them.' },
-                price: { type: 'string', description: 'Decimal probability 0..1, e.g. "0.42" for 42%.' },
-                size: { type: 'string', description: 'Number of outcome tokens (shares), e.g. "100".' },
+                price: { type: 'string', description: 'Decimal probability 0..1 on the book\'s tick_size, e.g. "0.42" for 42%.' },
+                size: { type: 'string', description: 'Number of outcome tokens (shares), e.g. "100". Rounded down to 2 decimals; must meet the book\'s min_order_size.' },
                 expirationSec: {
                     type: 'number',
-                    description: 'Unix seconds when the order expires. 0 = never. Default 0.',
+                    description: 'Unix seconds when a GTD order expires (submit with orderType GTD; at least 3 minutes ahead). 0 = never. Default 0.',
                     default: 0,
                 },
-                feeRateBps: { type: 'number', default: 0 },
+                bookVersion: {
+                    type: 'string',
+                    enum: ['ctf', 'v2'],
+                    description: '"v2" when chaingpt_pm_orderbook shows book version v2 (Polymarket Protocol V2 market), otherwise "ctf". ' +
+                        'Selects the EIP-712 signing domain. Default "ctf".',
+                    default: 'ctf',
+                },
                 negRisk: {
                     type: 'boolean',
-                    description: 'true if this market is on the Neg-Risk exchange (multi-outcome / scalar). Default false. ' +
-                        'Determines which verifyingContract is used in the EIP-712 domain.',
+                    description: 'The book\'s neg_risk flag from chaingpt_pm_orderbook (multi-outcome markets). Default false. ' +
+                        'Selects the exchange contract for CTF books; ignored for v2 books.',
                     default: false,
                 },
                 acknowledgeMainnet: { type: 'boolean', description: 'You must pass true. Polymarket orders are real-money trades.' },
@@ -213,7 +220,9 @@ export async function handlePolymarketTool(name, args) {
             if (!m) {
                 return { content: [{ type: 'text', text: 'Market not found.' }] };
             }
-            const tokenIds = m.clobTokenIds ? (typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds) : [];
+            // v2 markets trade by position id; CTF markets by CLOB token id.
+            const rawIds = m.version === 'v2' ? m.positionIds : m.clobTokenIds;
+            const tokenIds = rawIds ? (typeof rawIds === 'string' ? JSON.parse(rawIds) : rawIds) : [];
             const outcomes = m.outcomes ? (typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : m.outcomes) : ['YES', 'NO'];
             const prices = m.outcomePrices ? (typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices) : [];
             const lines = [];
@@ -225,6 +234,7 @@ export async function handlePolymarketTool(name, args) {
             lines.push(`Volume 24h:      $${formatNum(m.volume24hr)}`);
             lines.push(`Total volume:    $${formatNum(m.volume)}`);
             lines.push(`Liquidity:       $${formatNum(m.liquidity)}`);
+            lines.push(`Market version:  ${m.version === 'v2' ? 'v2 (place orders with bookVersion "v2")' : 'ctf'}`);
             lines.push('');
             lines.push('Outcomes:');
             for (let i = 0; i < outcomes.length; i++) {
@@ -246,6 +256,9 @@ export async function handlePolymarketTool(name, args) {
             const asks = (book?.asks ?? []).slice(0, depth);
             const lines = [];
             lines.push(`Polymarket orderbook — tokenId ${tokenId}`);
+            // Order signing needs these: the book version and neg_risk pick the signing domain.
+            lines.push(`Book version: ${book?.version === 'v2' ? 'v2' : 'ctf'}  neg_risk: ${book?.neg_risk === true}  ` +
+                `tick_size: ${book?.tick_size ?? 'n/a'}  min_order_size: ${book?.min_order_size ?? 'n/a'}`);
             lines.push('');
             lines.push(`  ${'Bid Size'.padStart(12)}   ${'Bid Px'.padStart(8)}  │  ${'Ask Px'.padStart(8)}   ${'Ask Size'.padStart(12)}`);
             lines.push(`  ${'─'.repeat(12)}   ${'─'.repeat(8)}  │  ${'─'.repeat(8)}   ${'─'.repeat(12)}`);
@@ -301,26 +314,26 @@ export async function handlePolymarketTool(name, args) {
             const price = String(args.price);
             const size = String(args.size);
             const expirationSec = Number(args.expirationSec ?? 0);
-            const feeRateBps = Number(args.feeRateBps ?? 0);
             const negRisk = Boolean(args.negRisk ?? false);
+            const bookVersion = args.bookVersion === 'v2' ? 'v2' : 'ctf';
             const signer = args.signer ? String(args.signer) : undefined;
             const signatureType = args.signatureType;
             if (signer && signer.toLowerCase() !== maker.toLowerCase() && !signatureType) {
                 return { content: [{ type: 'text', text: 'A signer different from maker means a proxy or Safe wallet: pass signatureType 1 (Polymarket proxy) or 2 (Gnosis Safe).' }] };
             }
-            const order = buildOrder({ maker, tokenId, side, price, size, expirationSec, feeRateBps, signer, signatureType });
-            const typed = orderTypedData(order, negRisk);
-            const usdcCost = (Number(price) * Number(size)).toFixed(4);
+            const order = buildOrder({ maker, tokenId, side, price, size, expirationSec, signer, signatureType });
+            const typed = orderTypedData(order, { negRisk, bookVersion });
+            const [usdc, shares] = (order.side === 0 ? [order.makerAmount, order.takerAmount] : [order.takerAmount, order.makerAmount]).map((v) => Number(v) / 1e6);
             const lines = [
                 `Polymarket order — sign with your wallet, then call chaingpt_pm_submit_signed_order.`,
                 '',
                 `Side:           ${side}`,
                 `Token id:       ${tokenId}`,
                 `Price:          ${price} (${(Number(price) * 100).toFixed(2)}% implied)`,
-                `Size:           ${size} shares`,
-                `USDC.e cost:    ~$${usdcCost}`,
-                `Expiration:     ${expirationSec === 0 ? 'never' : new Date(expirationSec * 1000).toISOString()}`,
-                `Exchange:       ${negRisk ? 'Neg-Risk' : 'CTF'} (${typed.domain.verifyingContract})`,
+                `Size:           ${shares} shares`,
+                `USDC:           $${usdc}`,
+                `Expiration:     ${expirationSec === 0 ? 'never' : `${new Date(expirationSec * 1000).toISOString()} (submit with orderType GTD)`}`,
+                `Exchange:       ${bookVersion === 'v2' ? 'v2' : negRisk ? 'CTF Neg-Risk' : 'CTF'} (${typed.domain.verifyingContract}, domain version ${typed.domain.version})`,
                 '',
                 '--- EIP-712 typed data (sign via eth_signTypedData_v4) ---',
                 JSON.stringify(typed, null, 2),
@@ -346,15 +359,36 @@ export async function handlePolymarketTool(name, args) {
                 };
             }
             const order = args.order;
+            // Legacy orders (taker/nonce/feeRateBps, no timestamp) were signed against retired exchanges.
+            if (!order || typeof order !== 'object' || order.timestamp === undefined || order.metadata === undefined || order.builder === undefined) {
+                return { content: [{ type: 'text', text: 'This order is not in the current Polymarket order format (no timestamp/metadata/builder). Rebuild it with chaingpt_pm_place_order_payload and sign the new typed data.' }] };
+            }
             const signature = String(args.signature);
             // Per the CLOB API: body.owner is the owner's API key; the POLY_ADDRESS header is the signing EOA
             // (differs from maker for proxy wallets).
             // An address here (the old documented value) is ignored: the API wants the key.
             const owner = typeof args.owner === 'string' && !/^0x[0-9a-fA-F]{40}$/.test(args.owner) ? args.owner : creds.apiKey;
             const orderType = String(args.orderType ?? 'GTC');
+            // Field set and order mirror the official client's orderToJsonV2. Wire format: salt as a JSON
+            // number (the signed uint256 value, kept exact), side as "BUY"/"SELL", unsigned expiration alongside.
             const body = JSON.stringify({
-                // CLOB wire format: side as "BUY"/"SELL" and salt as a number (the signed uint256 value, kept exact).
-                order: { ...order, salt: clobSalt(order.salt), side: order.side === 0 ? 'BUY' : 'SELL', signature },
+                deferExec: false,
+                postOnly: false,
+                order: {
+                    salt: clobSalt(order.salt),
+                    maker: order.maker,
+                    signer: order.signer,
+                    tokenId: order.tokenId,
+                    makerAmount: order.makerAmount,
+                    takerAmount: order.takerAmount,
+                    side: order.side === 0 ? 'BUY' : 'SELL',
+                    signatureType: order.signatureType,
+                    timestamp: order.timestamp,
+                    expiration: order.expiration ?? '0',
+                    metadata: order.metadata,
+                    builder: order.builder,
+                    signature,
+                },
                 owner,
                 orderType,
             });
