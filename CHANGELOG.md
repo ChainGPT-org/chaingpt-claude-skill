@@ -6,10 +6,10 @@
 - `chaingpt_pm_place_order_payload` takes `bookVersion` ("ctf" or "v2") and no longer takes `feeRateBps`. Sizes are rounded down to 2 decimals and prices finer than 4 decimals are refused. `chaingpt_pm_orderbook` shows the book version, neg_risk, tick size and minimum order size. `chaingpt_pm_market` lists position ids for v2 markets.
 - `chaingpt_pm_submit_signed_order` sends the official client's body shape and refuses legacy-format orders, which can no longer be filled. The API key is still sent as `owner`, the signer as `POLY_ADDRESS`, side as "BUY"/"SELL" and the salt as an exact JSON number.
 
+Not supported yet: deposit-wallet orders (`signatureType` 3), which need an ERC-7739-wrapped signature.
+
 ### Security
 - `follow-redirects` 1.16.2 (via axios): custom credential headers are no longer forwarded across redirects (Dependabot high-severity alert).
-
-Not supported yet: deposit-wallet orders (`signatureType` 3), which need an ERC-7739-wrapped signature.
 
 ## [1.24.1] - 2026-11-01
 ### Fixed
