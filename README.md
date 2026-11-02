@@ -846,8 +846,7 @@ These aren't mutually exclusive — you can run this skill alongside any of them
 ```
 chaingpt-claude-skill/
 ├── .claude-plugin/
-│   └── plugin.json                   # Plugin manifest (name, version, author)
-├── .mcp.json                         # MCP server configuration
+│   └── plugin.json                   # Plugin manifest and MCP server configuration
 ├── VERSION                           # Semantic version
 ├── README.md                         # This file
 ├── CONTRIBUTING.md
