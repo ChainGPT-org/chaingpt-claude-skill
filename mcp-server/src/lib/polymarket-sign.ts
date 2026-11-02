@@ -9,7 +9,7 @@
  *            https://github.com/Polymarket/clob-client-v2 (src/config.ts, order-utils/)
  */
 
-import { type Hex } from 'viem';
+import { hashDomain, hashStruct, toHex, type Hex } from 'viem';
 import * as crypto from 'crypto';
 
 export const POLYGON_CHAIN_ID = 137;
@@ -47,9 +47,12 @@ export interface PolymarketOrder {
   builder: Hex;
   /** Unix seconds, "0" = none. NOT signed: it travels in the POST body next to the signed fields. */
   expiration: string;
+  /** Deposit wallets (type 3) only, NOT signed or posted: the EOA that owns the wallet (its API key) and
+   *  the exchange domain, so the submit step can wrap the EOA's signature. */
+  depositWallet?: { owner: Hex; exchange: Hex; domainVersion: '2' | '3' };
 }
 
-type SignedOrderFields = Omit<PolymarketOrder, 'expiration'>;
+type SignedOrderFields = Omit<PolymarketOrder, 'expiration' | 'depositWallet'>;
 
 export interface OrderTypedData {
   domain: {
@@ -71,7 +74,7 @@ export function orderTypedData(
   order: PolymarketOrder,
   opts: { negRisk?: boolean; bookVersion?: BookVersion } = {}
 ): OrderTypedData {
-  const { expiration: _unsigned, ...message } = order;
+  const { expiration: _unsigned, depositWallet: _local, ...message } = order;
   const v2 = opts.bookVersion === 'v2'; // v2 books have one exchange; neg_risk does not pick it
   return {
     domain: {
@@ -106,6 +109,54 @@ export function orderTypedData(
   };
 }
 
+// ─── Deposit wallets (signatureType 3, POLY_1271) ───────────────────
+// The wallet contract validates via ERC-1271 using ERC-7739 nested typed data: its owner EOA signs a
+// TypedDataSign envelope (exchange domain, the Order as `contents`, the wallet's own domain fields), and
+// the posted signature is that inner signature followed by what the wallet needs to rebuild the hash.
+// Mirrors buildOrderSignature in clob-client-v2 src/order-utils/exchangeOrderBuilderV2.ts.
+
+const ORDER_TYPE_STRING =
+  'Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,' +
+  'uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)';
+
+/** Typed data the deposit wallet's owner EOA signs (eth_signTypedData_v4). */
+export function depositWalletTypedData(td: OrderTypedData) {
+  return {
+    domain: td.domain,
+    types: {
+      EIP712Domain: td.types.EIP712Domain,
+      TypedDataSign: [
+        { name: 'contents', type: 'Order' },
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+        { name: 'salt', type: 'bytes32' },
+      ],
+      Order: td.types.Order,
+    },
+    primaryType: 'TypedDataSign' as const,
+    message: {
+      contents: td.message,
+      name: 'DepositWallet',
+      version: '1',
+      chainId: td.domain.chainId,
+      verifyingContract: td.message.signer, // the deposit wallet
+      salt: BYTES32_ZERO,
+    },
+  };
+}
+
+/** innerSig (65 bytes) ‖ exchange domain separator ‖ Order struct hash ‖ Order type string ‖ uint16 its length. */
+export function wrapDepositWalletSignature(innerSig: Hex, td: OrderTypedData): Hex {
+  if (!/^0x[0-9a-fA-F]{130}$/.test(innerSig)) throw new Error('Deposit-wallet orders need the 65-byte signature from the owner EOA.');
+  const typeHex = toHex(ORDER_TYPE_STRING).slice(2);
+  const types = td.types as any; // viem's generic typed-data inference doesn't follow our declared field list
+  return (`0x${innerSig.slice(2)}${hashDomain({ domain: td.domain, types }).slice(2)}` +
+    `${hashStruct({ data: td.message as any, primaryType: 'Order', types }).slice(2)}` +
+    `${typeHex}${ORDER_TYPE_STRING.length.toString(16).padStart(4, '0')}`) as Hex;
+}
+
 /**
  * Build a Polymarket order from price + size.
  * 1 outcome token pays 1 USDC at resolution, so a 50% YES order = 0.50 USDC per token.
@@ -121,10 +172,13 @@ export function buildOrder(opts: {
   side: 'BUY' | 'SELL';
   /** Optional Unix-seconds expiration (GTD orders). 0 = never. */
   expirationSec?: number;
-  /** Signature type (0 = EOA — default). */
-  signatureType?: 0 | 1 | 2;
-  /** Signing EOA when it differs from maker (proxy / Safe wallets). Default: maker. */
+  /** Signature type (0 = EOA — default). 3 = deposit wallet: maker and signer are both the wallet contract. */
+  signatureType?: 0 | 1 | 2 | 3;
+  /** Signing EOA when it differs from maker (proxy / Safe wallets). Default: maker. Ignored for type 3. */
   signer?: Hex;
+  /** The book's tick_size and min_order_size; checked when given. */
+  tickSize?: string;
+  minOrderSize?: string;
   /** Optional explicit salt. */
   salt?: string;
 }): PolymarketOrder {
@@ -142,8 +196,17 @@ export function buildOrder(opts: {
   if (priceUnits % 100n !== 0n) {
     throw new Error(`Polymarket price ${opts.price} has more than 4 decimals; no market tick allows that.`);
   }
+  if (opts.tickSize !== undefined) {
+    const tickUnits = BigInt(Math.round(Number(opts.tickSize) * 1_000_000));
+    if (tickUnits <= 0n || priceUnits % tickUnits !== 0n || priceUnits > 1_000_000n - tickUnits) {
+      throw new Error(`Polymarket price ${opts.price} is not on this market's tick (${opts.tickSize}).`);
+    }
+  }
   // Sizes carry at most 2 decimals on every tick size: round down, as the official client does.
   const sizeUnits = (BigInt(Math.round(size * 1_000_000)) / 10_000n) * 10_000n;
+  if (opts.minOrderSize !== undefined && Number(sizeUnits) / 1e6 < Number(opts.minOrderSize)) {
+    throw new Error(`Polymarket size ${opts.size} is below this market's minimum order size (${opts.minOrderSize} shares).`);
+  }
   // With ≤4-decimal prices and 2-decimal sizes this product is exact.
   const usdcAmount = (sizeUnits * priceUnits) / 1_000_000n;
   // A zero-cost real-money order must never leave this helper.
@@ -159,7 +222,7 @@ export function buildOrder(opts: {
     // salt (a JSON number) round-trips exactly and matches what was signed.
     salt: opts.salt ?? BigInt('0x' + crypto.randomBytes(6).toString('hex')).toString(),
     maker: opts.maker,
-    signer: opts.signer ?? opts.maker,
+    signer: opts.signatureType === 3 ? opts.maker : opts.signer ?? opts.maker,
     tokenId: opts.tokenId,
     makerAmount: (isBuy ? usdcAmount : sizeUnits).toString(),
     takerAmount: (isBuy ? sizeUnits : usdcAmount).toString(),

@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- Polymarket deposit-wallet orders (`signatureType` 3): `maker` is the deposit wallet and `signer` its owner EOA. The owner signs the ERC-7739 `TypedDataSign` envelope; `chaingpt_pm_submit_signed_order` checks that the signature recovers to the owner, wraps it for ERC-1271 as the official client does, and authenticates as the owner. A test reproduces the full signature in Polymarket's published client vector.
+
+### Changed
+- `chaingpt_pm_place_order_payload` reads the token's live order book: the book's version and neg_risk choose the signing domain, prices must sit on its tick size, and sizes must meet its minimum. The `bookVersion` and `negRisk` inputs are gone.
+- The Polymarket skill describes order placement instead of calling it a follow-up.
+
 ## [1.24.2] - 2026-11-01
 ### Fixed
 - Polymarket orders use the current CLOB order format, checked against Polymarket's docs and `clob-client-v2`. The signed `Order` struct is now salt, maker, signer, tokenId, makerAmount, takerAmount, side (uint8), signatureType (uint8), timestamp (unix ms), metadata and builder. Expiration is no longer signed; it travels in the POST body. CTF books sign against domain version "2" on the new CTF / Neg-Risk exchanges. Books that report `version: "v2"` sign against domain version "3" on `0xe3333700cA9d93003F00f0F71f8515005F6c00Aa`. A test checks the domain separator and struct hash against Polymarket's published client vector.

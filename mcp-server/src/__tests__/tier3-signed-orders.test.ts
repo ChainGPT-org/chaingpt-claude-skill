@@ -11,9 +11,13 @@ import { hyperliquidTools, handleHyperliquidTool } from '../tools/hyperliquid.js
 import { polymarketTools, handlePolymarketTool } from '../tools/polymarket.js';
 import { actionHash, phantomAgentTypedData, buildActionPayload } from '../lib/hyperliquid-sign.js';
 import {
-  buildOrder, orderTypedData, type PolymarketOrder,
+  buildOrder, orderTypedData, depositWalletTypedData, wrapDepositWalletSignature, type PolymarketOrder,
   POLYMARKET_CTF_EXCHANGE, POLYMARKET_NEG_RISK_EXCHANGE, POLYMARKET_V2_EXCHANGE,
 } from '../lib/polymarket-sign.js';
+
+// A CLOB /book response: the place-order tool reads the signing domain and price/size grid from it.
+const mockBook = (book: Record<string, unknown> = {}) => vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+  new Response(JSON.stringify({ tick_size: '0.01', min_order_size: '5', neg_risk: false, bids: [], asks: [], ...book }), { status: 200 }));
 import { hashDomain, hashStruct, recoverTypedDataAddress } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
@@ -201,6 +205,40 @@ describe('Polymarket order-build helper', () => {
     expect(hashStruct({ data: td.message, primaryType: 'Order', types: td.types } as any)).toBe(structHash);
   });
 
+  it('reproduces the official client vector\'s full deposit-wallet signature', async () => {
+    // Same vector, signed by the public Hardhat dev key #0 (deterministic ECDSA), Amoy, CTF exchange.
+    const expected =
+      '0xa3a093c83b6c20c83355c16ce94c92e6e9fcbdeb840618cc74f6c57a42ad145b' +
+      '2b98db73d2c73cbf1f2b6af288566ae81960ddbc3a13921027358a8bff3be6ff1c' +
+      'a440cbd865bc0c6243d7a8df9a8bf48a8827b0a4abbb61c30e96d305423af148' +
+      'd23d42d3ad94e65d78258cecaf8dcbaddac0f73dc085040f2c12bb595dd83804' +
+      '4f726465722875696e743235362073616c742c61646472657373206d616b65722c' +
+      '61646472657373207369676e65722c75696e7432353620746f6b656e49642c75' +
+      '696e74323536206d616b6572416d6f756e742c75696e743235362074616b6572' +
+      '416d6f756e742c75696e743820736964652c75696e7438207369676e61747572' +
+      '65547970652c75696e743235362074696d657374616d702c6279746573333220' +
+      '6d657461646174612c62797465733332206275696c6465722900ba';
+    const owner = privateKeyToAccount(('0x' + 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80') as `0x${string}`);
+    const wallet = '0x1111111111111111111111111111111111111111' as const;
+    const order: PolymarketOrder = {
+      salt: '479249096354', maker: wallet, signer: wallet, tokenId: '1234',
+      makerAmount: '100000000', takerAmount: '50000000', side: 0, signatureType: 3,
+      timestamp: '1710000000000', metadata: `0x${'0'.repeat(64)}`, builder: `0x${'0'.repeat(64)}`, expiration: '0',
+    };
+    const base = orderTypedData(order);
+    const td = { ...base, domain: { ...base.domain, chainId: 80002 } };
+    const inner = await owner.signTypedData(depositWalletTypedData(td) as any);
+    expect(wrapDepositWalletSignature(inner, td)).toBe(expected);
+  });
+
+  it('checks the book\'s tick size and minimum order size', () => {
+    const o = { maker: '0xaaa' as any, tokenId: '1', side: 'BUY' as const, tickSize: '0.01', minOrderSize: '5' };
+    expect(() => buildOrder({ ...o, price: '0.425', size: '10' })).toThrow(/not on this market's tick/);
+    expect(() => buildOrder({ ...o, price: '0.995', size: '10', tickSize: '0.001' })).not.toThrow();
+    expect(() => buildOrder({ ...o, price: '0.42', size: '4.99' })).toThrow(/below this market's minimum/);
+    expect(buildOrder({ ...o, price: '0.42', size: '5' }).takerAmount).toBe('5000000');
+  });
+
   it('typed data signs and recovers with eth_signTypedData_v4 semantics', async () => {
     const account = privateKeyToAccount(generatePrivateKey());
     const o = buildOrder({ maker: account.address, tokenId: '1234', side: 'SELL', price: '0.42', size: '10' });
@@ -231,6 +269,7 @@ describe('Polymarket handler smoke', () => {
   });
 
   it('place_order_payload returns typed data with ack', async () => {
+    const spy = mockBook();
     const r = await handlePolymarketTool('chaingpt_pm_place_order_payload', {
       maker: '0x1111111111111111111111111111111111111111',
       tokenId: '12345',
@@ -244,15 +283,63 @@ describe('Polymarket handler smoke', () => {
     expect(t).toContain('"primaryType": "Order"');
     expect(t).toContain('"chainId": 137');
     expect(t).toContain('"version": "2"');
+    expect(String(spy.mock.calls[0][0])).toContain('/book?token_id=12345');
+    spy.mockRestore();
   });
 
-  it('place_order_payload uses the v2 domain when bookVersion is v2', async () => {
+  it('place_order_payload takes neg_risk and the price grid from the book', async () => {
+    const spy = mockBook({ neg_risk: true, tick_size: '0.1' });
+    try {
+      const base = { maker: '0x1111111111111111111111111111111111111111', tokenId: '12345', side: 'BUY', size: '100', acknowledgeMainnet: true };
+      expect((await handlePolymarketTool('chaingpt_pm_place_order_payload', { ...base, price: '0.4' })).content[0].text).toContain(POLYMARKET_NEG_RISK_EXCHANGE);
+      await expect(handlePolymarketTool('chaingpt_pm_place_order_payload', { ...base, price: '0.42' })).rejects.toThrow(/not on this market's tick/);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('place_order_payload uses the v2 domain when the book is v2', async () => {
+    const spy = mockBook({ version: 'v2', neg_risk: true });
     const r = await handlePolymarketTool('chaingpt_pm_place_order_payload', {
       maker: '0x1111111111111111111111111111111111111111', tokenId: '12345', side: 'BUY', price: '0.42', size: '100',
-      bookVersion: 'v2', acknowledgeMainnet: true,
+      acknowledgeMainnet: true,
     });
+    spy.mockRestore();
     expect(r.content[0].text).toContain(POLYMARKET_V2_EXCHANGE);
     expect(r.content[0].text).toContain('"version": "3"');
+  });
+
+  it('deposit-wallet orders: owner signs TypedDataSign, submit wraps it and authenticates as the owner', async () => {
+    const owner = privateKeyToAccount(generatePrivateKey());
+    const wallet = '0x' + '1'.repeat(40);
+    let spy = mockBook();
+    const r = await handlePolymarketTool('chaingpt_pm_place_order_payload', {
+      maker: wallet, signer: owner.address, signatureType: 3, tokenId: '12345', side: 'BUY', price: '0.42', size: '100', acknowledgeMainnet: true,
+    });
+    spy.mockRestore();
+    const t = r.content[0].text;
+    const typed = JSON.parse(t.split('--- EIP-712 typed data (sign via eth_signTypedData_v4) ---')[1].split('--- order')[0]);
+    const order = JSON.parse(t.split('--- order (pass back to submit_signed_order) ---')[1]);
+    expect(typed.primaryType).toBe('TypedDataSign');
+    expect([order.maker, order.signer, order.depositWallet.owner]).toEqual([wallet, wallet, owner.address]);
+
+    process.env.POLY_CLOB_API_KEY = 'k'; process.env.POLY_CLOB_SECRET = 'cw=='; process.env.POLY_CLOB_PASSPHRASE = 'p';
+    spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"success":true}', { status: 200 }));
+    try {
+      const stranger = await privateKeyToAccount(generatePrivateKey()).signTypedData(typed);
+      const refused = await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order, signature: stranger });
+      expect(refused.content[0].text).toContain("not the deposit wallet's owner");
+      expect(spy).not.toHaveBeenCalled();
+
+      const signature = await owner.signTypedData(typed);
+      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order, signature });
+      const init = spy.mock.calls[0][1] as RequestInit;
+      const body = JSON.parse(String(init.body));
+      expect(body.order.signature).toBe(wrapDepositWalletSignature(signature, orderTypedData(order)));
+      expect(body.order).not.toHaveProperty('depositWallet');
+      expect((init.headers as Record<string, string>).POLY_ADDRESS).toBe(owner.address);
+    } finally {
+      spy.mockRestore();
+      delete process.env.POLY_CLOB_API_KEY; delete process.env.POLY_CLOB_SECRET; delete process.env.POLY_CLOB_PASSPHRASE;
+    }
   });
 
   it('submit_signed_order refuses legacy-format orders instead of posting a dead signature', async () => {
