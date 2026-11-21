@@ -77,3 +77,52 @@ export async function publicFetch(raw, init = {}, opts = {}) {
         req.end(init.body);
     });
 }
+/** Reads at most maxBytes of a response body; larger bodies (declared or streamed) are refused and the stream is cancelled. */
+export async function readBounded(res, maxBytes) {
+    const declared = Number(res.headers.get('content-length'));
+    if (declared > maxBytes) {
+        await res.body?.cancel().catch(() => undefined);
+        throw new Error(`Response body exceeds ${maxBytes} bytes`);
+    }
+    if (!res.body)
+        return '';
+    const reader = res.body.getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done)
+            break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+            await reader.cancel().catch(() => undefined);
+            throw new Error(`Response body exceeds ${maxBytes} bytes`);
+        }
+        chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
+}
+/**
+ * JSON request to a caller- or config-selected endpoint (bundler, facilitator): https only, public addresses only
+ * (checked at connect time), no redirects, bounded body. Errors name only the host: endpoint paths often carry API keys.
+ */
+export async function publicJson(raw, opts = {}) {
+    const host = (() => { try {
+        return new URL(raw).host;
+    }
+    catch {
+        return '[invalid URL]';
+    } })();
+    const hasBody = opts.body !== undefined;
+    const res = await publicFetch(raw, {
+        method: opts.method ?? 'GET',
+        headers: { accept: 'application/json', ...(hasBody ? { 'content-type': 'application/json' } : {}) },
+        body: hasBody ? JSON.stringify(opts.body) : undefined,
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+    }, { httpsOnly: true });
+    if (res.status < 200 || res.status >= 300) {
+        await res.body?.cancel().catch(() => undefined);
+        throw new Error(`HTTP ${res.status} from ${host}${res.status >= 300 && res.status < 400 ? ' (redirect not followed)' : ''}`);
+    }
+    return JSON.parse(await readBounded(res, opts.maxBytes ?? 1_000_000));
+}

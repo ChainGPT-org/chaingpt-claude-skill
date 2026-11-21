@@ -38,7 +38,7 @@ import {
   toPackedUserOperation,
   type UserOperation,
 } from 'viem/account-abstraction';
-import { httpJson } from './http.js';
+import { publicJson } from './public-url.js';
 
 /** EntryPoint v0.7 canonical address (deterministic CREATE2 deployment). */
 export const ENTRY_POINT_V07 = '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as const;
@@ -217,7 +217,8 @@ export async function bundlerRpc<T = unknown>(opts: {
   method: string;
   params: unknown[];
 }): Promise<T> {
-  const res = await httpJson<{ result?: T; error?: { code: number; message: string } }>(opts.url, {
+  // The bundler URL is caller-selected: public https hosts only, no redirects, bounded body.
+  const res = await publicJson<{ result?: T; error?: { code: number; message: string } }>(opts.url, {
     method: 'POST',
     body: { jsonrpc: '2.0', id: 1, method: opts.method, params: opts.params },
   });

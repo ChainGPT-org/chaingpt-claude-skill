@@ -1,5 +1,4 @@
-import { httpJson } from '../lib/http.js';
-import { publicFetch } from '../lib/public-url.js';
+import { publicFetch, publicJson, readBounded } from '../lib/public-url.js';
 import { X402_VERSION, X402_TOKENS, chainIdForNetwork, buildTransferWithAuthorizationTypedData, encodeXPaymentHeader, decodeBase64Header, parseAccepts, formatAtomic, freshNonce, X402_NETWORK_CHAINID, } from '../lib/x402.js';
 import { isAddress, verifyTypedData } from 'viem';
 /**
@@ -175,7 +174,7 @@ async function handleX402Fetch(args) {
     if (res.status >= 300 && res.status < 400) {
         return `HTTP ${res.status} redirect from ${url} to ${res.headers.get('location') ?? '(no Location)'} — not followed. Call x402_fetch on the target if you trust it.`;
     }
-    const bodyText = await res.text();
+    const bodyText = await readBounded(res, 1_000_000);
     if (res.status !== 402) {
         const paid = args.xPaymentHeader ? ' (paid via X-PAYMENT)' : '';
         return [
@@ -345,16 +344,15 @@ async function handleFacilitator(args) {
         throw new Error('facilitatorUrl must be https://');
     const action = String(args.action);
     if (action === 'supported') {
-        const res = await httpJson(`${base}/supported`, { method: 'GET' });
+        const res = await publicJson(`${base}/supported`, { method: 'GET' });
         return `=== facilitator /supported ===\n${JSON.stringify(res, null, 2)}`;
     }
     if (action === 'verify' || action === 'settle') {
         if (!args.paymentPayload || !args.paymentRequirements) {
             throw new Error(`${action} requires both paymentPayload and paymentRequirements.`);
         }
-        const res = await httpJson(`${base}/${action}`, {
+        const res = await publicJson(`${base}/${action}`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
             body: { paymentPayload: args.paymentPayload, paymentRequirements: args.paymentRequirements },
         });
         return `=== facilitator /${action} ===\n${JSON.stringify(res, null, 2)}`;

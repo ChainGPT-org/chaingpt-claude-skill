@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { createPublicClient, http, fallback, getAddress, type Address } from 'viem';
-import { publicFetch } from '../lib/public-url.js';
+import { publicFetch, readBounded } from '../lib/public-url.js';
 import { rpcEndpoints } from '../lib/chains.js';
 
 /**
@@ -103,7 +103,7 @@ async function loadAgentCard(tokenURI: string): Promise<any | null> {
     if (/^https?:\/\//.test(url)) {
       // tokenURI is attacker-chosen: public hosts only (checked at connect time), and a redirect is never followed.
       const res = await publicFetch(url, { signal: AbortSignal.timeout(15_000) });
-      return res.ok ? await res.json() : null;
+      return res.ok ? JSON.parse(await readBounded(res, 1_000_000)) : null;
     }
   } catch { /* ignore */ }
   return null;

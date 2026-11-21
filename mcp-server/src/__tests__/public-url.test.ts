@@ -18,7 +18,8 @@ vi.mock('node:dns', () => ({
 }));
 
 import { lookup as connectLookup } from 'node:dns';
-import { assertPublicUrl, publicFetch } from '../lib/public-url.js';
+import { assertPublicUrl, publicFetch, publicJson, readBounded } from '../lib/public-url.js';
+import { bundlerRpc } from '../lib/erc4337.js';
 
 describe('assertPublicUrl', () => {
   it('allows public hosts', async () => {
@@ -51,5 +52,26 @@ describe('publicFetch', () => {
   it('keeps the up-front checks', async () => {
     await expect(publicFetch('http://127.0.0.1:8545/')).rejects.toThrow(/loopback, private or link-local/);
     await expect(publicFetch('http://public.example/', {}, { httpsOnly: true })).rejects.toThrow(/must be https/);
+  });
+});
+
+describe('publicJson (bundler / facilitator transport)', () => {
+  it('refuses private, metadata and plain-http endpoints before connecting', async () => {
+    for (const u of ['https://127.0.0.1:4337/rpc', 'https://169.254.169.254/latest/meta-data/', 'https://[::1]/', 'https://internal.bundler/rpc', 'https://mixed.example/']) {
+      await expect(publicJson(u), u).rejects.toThrow(/loopback, private or link-local/);
+    }
+    await expect(publicJson('http://public.example/supported')).rejects.toThrow(/must be https/);
+  });
+
+  it('is the transport bundlerRpc uses', async () => {
+    await expect(bundlerRpc({ url: 'https://127.0.0.1:4337/', method: 'eth_supportedEntryPoints', params: [] })).rejects.toThrow(/loopback, private or link-local/);
+  });
+});
+
+describe('readBounded', () => {
+  it('reads small bodies and refuses oversized ones by header or by stream', async () => {
+    await expect(readBounded(new Response('{"ok":1}'), 100)).resolves.toBe('{"ok":1}');
+    await expect(readBounded(new Response('x'.repeat(101)), 100)).rejects.toThrow(/exceeds 100 bytes/);
+    await expect(readBounded(new Response('x', { headers: { 'content-length': '5000' } }), 100)).rejects.toThrow(/exceeds 100 bytes/);
   });
 });
