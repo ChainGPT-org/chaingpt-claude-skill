@@ -22,6 +22,10 @@ import { homedir } from 'node:os';
  */
 
 const DEFAULT_DIR = join(homedir(), '.chaingpt-mcp', 'plans');
+// Quotas: save_plan is model-callable, so it must not be able to fill the disk or make list_plans parse gigabytes.
+const MAX_PLAN_BYTES = 256 * 1024;      // serialized payload + notes at save time
+const MAX_PLANS = 500;
+const MAX_PLAN_FILE_BYTES = 1024 * 1024; // on-disk file incl. execution journal; larger files are skipped by list
 
 function planDir(): string {
   return process.env.CHAINGPT_PLAN_DIR?.trim() || DEFAULT_DIR;
@@ -210,12 +214,22 @@ async function handlePlanToolUnlocked(
       if (!planName || payload === undefined) {
         return { content: [{ type: 'text', text: 'name and payload are required.' }] };
       }
+      const size = Buffer.byteLength(JSON.stringify(payload) ?? '') + Buffer.byteLength(notes ?? '') + Buffer.byteLength(type ?? '');
+      if (size > MAX_PLAN_BYTES) {
+        return { content: [{ type: 'text', text: `Plan is ${size} bytes; the limit is ${MAX_PLAN_BYTES}. Store less detail in the plan.` }] };
+      }
       const path = planPath(planName);
       let exists = false;
       try {
         await stat(path);
         exists = true;
       } catch { /* ok — doesn't exist */ }
+      if (!exists) {
+        const count = (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith('.json')).length;
+        if (count >= MAX_PLANS) {
+          return { content: [{ type: 'text', text: `There are already ${count} saved plans (limit ${MAX_PLANS}). Delete old plans first.` }] };
+        }
+      }
 
       if (exists && !overwrite) {
         return {
@@ -295,6 +309,7 @@ async function handlePlanToolUnlocked(
       for (const f of jsons) {
         const path = join(dir, f);
         try {
+          if ((await stat(path)).size > MAX_PLAN_FILE_BYTES) continue; // never parse oversized files
           const raw = await readFile(path, 'utf8');
           const parsed = JSON.parse(raw) as PersistedPlan;
           if (filterType && parsed.type !== filterType) continue;

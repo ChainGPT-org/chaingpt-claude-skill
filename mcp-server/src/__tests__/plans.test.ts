@@ -130,6 +130,26 @@ describe('Plan persistence round-trip', () => {
     await expect(handlePlanTool('chaingpt_strategy_save_plan', { name: '../../etc/passwd', payload: {} })).rejects.toThrow(/Plan name/);
   });
 
+  it('enforces size and count quotas, and list skips oversized files', async () => {
+    const big = await handlePlanTool('chaingpt_strategy_save_plan', { name: 'too-big', payload: 'x'.repeat(256 * 1024 + 1) });
+    expect(big.content[0].text).toMatch(/limit is 262144/);
+    const { writeFileSync, mkdtempSync: mk } = await import('node:fs');
+    writeFileSync(join(TMP_DIR, 'huge.json'), JSON.stringify({ name: 'huge', payload: 'y'.repeat(1024 * 1024) }));
+    const list = await handlePlanTool('chaingpt_strategy_list_plans', {});
+    expect(list.content[0].text).not.toContain('huge');
+    const full = mk(join(tmpdir(), 'chaingpt-plans-full-'));
+    for (let i = 0; i < 500; i++) writeFileSync(join(full, `p${i}.json`), '{}');
+    process.env.CHAINGPT_PLAN_DIR = full;
+    try {
+      const r = await handlePlanTool('chaingpt_strategy_save_plan', { name: 'one-more', payload: {} });
+      expect(r.content[0].text).toMatch(/limit 500/);
+    } finally {
+      process.env.CHAINGPT_PLAN_DIR = TMP_DIR;
+      rmSync(full, { recursive: true, force: true });
+      rmSync(join(TMP_DIR, 'huge.json'), { force: true });
+    }
+  });
+
   it('load returns friendly message for unknown plan', async () => {
     const r = await handlePlanTool('chaingpt_strategy_load_plan', { name: 'does-not-exist' });
     expect(r.content[0].text).toContain('not found');
