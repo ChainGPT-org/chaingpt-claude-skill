@@ -44,9 +44,20 @@ process.stdin.on('end', () => {
         tool
       );
 
+    // A signed x402 payment can be settled by whoever receives it: the merchant (x402_fetch) or any facilitator
+    // (verify as well as settle), so every hand-off of one asks.
+    const isSignedX402 =
+      (/chaingpt_x402_fetch$/.test(tool) && Boolean(input.xPaymentHeader) && String(input.xPaymentHeader).trim() !== '') ||
+      (/chaingpt_x402_facilitator$/.test(tool) && (input.action === 'settle' || input.paymentPayload !== undefined));
+
     let ask = false;
     let why = '';
-    if (isAgent4337Send) {
+    if (isSignedX402) {
+      ask = true;
+      const req = input.paymentRequirements && typeof input.paymentRequirements === 'object' ? input.paymentRequirements : {};
+      const dest = String(input.url || input.facilitatorUrl || '?').slice(0, 80);
+      why = `A SIGNED x402 payment is about to be sent to ${dest}${req.payTo ? ` (pay ${req.maxAmountRequired || '?'} of ${req.asset || '?'} on ${req.network || '?'} to ${req.payTo})` : ''}. The recipient can settle it: confirm the amount and payee are what you intend.`;
+    } else if (isAgent4337Send) {
       ask = true;
       why = `Agent session key is about to act through smart account ${input.account || '?'} on ${input.chain || '?'}: target=${input.target || '?'}, value=${input.valueWei || '0'} wei, memo=${input.memo || '(none)'}. Local policy + on-chain session caps both apply; this prompt is the human layer on top.`;
     } else if (isSubmitUserOp) {
@@ -59,7 +70,7 @@ process.stdin.on('end', () => {
     } else if (hasAck) {
       ask = true;
       why = `${tool.replace(/^.*__/, '')} was called with acknowledgeMainnet: true — the next step is signing real funds on mainnet. Confirm the asset, amount, and destination are what you intend.`;
-    } else if (isOrderSigner || (/chaingpt_x402_facilitator$/.test(tool) && input.action === 'settle')) {
+    } else if (isOrderSigner) {
       ask = true;
       why = `${tool.replace(/^.*__/, '')} builds/submits a real-money order payload (strict guard mode).`;
     }
