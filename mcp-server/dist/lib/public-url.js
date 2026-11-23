@@ -52,8 +52,10 @@ const guardedLookup = (host, opts, cb) => dnsLookup(host, { family: opts.family,
 function untilAborted(p, signal) {
     if (!signal)
         return p;
-    if (signal.aborted)
+    if (signal.aborted) {
+        p.catch(() => undefined); // the check may still refuse; nobody waits for it now
         return Promise.reject(signal.reason);
+    }
     return new Promise((resolve, reject) => {
         const onAbort = () => reject(signal.reason);
         signal.addEventListener('abort', onAbort, { once: true });

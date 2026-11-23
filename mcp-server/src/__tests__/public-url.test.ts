@@ -78,6 +78,22 @@ describe('publicJson (bundler / facilitator transport)', () => {
     expect(Date.now() - t0).toBeLessThan(2000);
   });
 
+  it('an already-aborted signal wins, and the refused check is not left unhandled', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const ac = new AbortController();
+      const reason = new Error('caller gave up');
+      ac.abort(reason);
+      await expect(publicFetch('https://127.0.0.1/', { signal: ac.signal })).rejects.toBe(reason);
+      await new Promise(r => setTimeout(r, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('is the transport bundlerRpc uses', async () => {
     await expect(bundlerRpc({ url: 'https://127.0.0.1:4337/', method: 'eth_supportedEntryPoints', params: [] })).rejects.toThrow(/loopback, private or link-local/);
   });

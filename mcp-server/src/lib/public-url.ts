@@ -49,7 +49,10 @@ const guardedLookup: LookupFunction = (host, opts, cb) => dnsLookup(host, { fami
 /** Rejects with the signal's reason as soon as it aborts, so a slow DNS check cannot outlive the caller's deadline. */
 function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return p;
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    p.catch(() => undefined); // the check may still refuse; nobody waits for it now
+    return Promise.reject(signal.reason);
+  }
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
     signal.addEventListener('abort', onAbort, { once: true });
