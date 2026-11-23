@@ -100,7 +100,17 @@ export async function readBounded(res, maxBytes) {
         }
         chunks.push(value);
     }
-    return Buffer.concat(chunks).toString('utf8');
+    // TextDecoder strips a leading UTF-8 BOM (as Response.text() did); Buffer#toString would keep it and break JSON.parse.
+    return new TextDecoder().decode(Buffer.concat(chunks));
+}
+/** JSON.parse whose error names only the host: the body may reflect API keys, so neither it nor the parser error is kept. */
+export function parsePublicJson(text, host) {
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        throw new Error(`Invalid JSON response from ${host}`);
+    }
 }
 /**
  * JSON request to a caller- or config-selected endpoint (bundler, facilitator): https only, public addresses only
@@ -124,5 +134,5 @@ export async function publicJson(raw, opts = {}) {
         await res.body?.cancel().catch(() => undefined);
         throw new Error(`HTTP ${res.status} from ${host}${res.status >= 300 && res.status < 400 ? ' (redirect not followed)' : ''}`);
     }
-    return JSON.parse(await readBounded(res, opts.maxBytes ?? 1_000_000));
+    return parsePublicJson(await readBounded(res, opts.maxBytes ?? 1_000_000), host);
 }

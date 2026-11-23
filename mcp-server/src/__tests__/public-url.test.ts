@@ -18,7 +18,7 @@ vi.mock('node:dns', () => ({
 }));
 
 import { lookup as connectLookup } from 'node:dns';
-import { assertPublicUrl, publicFetch, publicJson, readBounded } from '../lib/public-url.js';
+import { assertPublicUrl, parsePublicJson, publicFetch, publicJson, readBounded } from '../lib/public-url.js';
 import { bundlerRpc } from '../lib/erc4337.js';
 
 describe('assertPublicUrl', () => {
@@ -73,5 +73,23 @@ describe('readBounded', () => {
     await expect(readBounded(new Response('{"ok":1}'), 100)).resolves.toBe('{"ok":1}');
     await expect(readBounded(new Response('x'.repeat(101)), 100)).rejects.toThrow(/exceeds 100 bytes/);
     await expect(readBounded(new Response('x', { headers: { 'content-length': '5000' } }), 100)).rejects.toThrow(/exceeds 100 bytes/);
+  });
+});
+
+describe('JSON decoding of bounded bodies', () => {
+  it('strips a UTF-8 BOM so BOM-prefixed JSON (x402 challenges, agent cards) still parses', async () => {
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"x402Version":1}')]);
+    const text = await readBounded(new Response(bom), 100);
+    expect(text).toBe('{"x402Version":1}');
+    expect(parsePublicJson(text, 'facilitator.example')).toEqual({ x402Version: 1 });
+  });
+
+  it('reports invalid JSON by host only, without the body or the parser error', () => {
+    let err: unknown;
+    try { parsePublicJson('<html>key=sk-live-REFLECTED-123</html>', 'bundler.example'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('Invalid JSON response from bundler.example');
+    expect((err as Error).cause).toBeUndefined();
+    expect(String((err as Error).stack)).not.toContain('REFLECTED');
   });
 });
