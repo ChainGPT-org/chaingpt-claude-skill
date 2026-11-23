@@ -7,7 +7,7 @@ import { loadPolicy, policyPath, checkPolicy, checkErc4337Gate, } from '../lib/a
 import { logActivity, spendStats, activityPath } from '../lib/agent-activity.js';
 import { encodeSingleExecute, encodeGetNonce, nexusNonceKey, readAccountId, classifyAccountId, } from '../lib/erc7579.js';
 import { SMART_SESSIONS_ADDRESS, encodeUseSignature, MOCK_ECDSA_SIG } from '../lib/smart-sessions.js';
-import { ENTRY_POINT_V07, normalizeUserOp, computeUserOpHash, userOpToBundlerJson, bundlerRpc, } from '../lib/erc4337.js';
+import { ENTRY_POINT_V07, normalizeUserOp, computeUserOpHash, userOpToBundlerJson, bundlerRpc, userOpGasUnits, } from '../lib/erc4337.js';
 import { resolveChainWithCustom, rpcEndpointsWithCustom } from '../lib/agent-custom-chains.js';
 import { jsonRpcFallback } from '../lib/http.js';
 /**
@@ -185,7 +185,7 @@ async function handleAgentWallet4337ToolUnlocked(name, args) {
             to: target,
             value: valueWei,
             data,
-            gas: BigInt(baseOp.callGasLimit),
+            gas: userOpGasUnits(baseOp), // all bundler-chosen gas, not only the inner call
             memo,
         };
         const targetCode = data === '0x' ? await jsonRpcFallback(rpcs, 'eth_getCode', [target, 'latest']) : undefined;
@@ -197,7 +197,7 @@ async function handleAgentWallet4337ToolUnlocked(name, args) {
             return refusalBlock(currentGate.reason, currentGate.policyDigest);
         const assets = evmAssetSpends(chain.slug, target, data, valueWei, currentPolicy);
         checkAssetLimits(chain.slug, assets, currentPolicy, activityPath());
-        const maxCost = valueWei + (BigInt(baseOp.callGasLimit) + BigInt(baseOp.verificationGasLimit) + BigInt(baseOp.preVerificationGas)) * maxFeePerGas;
+        const maxCost = valueWei + userOpGasUnits(baseOp) * maxFeePerGas;
         const decision = checkPolicy({ ...intent, value: maxCost }, currentPolicy, spendStats(24, 'evm'));
         if (!decision.allowed)
             return refusalBlock(decision.reason, decision.policyDigest);

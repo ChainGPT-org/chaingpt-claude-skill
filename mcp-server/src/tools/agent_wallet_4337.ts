@@ -26,6 +26,7 @@ import {
   computeUserOpHash,
   userOpToBundlerJson,
   bundlerRpc,
+  userOpGasUnits,
   type UserOpInput,
 } from '../lib/erc4337.js';
 import { resolveChainWithCustom, rpcEndpointsWithCustom } from '../lib/agent-custom-chains.js';
@@ -221,7 +222,7 @@ async function handleAgentWallet4337ToolUnlocked(
       to: target,
       value: valueWei,
       data,
-      gas: BigInt(baseOp.callGasLimit!),
+      gas: userOpGasUnits(baseOp), // all bundler-chosen gas, not only the inner call
       memo,
     };
     const targetCode = data === '0x' ? await jsonRpcFallback<Hex>(rpcs, 'eth_getCode', [target, 'latest']) : undefined;
@@ -231,7 +232,7 @@ async function handleAgentWallet4337ToolUnlocked(
     if (!currentGate.allowed) return refusalBlock(currentGate.reason, currentGate.policyDigest);
     const assets = evmAssetSpends(chain.slug, target, data, valueWei, currentPolicy);
     checkAssetLimits(chain.slug, assets, currentPolicy, activityPath());
-    const maxCost = valueWei + (BigInt(baseOp.callGasLimit!) + BigInt(baseOp.verificationGasLimit!) + BigInt(baseOp.preVerificationGas!)) * maxFeePerGas;
+    const maxCost = valueWei + userOpGasUnits(baseOp) * maxFeePerGas;
     const decision = checkPolicy({ ...intent, value: maxCost }, currentPolicy, spendStats(24, 'evm'));
     if (!decision.allowed) return refusalBlock(decision.reason, decision.policyDigest);
 

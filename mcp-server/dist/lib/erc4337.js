@@ -77,6 +77,14 @@ function assertHex(v, label, optional = false) {
  * proper bigint typing. Throws on missing / malformed fields with a clear
  * label so the caller knows exactly which input was bad.
  */
+/**
+ * Every gas-unit component the signed UserOperation lets a bundler charge for. A maxTxGas cap must cover all of
+ * them: the bundler chooses verification and pre-verification gas, not only call gas.
+ */
+export function userOpGasUnits(op) {
+    return [op.callGasLimit, op.verificationGasLimit, op.preVerificationGas, op.paymasterVerificationGasLimit, op.paymasterPostOpGasLimit]
+        .reduce((sum, v) => sum + BigInt(v ?? 0), 0n);
+}
 export function normalizeUserOp(input) {
     const sender = assertAddress(input.sender, 'sender');
     const callData = assertHex(input.callData, 'callData');
