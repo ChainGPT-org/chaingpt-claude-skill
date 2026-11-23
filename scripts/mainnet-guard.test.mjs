@@ -20,7 +20,13 @@ test('every shipped autonomous signer forces confirmation', () => {
 test('signed submissions and facilitator settlement force confirmation by default', () => {
   for (const tool of ['chaingpt_aa_submit_userop','chaingpt_hl_submit_signed_action','chaingpt_pm_submit_signed_order','chaingpt_dex_cow_submit_signed_order']) assert.equal(decision(tool), 'ask');
   assert.equal(decision('chaingpt_x402_facilitator', { action: 'settle' }), 'ask');
-  assert.equal(decision('chaingpt_x402_facilitator', { action: 'verify' }), undefined);
+  assert.equal(decision('chaingpt_x402_facilitator', { action: 'supported' }), undefined);
+});
+test('every hand-off of a signed x402 payment forces confirmation', () => {
+  assert.equal(decision('chaingpt_x402_facilitator', { action: 'verify', paymentPayload: { payload: { signature: '0x01' } }, paymentRequirements: {} }), 'ask');
+  assert.equal(decision('chaingpt_x402_fetch', { url: 'https://api.example/r', xPaymentHeader: 'eyJ4NDAyIjoxfQ==' }), 'ask');
+  assert.equal(decision('chaingpt_x402_fetch', { url: 'https://api.example/r' }), undefined);
+  assert.equal(decision('chaingpt_x402_fetch', { url: 'https://api.example/r', xPaymentHeader: '  ' }), undefined);
 });
 test('reads pass and malformed hook input fails closed', () => {
   assert.equal(decision('chaingpt_wallet_balances'), undefined);
