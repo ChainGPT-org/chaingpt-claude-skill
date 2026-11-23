@@ -66,3 +66,21 @@ describe('checkErc4337Gate', () => {
     }
   });
 });
+
+describe('ERC-4337 maxTxGas covers every bundler-chosen gas component', () => {
+  it('sums call, verification, pre-verification and paymaster gas', async () => {
+    const { userOpGasUnits } = await import('../lib/erc4337.js');
+    const { checkPolicy } = await import('../lib/agent-policy.js');
+    // Call gas alone is under the cap; the bundler inflated verification + pre-verification gas.
+    const op = { callGasLimit: '0x10000', verificationGasLimit: '0x200000', preVerificationGas: '0x100000' };
+    const gas = userOpGasUnits(op);
+    expect(gas).toBe(0x10000n + 0x200000n + 0x100000n);
+    expect(userOpGasUnits({ ...op, paymasterVerificationGasLimit: '0x10', paymasterPostOpGasLimit: '0x1' })).toBe(gas + 0x11n);
+    const policy = { version: 1, killSwitch: false, maxTxGas: '1000000' } as unknown as AgentPolicy;
+    const intent = { chainId: 8453, to: '0x2222222222222222222222222222222222222222', value: 0n, data: '0x', memo: 'm' } as const;
+    expect(checkPolicy({ ...intent, gas: BigInt(op.callGasLimit) } as any, policy).reason).not.toMatch(/maxTxGas/);
+    const decision = checkPolicy({ ...intent, gas } as any, policy);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toMatch(/exceeds maxTxGas/);
+  });
+});
