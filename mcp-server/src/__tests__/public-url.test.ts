@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(async (host: string) => ({
+  lookup: vi.fn(async (host: string) => host === 'slow.example' ? new Promise(() => {}) : ({
     'public.example': [{ address: '93.184.215.14', family: 4 }],
     'mixed.example': [{ address: '93.184.215.14', family: 4 }, { address: '10.0.0.5', family: 4 }],
     'mapped.example': [{ address: '::ffff:127.0.0.1', family: 6 }],
@@ -61,6 +61,21 @@ describe('publicJson (bundler / facilitator transport)', () => {
       await expect(publicJson(u), u).rejects.toThrow(/loopback, private or link-local/);
     }
     await expect(publicJson('http://public.example/supported')).rejects.toThrow(/must be https/);
+  });
+
+  it('rejects an unparsable endpoint without keeping the URL (or a key in it) anywhere on the error', async () => {
+    let err: unknown;
+    try { await publicJson('https://bundler.example:bad/rpc?api_key=SECRET-KEY-1'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-1');
+    expect(Object.values(err as object).join(' ')).not.toContain('SECRET-KEY-1');
+  });
+
+  it('applies the timeout to the DNS check too', async () => {
+    const t0 = Date.now();
+    await expect(publicJson('https://slow.example/rpc', { timeoutMs: 50 })).rejects.toThrow();
+    expect(Date.now() - t0).toBeLessThan(2000);
   });
 
   it('is the transport bundlerRpc uses', async () => {

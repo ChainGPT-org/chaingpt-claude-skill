@@ -48,13 +48,25 @@ const guardedLookup = (host, opts, cb) => dnsLookup(host, { family: opts.family,
     else
         cb(null, addrs[0].address, addrs[0].family);
 });
+/** Rejects with the signal's reason as soon as it aborts, so a slow DNS check cannot outlive the caller's deadline. */
+function untilAborted(p, signal) {
+    if (!signal)
+        return p;
+    if (signal.aborted)
+        return Promise.reject(signal.reason);
+    return new Promise((resolve, reject) => {
+        const onAbort = () => reject(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+        p.then(v => { signal.removeEventListener('abort', onAbort); resolve(v); }, e => { signal.removeEventListener('abort', onAbort); reject(e); });
+    });
+}
 /**
  * fetch() for untrusted URLs: same checks as assertPublicUrl, plus the connection itself only goes to a checked
  * address. Host header and TLS SNI/certificate checks still use the URL's hostname. Redirects are never followed:
  * a 3xx comes back as-is. No pooled sockets, so a socket opened by other code cannot be reused.
  */
 export async function publicFetch(raw, init = {}, opts = {}) {
-    const url = await assertPublicUrl(raw, opts);
+    const url = await untilAborted(assertPublicUrl(raw, opts), init.signal);
     const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
     return new Promise((resolve, reject) => {
         const req = request(url, { method: init.method ?? 'GET', headers: init.headers, signal: init.signal, lookup: guardedLookup, agent: false }, res => {
@@ -117,12 +129,14 @@ export function parsePublicJson(text, host) {
  * (checked at connect time), no redirects, bounded body. Errors name only the host: endpoint paths often carry API keys.
  */
 export async function publicJson(raw, opts = {}) {
-    const host = (() => { try {
-        return new URL(raw).host;
+    let host;
+    try {
+        host = new URL(raw).host;
     }
     catch {
-        return '[invalid URL]';
-    } })();
+        // Node's ERR_INVALID_URL keeps the whole URL (and any key in it) on `input`: drop it, keep nothing.
+        throw new Error('Invalid endpoint URL');
+    }
     const hasBody = opts.body !== undefined;
     const res = await publicFetch(raw, {
         method: opts.method ?? 'GET',
