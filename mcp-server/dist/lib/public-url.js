@@ -27,7 +27,14 @@ const refusal = (host) => new Error(`Refusing to fetch ${host}: it resolves to a
  * This is an early, readable check only: a later connection re-resolves the name. Use publicFetch to connect.
  */
 export async function assertPublicUrl(raw, { httpsOnly = false } = {}) {
-    const url = new URL(raw);
+    let url;
+    try {
+        url = new URL(raw);
+    }
+    catch {
+        // Node's ERR_INVALID_URL keeps the whole URL (and any key in it) on `input`: drop it, keep nothing.
+        throw new Error('Invalid URL');
+    }
     if (url.protocol !== 'https:' && (httpsOnly || url.protocol !== 'http:'))
         throw new Error(`URL must be ${httpsOnly ? 'https' : 'http(s)'}: ${url.protocol}`);
     const host = url.hostname.replace(/^\[|\]$/g, '');

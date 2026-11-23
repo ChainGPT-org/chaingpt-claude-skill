@@ -53,6 +53,15 @@ describe('publicFetch', () => {
     await expect(publicFetch('http://127.0.0.1:8545/')).rejects.toThrow(/loopback, private or link-local/);
     await expect(publicFetch('http://public.example/', {}, { httpsOnly: true })).rejects.toThrow(/must be https/);
   });
+
+  it('rejects an unparsable URL without keeping it (or a key in it) anywhere on the error', async () => {
+    let err: unknown;
+    try { await publicFetch('https://card.example:bad/agent.json?api_key=SECRET-KEY-2'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-2');
+    expect(Object.values(err as object).join(' ')).not.toContain('SECRET-KEY-2');
+  });
 });
 
 describe('publicJson (bundler / facilitator transport)', () => {
