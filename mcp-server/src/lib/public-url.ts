@@ -114,8 +114,11 @@ export async function publicFetch(
   });
 }
 
-/** Reads at most maxBytes of a response body; larger bodies (declared or streamed) are refused and the stream is cancelled. */
-export async function readBounded(res: Response, maxBytes: number): Promise<string> {
+/**
+ * Reads at most maxBytes of a response body; larger bodies (declared or streamed) are refused and the stream is cancelled.
+ * Pass the request's signal so a deadline that fires mid-body surfaces as that signal's reason, not as a read failure.
+ */
+export async function readBounded(res: Response, maxBytes: number, signal?: AbortSignal): Promise<string> {
   const declared = Number(res.headers.get('content-length'));
   if (declared > maxBytes) {
     await res.body?.cancel().catch(() => undefined);
@@ -131,6 +134,7 @@ export async function readBounded(res: Response, maxBytes: number): Promise<stri
       chunk = await reader.read();
     } catch {
       // A mid-body socket/parser error can carry raw response bytes: keep none of it.
+      if (signal?.aborted) throw signal.reason;
       throw new Error('Response body could not be read');
     }
     const { done, value } = chunk;
@@ -171,15 +175,16 @@ export async function publicJson<T = unknown>(
     throw new Error('Invalid endpoint URL');
   }
   const hasBody = opts.body !== undefined;
+  const signal = AbortSignal.timeout(opts.timeoutMs ?? 15_000);
   const res = await publicFetch(raw, {
     method: opts.method ?? 'GET',
     headers: { accept: 'application/json', ...(hasBody ? { 'content-type': 'application/json' } : {}) },
     body: hasBody ? JSON.stringify(opts.body) : undefined,
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+    signal,
   }, { httpsOnly: true });
   if (res.status < 200 || res.status >= 300) {
     await res.body?.cancel().catch(() => undefined);
     throw new Error(`HTTP ${res.status} from ${host}${res.status >= 300 && res.status < 400 ? ' (redirect not followed)' : ''}`);
   }
-  return parsePublicJson<T>(await readBounded(res, opts.maxBytes ?? 1_000_000), host);
+  return parsePublicJson<T>(await readBounded(res, opts.maxBytes ?? 1_000_000, signal), host);
 }

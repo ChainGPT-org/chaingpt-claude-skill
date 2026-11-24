@@ -133,6 +133,13 @@ describe('transport errors', () => {
     expect((err as Error).message).toBe('Response body could not be read');
     expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-4');
   });
+
+  it("a deadline that fires mid-body surfaces as the signal's reason", async () => {
+    const ac = new AbortController();
+    const reason = new Error('deadline');
+    const body = new ReadableStream<Uint8Array>({ pull(c) { ac.abort(reason); c.error(new Error('aborted')); } });
+    await expect(readBounded(new Response(body), 100, ac.signal)).rejects.toBe(reason);
+  });
 });
 
 describe('readBounded', () => {

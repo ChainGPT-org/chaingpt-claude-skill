@@ -165,16 +165,17 @@ async function handleX402Fetch(args) {
     if (args.xPaymentHeader)
         headers['X-PAYMENT'] = String(args.xPaymentHeader);
     // publicFetch never follows redirects: the https/public-host check covers this URL only, and X-PAYMENT must not travel on.
+    const signal = AbortSignal.timeout(30_000);
     const res = await publicFetch(url, {
         method,
         headers,
         body: args.body !== undefined ? String(args.body) : undefined,
-        signal: AbortSignal.timeout(30_000),
+        signal,
     }, { httpsOnly: true });
     if (res.status >= 300 && res.status < 400) {
         return `HTTP ${res.status} redirect from ${url} to ${res.headers.get('location') ?? '(no Location)'} — not followed. Call x402_fetch on the target if you trust it.`;
     }
-    const bodyText = await readBounded(res, 1_000_000);
+    const bodyText = await readBounded(res, 1_000_000, signal);
     if (res.status !== 402) {
         const paid = args.xPaymentHeader ? ' (paid via X-PAYMENT)' : '';
         return [
