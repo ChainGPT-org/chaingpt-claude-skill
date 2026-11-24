@@ -1,6 +1,5 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { httpJson } from '../lib/http.js';
-import { publicFetch } from '../lib/public-url.js';
+import { publicFetch, publicJson, readBounded } from '../lib/public-url.js';
 import {
   X402_VERSION,
   X402_TOKENS,
@@ -192,16 +191,17 @@ async function handleX402Fetch(args: any): Promise<string> {
   if (args.xPaymentHeader) headers['X-PAYMENT'] = String(args.xPaymentHeader);
 
   // publicFetch never follows redirects: the https/public-host check covers this URL only, and X-PAYMENT must not travel on.
+  const signal = AbortSignal.timeout(30_000);
   const res = await publicFetch(url, {
     method,
     headers,
     body: args.body !== undefined ? String(args.body) : undefined,
-    signal: AbortSignal.timeout(30_000),
+    signal,
   }, { httpsOnly: true });
   if (res.status >= 300 && res.status < 400) {
     return `HTTP ${res.status} redirect from ${url} to ${res.headers.get('location') ?? '(no Location)'} — not followed. Call x402_fetch on the target if you trust it.`;
   }
-  const bodyText = await res.text();
+  const bodyText = await readBounded(res, 1_000_000, signal);
 
   if (res.status !== 402) {
     const paid = args.xPaymentHeader ? ' (paid via X-PAYMENT)' : '';
@@ -370,16 +370,15 @@ async function handleFacilitator(args: any): Promise<string> {
   if (!/^https:\/\//.test(base)) throw new Error('facilitatorUrl must be https://');
   const action = String(args.action);
   if (action === 'supported') {
-    const res = await httpJson<any>(`${base}/supported`, { method: 'GET' });
+    const res = await publicJson<any>(`${base}/supported`, { method: 'GET' });
     return `=== facilitator /supported ===\n${JSON.stringify(res, null, 2)}`;
   }
   if (action === 'verify' || action === 'settle') {
     if (!args.paymentPayload || !args.paymentRequirements) {
       throw new Error(`${action} requires both paymentPayload and paymentRequirements.`);
     }
-    const res = await httpJson<any>(`${base}/${action}`, {
+    const res = await publicJson<any>(`${base}/${action}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
       body: { paymentPayload: args.paymentPayload, paymentRequirements: args.paymentRequirements },
     });
     return `=== facilitator /${action} ===\n${JSON.stringify(res, null, 2)}`;

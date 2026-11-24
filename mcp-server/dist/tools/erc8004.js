@@ -1,5 +1,5 @@
 import { createPublicClient, http, fallback, getAddress } from 'viem';
-import { publicFetch } from '../lib/public-url.js';
+import { publicFetch, readBounded } from '../lib/public-url.js';
 import { rpcEndpoints } from '../lib/chains.js';
 /**
  * Tier-7 ERC-8004 "Trustless Agents" — on-chain agent identity + reputation.
@@ -93,7 +93,7 @@ async function loadAgentCard(tokenURI) {
         if (/^https?:\/\//.test(url)) {
             // tokenURI is attacker-chosen: public hosts only (checked at connect time), and a redirect is never followed.
             const res = await publicFetch(url, { signal: AbortSignal.timeout(15_000) });
-            return res.ok ? await res.json() : null;
+            return res.ok ? JSON.parse(await readBounded(res, 1_000_000)) : null;
         }
     }
     catch { /* ignore */ }

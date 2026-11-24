@@ -2,6 +2,22 @@ import './_setup.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Offline DNS: fixture hosts resolve to a public documentation address. The bundler/facilitator transport is
+// stubbed after the real https + public-host checks run.
+vi.mock('node:dns/promises', () => ({ lookup: vi.fn(async () => [{ address: '93.184.215.14', family: 4 }]) }));
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.mock('../lib/public-url.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/public-url.js')>();
+  return {
+    ...real,
+    publicJson: async (url: string, opts: { method?: string; body?: unknown } = {}) => {
+      await real.assertPublicUrl(url, { httpsOnly: true });
+      const res: Response = await fetchMock(url, { method: opts.method, body: JSON.stringify(opts.body) });
+      return JSON.parse(await real.readBounded(res, 1_000_000));
+    },
+  };
+});
+
 import {
   aaTools,
   handleAaTool,
@@ -253,7 +269,7 @@ describe('handleAaTool — pack_userop', () => {
 describe('handleAaTool — estimate_userop', () => {
   let fetchSpy: any;
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    fetchSpy = fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -268,7 +284,7 @@ describe('handleAaTool — estimate_userop', () => {
       ),
     );
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.restoreAllMocks(); fetchMock.mockReset(); });
 
   it('POSTs the bundler-rpc envelope and returns the result text', async () => {
     const res = await handleAaTool('chaingpt_aa_estimate_userop', {
@@ -316,9 +332,9 @@ describe('handleAaTool — estimate_userop', () => {
 describe('handleAaTool — userop_receipt', () => {
   let fetchSpy: any;
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy = fetchMock;
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.restoreAllMocks(); fetchMock.mockReset(); });
 
   it('returns the "not yet bundled" message on a null result', async () => {
     fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: null }), {

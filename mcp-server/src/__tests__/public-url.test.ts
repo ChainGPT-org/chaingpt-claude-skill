@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(async (host: string) => ({
+  lookup: vi.fn(async (host: string) => host === 'slow.example' ? new Promise(() => {}) : ({
     'public.example': [{ address: '93.184.215.14', family: 4 }],
     'mixed.example': [{ address: '93.184.215.14', family: 4 }, { address: '10.0.0.5', family: 4 }],
     'mapped.example': [{ address: '::ffff:127.0.0.1', family: 6 }],
@@ -18,7 +18,8 @@ vi.mock('node:dns', () => ({
 }));
 
 import { lookup as connectLookup } from 'node:dns';
-import { assertPublicUrl, publicFetch } from '../lib/public-url.js';
+import { assertPublicUrl, parsePublicJson, publicFetch, publicJson, readBounded, transportError } from '../lib/public-url.js';
+import { bundlerRpc } from '../lib/erc4337.js';
 
 describe('assertPublicUrl', () => {
   it('allows public hosts', async () => {
@@ -51,5 +52,118 @@ describe('publicFetch', () => {
   it('keeps the up-front checks', async () => {
     await expect(publicFetch('http://127.0.0.1:8545/')).rejects.toThrow(/loopback, private or link-local/);
     await expect(publicFetch('http://public.example/', {}, { httpsOnly: true })).rejects.toThrow(/must be https/);
+  });
+
+  it('rejects an unparsable URL without keeping it (or a key in it) anywhere on the error', async () => {
+    let err: unknown;
+    try { await publicFetch('https://card.example:bad/agent.json?api_key=SECRET-KEY-2'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-2');
+    expect(Object.values(err as object).join(' ')).not.toContain('SECRET-KEY-2');
+  });
+});
+
+describe('publicJson (bundler / facilitator transport)', () => {
+  it('refuses private, metadata and plain-http endpoints before connecting', async () => {
+    for (const u of ['https://127.0.0.1:4337/rpc', 'https://169.254.169.254/latest/meta-data/', 'https://[::1]/', 'https://internal.bundler/rpc', 'https://mixed.example/']) {
+      await expect(publicJson(u), u).rejects.toThrow(/loopback, private or link-local/);
+    }
+    await expect(publicJson('http://public.example/supported')).rejects.toThrow(/must be https/);
+  });
+
+  it('rejects an unparsable endpoint without keeping the URL (or a key in it) anywhere on the error', async () => {
+    let err: unknown;
+    try { await publicJson('https://bundler.example:bad/rpc?api_key=SECRET-KEY-1'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-1');
+    expect(Object.values(err as object).join(' ')).not.toContain('SECRET-KEY-1');
+  });
+
+  it('applies the timeout to the DNS check too', async () => {
+    const t0 = Date.now();
+    await expect(publicJson('https://slow.example/rpc', { timeoutMs: 50 })).rejects.toThrow();
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it('an already-aborted signal wins, and the refused check is not left unhandled', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const ac = new AbortController();
+      const reason = new Error('caller gave up');
+      ac.abort(reason);
+      await expect(publicFetch('https://127.0.0.1/', { signal: ac.signal })).rejects.toBe(reason);
+      await new Promise(r => setTimeout(r, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  it('is the transport bundlerRpc uses', async () => {
+    await expect(bundlerRpc({ url: 'https://127.0.0.1:4337/', method: 'eth_supportedEntryPoints', params: [] })).rejects.toThrow(/loopback, private or link-local/);
+  });
+});
+
+describe('transport errors', () => {
+  it('drops raw parser bytes (a reflected key) and keeps only host and error code', () => {
+    const parserError = Object.assign(new Error('Parse Error: Invalid header value char'), {
+      code: 'HPE_INVALID_HEADER_TOKEN', rawPacket: Buffer.from('HTTP/1.1 200\r\nX-Echo: key=SECRET-KEY-3\r\n'),
+    });
+    const err = transportError('bundler.example', parserError) as Error;
+    expect(err.message).toBe('Request to bundler.example failed (HPE_INVALID_HEADER_TOKEN)');
+    expect(err.cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-3');
+  });
+
+  it("keeps the caller's abort reason", () => {
+    const ac = new AbortController();
+    const reason = new Error('caller gave up');
+    ac.abort(reason);
+    expect(transportError('bundler.example', new Error('socket hang up'), ac.signal)).toBe(reason);
+  });
+
+  it('a body stream that fails mid-read yields no raw bytes', async () => {
+    const body = new ReadableStream<Uint8Array>({ start(c) { c.error(Object.assign(new Error('x'), { rawPacket: 'SECRET-KEY-4' })); } });
+    let err: unknown;
+    try { await readBounded(new Response(body), 100); } catch (e) { err = e; }
+    expect((err as Error).message).toBe('Response body could not be read');
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-4');
+  });
+
+  it("a deadline that fires mid-body surfaces as the signal's reason", async () => {
+    const ac = new AbortController();
+    const reason = new Error('deadline');
+    const body = new ReadableStream<Uint8Array>({ pull(c) { ac.abort(reason); c.error(new Error('aborted')); } });
+    await expect(readBounded(new Response(body), 100, ac.signal)).rejects.toBe(reason);
+  });
+});
+
+describe('readBounded', () => {
+  it('reads small bodies and refuses oversized ones by header or by stream', async () => {
+    await expect(readBounded(new Response('{"ok":1}'), 100)).resolves.toBe('{"ok":1}');
+    await expect(readBounded(new Response('x'.repeat(101)), 100)).rejects.toThrow(/exceeds 100 bytes/);
+    await expect(readBounded(new Response('x', { headers: { 'content-length': '5000' } }), 100)).rejects.toThrow(/exceeds 100 bytes/);
+  });
+});
+
+describe('JSON decoding of bounded bodies', () => {
+  it('strips a UTF-8 BOM so BOM-prefixed JSON (x402 challenges, agent cards) still parses', async () => {
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"x402Version":1}')]);
+    const text = await readBounded(new Response(bom), 100);
+    expect(text).toBe('{"x402Version":1}');
+    expect(parsePublicJson(text, 'facilitator.example')).toEqual({ x402Version: 1 });
+  });
+
+  it('reports invalid JSON by host only, without the body or the parser error', () => {
+    let err: unknown;
+    try { parsePublicJson('<html>key=sk-live-REFLECTED-123</html>', 'bundler.example'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('Invalid JSON response from bundler.example');
+    expect((err as Error).cause).toBeUndefined();
+    expect(String((err as Error).stack)).not.toContain('REFLECTED');
   });
 });

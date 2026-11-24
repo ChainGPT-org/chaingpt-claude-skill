@@ -22,14 +22,32 @@ function isBlocked(ip: string): boolean {
   return blocked.check(ip, isIP(ip) === 6 ? 'ipv6' : 'ipv4');
 }
 
-const refusal = (host: string) => new Error(`Refusing to fetch ${host}: it resolves to a loopback, private or link-local address.`);
+class Refused extends Error {}
+const refusal = (host: string) => new Refused(`Refusing to fetch ${host}: it resolves to a loopback, private or link-local address.`);
+
+/**
+ * Socket/parser failures become a host-only error: Node's HTTP parser keeps the raw response bytes on `rawPacket`
+ * (a reflected API key would ride along). Our own refusals and the caller's abort reason pass through unchanged.
+ */
+export function transportError(host: string, e: unknown, signal?: AbortSignal): unknown {
+  if (signal?.aborted) return signal.reason;
+  if (e instanceof Refused) return e;
+  const code = (e as { code?: unknown })?.code;
+  return new Error(`Request to ${host} failed${typeof code === 'string' && /^[A-Z0-9_]+$/.test(code) ? ` (${code})` : ''}`);
+}
 
 /**
  * Throws unless `raw` is an http(s) URL (https when httpsOnly) whose host resolves only to public addresses.
  * This is an early, readable check only: a later connection re-resolves the name. Use publicFetch to connect.
  */
 export async function assertPublicUrl(raw: string, { httpsOnly = false } = {}): Promise<URL> {
-  const url = new URL(raw);
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    // Node's ERR_INVALID_URL keeps the whole URL (and any key in it) on `input`: drop it, keep nothing.
+    throw new Error('Invalid URL');
+  }
   if (url.protocol !== 'https:' && (httpsOnly || url.protocol !== 'http:')) throw new Error(`URL must be ${httpsOnly ? 'https' : 'http(s)'}: ${url.protocol}`);
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addrs = isIP(host) ? [host] : (await lookup(host, { all: true })).map(a => a.address);
@@ -46,6 +64,23 @@ const guardedLookup: LookupFunction = (host, opts, cb) => dnsLookup(host, { fami
   else cb(null, addrs[0].address, addrs[0].family);
 });
 
+/** Rejects with the signal's reason as soon as it aborts, so a slow DNS check cannot outlive the caller's deadline. */
+function untilAborted<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) {
+    p.catch(() => undefined); // the check may still refuse; nobody waits for it now
+    return Promise.reject(signal.reason);
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(
+      v => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      e => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
+}
+
 /**
  * fetch() for untrusted URLs: same checks as assertPublicUrl, plus the connection itself only goes to a checked
  * address. Host header and TLS SNI/certificate checks still use the URL's hostname. Redirects are never followed:
@@ -56,10 +91,12 @@ export async function publicFetch(
   init: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal } = {},
   opts: { httpsOnly?: boolean } = {},
 ): Promise<Response> {
-  const url = await assertPublicUrl(raw, opts);
+  const url = await untilAborted(assertPublicUrl(raw, opts), init.signal);
   const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
-    const req = request(url, { method: init.method ?? 'GET', headers: init.headers, signal: init.signal, lookup: guardedLookup, agent: false }, res => {
+    // identity: this transport hands raw bytes to readBounded and never decompresses.
+    const headers = { 'accept-encoding': 'identity', ...init.headers };
+    const req = request(url, { method: init.method ?? 'GET', headers, signal: init.signal, lookup: guardedLookup, agent: false }, res => {
       try {
         const headers = new Headers();
         for (let i = 0; i < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
@@ -72,7 +109,82 @@ export async function publicFetch(
         reject(e);
       }
     });
-    req.on('error', reject);
+    req.on('error', e => reject(transportError(url.host, e, init.signal)));
     req.end(init.body);
   });
+}
+
+/**
+ * Reads at most maxBytes of a response body; larger bodies (declared or streamed) are refused and the stream is cancelled.
+ * Pass the request's signal so a deadline that fires mid-body surfaces as that signal's reason, not as a read failure.
+ */
+export async function readBounded(res: Response, maxBytes: number, signal?: AbortSignal): Promise<string> {
+  const declared = Number(res.headers.get('content-length'));
+  if (declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error(`Response body exceeds ${maxBytes} bytes`);
+  }
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      // A mid-body socket/parser error can carry raw response bytes: keep none of it.
+      if (signal?.aborted) throw signal.reason;
+      throw new Error('Response body could not be read');
+    }
+    const { done, value } = chunk;
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(`Response body exceeds ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  // TextDecoder strips a leading UTF-8 BOM (as Response.text() did); Buffer#toString would keep it and break JSON.parse.
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+/** JSON.parse whose error names only the host: the body may reflect API keys, so neither it nor the parser error is kept. */
+export function parsePublicJson<T = unknown>(text: string, host: string): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid JSON response from ${host}`);
+  }
+}
+
+/**
+ * JSON request to a caller- or config-selected endpoint (bundler, facilitator): https only, public addresses only
+ * (checked at connect time), no redirects, bounded body. Errors name only the host: endpoint paths often carry API keys.
+ */
+export async function publicJson<T = unknown>(
+  raw: string,
+  opts: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number; maxBytes?: number } = {},
+): Promise<T> {
+  let host: string;
+  try {
+    host = new URL(raw).host;
+  } catch {
+    // Node's ERR_INVALID_URL keeps the whole URL (and any key in it) on `input`: drop it, keep nothing.
+    throw new Error('Invalid endpoint URL');
+  }
+  const hasBody = opts.body !== undefined;
+  const signal = AbortSignal.timeout(opts.timeoutMs ?? 15_000);
+  const res = await publicFetch(raw, {
+    method: opts.method ?? 'GET',
+    headers: { accept: 'application/json', ...(hasBody ? { 'content-type': 'application/json' } : {}) },
+    body: hasBody ? JSON.stringify(opts.body) : undefined,
+    signal,
+  }, { httpsOnly: true });
+  if (res.status < 200 || res.status >= 300) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error(`HTTP ${res.status} from ${host}${res.status >= 300 && res.status < 400 ? ' (redirect not followed)' : ''}`);
+  }
+  return parsePublicJson<T>(await readBounded(res, opts.maxBytes ?? 1_000_000, signal), host);
 }
