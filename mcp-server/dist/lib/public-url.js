@@ -21,7 +21,21 @@ function isBlocked(ip) {
         return blocked.check(mapped[1], 'ipv4');
     return blocked.check(ip, isIP(ip) === 6 ? 'ipv6' : 'ipv4');
 }
-const refusal = (host) => new Error(`Refusing to fetch ${host}: it resolves to a loopback, private or link-local address.`);
+class Refused extends Error {
+}
+const refusal = (host) => new Refused(`Refusing to fetch ${host}: it resolves to a loopback, private or link-local address.`);
+/**
+ * Socket/parser failures become a host-only error: Node's HTTP parser keeps the raw response bytes on `rawPacket`
+ * (a reflected API key would ride along). Our own refusals and the caller's abort reason pass through unchanged.
+ */
+export function transportError(host, e, signal) {
+    if (signal?.aborted)
+        return signal.reason;
+    if (e instanceof Refused)
+        return e;
+    const code = e?.code;
+    return new Error(`Request to ${host} failed${typeof code === 'string' && /^[A-Z0-9_]+$/.test(code) ? ` (${code})` : ''}`);
+}
 /**
  * Throws unless `raw` is an http(s) URL (https when httpsOnly) whose host resolves only to public addresses.
  * This is an early, readable check only: a later connection re-resolves the name. Use publicFetch to connect.
@@ -78,7 +92,9 @@ export async function publicFetch(raw, init = {}, opts = {}) {
     const url = await untilAborted(assertPublicUrl(raw, opts), init.signal);
     const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
     return new Promise((resolve, reject) => {
-        const req = request(url, { method: init.method ?? 'GET', headers: init.headers, signal: init.signal, lookup: guardedLookup, agent: false }, res => {
+        // identity: this transport hands raw bytes to readBounded and never decompresses.
+        const headers = { 'accept-encoding': 'identity', ...init.headers };
+        const req = request(url, { method: init.method ?? 'GET', headers, signal: init.signal, lookup: guardedLookup, agent: false }, res => {
             try {
                 const headers = new Headers();
                 for (let i = 0; i < res.rawHeaders.length; i += 2)
@@ -94,7 +110,7 @@ export async function publicFetch(raw, init = {}, opts = {}) {
                 reject(e);
             }
         });
-        req.on('error', reject);
+        req.on('error', e => reject(transportError(url.host, e, init.signal)));
         req.end(init.body);
     });
 }
@@ -111,7 +127,15 @@ export async function readBounded(res, maxBytes) {
     const chunks = [];
     let total = 0;
     for (;;) {
-        const { done, value } = await reader.read();
+        let chunk;
+        try {
+            chunk = await reader.read();
+        }
+        catch {
+            // A mid-body socket/parser error can carry raw response bytes: keep none of it.
+            throw new Error('Response body could not be read');
+        }
+        const { done, value } = chunk;
         if (done)
             break;
         total += value.byteLength;

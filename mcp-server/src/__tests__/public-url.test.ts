@@ -18,7 +18,7 @@ vi.mock('node:dns', () => ({
 }));
 
 import { lookup as connectLookup } from 'node:dns';
-import { assertPublicUrl, parsePublicJson, publicFetch, publicJson, readBounded } from '../lib/public-url.js';
+import { assertPublicUrl, parsePublicJson, publicFetch, publicJson, readBounded, transportError } from '../lib/public-url.js';
 import { bundlerRpc } from '../lib/erc4337.js';
 
 describe('assertPublicUrl', () => {
@@ -105,6 +105,33 @@ describe('publicJson (bundler / facilitator transport)', () => {
 
   it('is the transport bundlerRpc uses', async () => {
     await expect(bundlerRpc({ url: 'https://127.0.0.1:4337/', method: 'eth_supportedEntryPoints', params: [] })).rejects.toThrow(/loopback, private or link-local/);
+  });
+});
+
+describe('transport errors', () => {
+  it('drops raw parser bytes (a reflected key) and keeps only host and error code', () => {
+    const parserError = Object.assign(new Error('Parse Error: Invalid header value char'), {
+      code: 'HPE_INVALID_HEADER_TOKEN', rawPacket: Buffer.from('HTTP/1.1 200\r\nX-Echo: key=SECRET-KEY-3\r\n'),
+    });
+    const err = transportError('bundler.example', parserError) as Error;
+    expect(err.message).toBe('Request to bundler.example failed (HPE_INVALID_HEADER_TOKEN)');
+    expect(err.cause).toBeUndefined();
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-3');
+  });
+
+  it("keeps the caller's abort reason", () => {
+    const ac = new AbortController();
+    const reason = new Error('caller gave up');
+    ac.abort(reason);
+    expect(transportError('bundler.example', new Error('socket hang up'), ac.signal)).toBe(reason);
+  });
+
+  it('a body stream that fails mid-read yields no raw bytes', async () => {
+    const body = new ReadableStream<Uint8Array>({ start(c) { c.error(Object.assign(new Error('x'), { rawPacket: 'SECRET-KEY-4' })); } });
+    let err: unknown;
+    try { await readBounded(new Response(body), 100); } catch (e) { err = e; }
+    expect((err as Error).message).toBe('Response body could not be read');
+    expect(JSON.stringify(err, Object.getOwnPropertyNames(err))).not.toContain('SECRET-KEY-4');
   });
 });
 
