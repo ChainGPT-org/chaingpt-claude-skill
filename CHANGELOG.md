@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [1.26.0] - 2026-11-24
+### Security
+- Bundler (ERC-4337) and x402 facilitator calls go through the checked public transport: https only, public addresses checked at connect time, redirects never followed, a 1 MB body cap, and errors that name only the host (no URL, response bytes or parser `rawPacket`). `x402_fetch` and ERC-8004 agent-card reads use the same body cap. (#138)
+- The x402 mainnet guard now asks before any signed payment leaves the plugin: an `x402_fetch` carrying an `xPaymentHeader`, and any facilitator call carrying a `paymentPayload` (verify as well as settle). It shows destination, amount and payee when known. (#140)
+- The ERC-4337 signer applies `maxTxGas` to the sum of call, verification, pre-verification and paymaster gas, so a bundler cannot inflate the components the cap used to skip. (#139)
+- `save_plan` is limited to 256 KB of payload/notes and 500 plans; `list_plans` skips files over 1 MB without reading them. (#141)
+
 ### Fixed
 - The MCP server entry now lives in `.claude-plugin/plugin.json` instead of a root `.mcp.json`. Claude Code also reads a root `.mcp.json` as project config, where `${CLAUDE_PLUGIN_ROOT}` is empty, so opening this repo as a project started a server that crashed at launch. Plugin installs are unchanged.
 
