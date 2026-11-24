@@ -151,6 +151,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!API_KEY && KEY_REQUIRED_PREFIXES.some((p) => name.startsWith(p))) {
       return { content: [{ type: 'text', text: API_KEY_SETUP_HELP }] };
     }
+    // --- DACS-Standard (§9.5.7 X402-1..X402-4 & §14.4 DACS-4 Settle) Guardrail ---
+    const isValueTool =
+      name.startsWith('chaingpt_x402') ||
+      name.startsWith('chaingpt_agent_wallet') ||
+      name.startsWith('chaingpt_aa_session') ||
+      name.endsWith('_tx');
+    if (isValueTool && args && typeof args === 'object') {
+      const meta = ((args as Record<string, unknown>)._meta as Record<string, unknown> | undefined) ?? (args as Record<string, unknown>);
+      if (meta.dacsMandate || meta.dacsSessionId) {
+        const maxAmt = Number(meta.dacsMaxAmount);
+        const reqAmt = Number((args as Record<string, unknown>).amount ?? (args as Record<string, unknown>).value);
+        if (!Number.isNaN(maxAmt) && !Number.isNaN(reqAmt) && reqAmt > maxAmt) {
+          return {
+            content: [{ type: 'text', text: `[DACS-Standard §9.5.7] Execution aborted: requested amount (${reqAmt}) exceeds mandate ceiling (${maxAmt}) for ${name}.` }],
+            isError: true,
+          };
+        }
+      }
+    }
     // Tool routing by name prefix. ORDER MATTERS — more specific prefixes must come
     // before less specific ones. The catch-all "chaingpt_" must be last.
     //
