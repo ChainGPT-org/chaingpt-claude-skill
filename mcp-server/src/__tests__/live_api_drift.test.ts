@@ -65,9 +65,10 @@ describe('Jupiter canonical Swap V1 host', () => {
 
   it('passes an optional key to both quote and unsigned build, without broadcast', async () => {
     vi.stubEnv('JUPITER_API_KEY', 'fixture-jupiter-key');
-    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response({ inAmount: '1', outAmount: '1' })).mockResolvedValueOnce(response({ swapTransaction: 'unsigned-fixture' }));
-    const r = await handleDexTool('chaingpt_dex_jupiter_build_swap_tx', { inputMint: sol, outputMint: sol, amountIn: '1', userPublicKey: sol, acknowledgeMainnet: true });
-    expect(text(r)).toContain('unsigned-fixture');
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response({ inputMint: sol, outputMint: sol, inAmount: '1000000000', outAmount: '1' })).mockResolvedValueOnce(response({ swapTransaction: 'unsigned-fixture' }));
+    // The fixture is not a real transaction, so the decoded-transaction check refuses to return it.
+    await expect(handleDexTool('chaingpt_dex_jupiter_build_swap_tx', { inputMint: sol, outputMint: sol, amountIn: '1', userPublicKey: sol, acknowledgeMainnet: true }))
+      .rejects.toThrow(/could not be decoded/);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[1][0]).toBe('https://api.jup.ag/swap/v1/swap');
     for (const [, init] of fetch.mock.calls) expect(init?.headers).toHaveProperty('x-api-key', 'fixture-jupiter-key');

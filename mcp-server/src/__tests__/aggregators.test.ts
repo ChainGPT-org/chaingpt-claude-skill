@@ -140,6 +140,24 @@ describe('1inch tools — key gating', () => {
     expect(t).toContain('0x111111125421cA6dc452d289314280a0f8842A65');
     expect(t).toContain('"chainId": 1');
   });
+
+  it('1inch_swap_tx refuses a tx that does not call the 1inch router or carries unexpected value', async () => {
+    process.env.ONEINCH_API_KEY = 'test-1inch-key';
+    const swap = (tx: object) => vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ dstAmount: '1', tx: { from: '0x1111111111111111111111111111111111111111', data: '0x12aa3caf', value: '0', ...tx } }),
+        { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    const args = {
+      network: 'ethereum', inToken: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', outToken: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+      amountIn: '100', decimalsIn: 6, from: '0x1111111111111111111111111111111111111111', acknowledgeMainnet: true,
+    };
+    swap({ to: '0x2222222222222222222222222222222222222222' });
+    await expect(handleAggregatorTool('chaingpt_dex_1inch_swap_tx', args)).rejects.toThrow(/not a 1inch router call/);
+    swap({ to: '0x111111125421cA6dc452d289314280a0f8842A65', value: '1000000000000000000' });
+    await expect(handleAggregatorTool('chaingpt_dex_1inch_swap_tx', args)).rejects.toThrow(/not a 1inch router call/);
+    swap({ to: '0x111111125421cA6dc452d289314280a0f8842A65', from: '0x3333333333333333333333333333333333333333' });
+    await expect(handleAggregatorTool('chaingpt_dex_1inch_swap_tx', args)).rejects.toThrow(/not a 1inch router call/);
+  });
 });
 
 describe('CoW Protocol tools', () => {
