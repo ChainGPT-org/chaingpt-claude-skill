@@ -733,7 +733,10 @@ describe('Admin dashboard HTTP endpoints', () => {
     const again = await handleAgentWalletTool('chaingpt_agent_wallet_serve_ui', { port: PORT + 8, chains: ['ethereum'] });
     expect(again.content[0].text).toContain('already running');
     expect(readFileSync(tokenFile, 'utf8').trim()).toBe(token);
-    expect((await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } })).status).toBe(200);
+    // The login page is also a 200, so check the session still opens the dashboard itself.
+    const dash = await fetch(`${base}/dashboard`, { headers: { cookie: `cg_admin_sid=${sid}` } });
+    expect(dash.status).toBe(200);
+    expect(await dash.text()).not.toContain('Admin login');
     await expect(fetch(`http://127.0.0.1:${PORT + 8}/`)).rejects.toThrow();
   });
 
