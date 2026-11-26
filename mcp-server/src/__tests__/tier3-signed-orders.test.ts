@@ -11,7 +11,7 @@ import { hyperliquidTools, handleHyperliquidTool } from '../tools/hyperliquid.js
 import { polymarketTools, handlePolymarketTool } from '../tools/polymarket.js';
 import { actionHash, phantomAgentTypedData, buildActionPayload } from '../lib/hyperliquid-sign.js';
 import {
-  buildOrder, orderTypedData, depositWalletTypedData, wrapDepositWalletSignature, type PolymarketOrder,
+  buildOrder, orderTypedData, orderBinding, depositWalletTypedData, wrapDepositWalletSignature, type PolymarketOrder,
   POLYMARKET_CTF_EXCHANGE, POLYMARKET_NEG_RISK_EXCHANGE, POLYMARKET_V2_EXCHANGE,
 } from '../lib/polymarket-sign.js';
 
@@ -368,6 +368,50 @@ describe('Polymarket handler smoke', () => {
     expect(r.content[0].text).toContain('POLY_CLOB_API_KEY');
   });
 
+  it('expiration and order type are fixed at payload time and cannot change after signing (H097-csf_97e65fe5)', async () => {
+    const base = { maker: '0x1111111111111111111111111111111111111111', tokenId: '12345', side: 'BUY', price: '0.42', size: '100', acknowledgeMainnet: true };
+    let spy = mockBook();
+    const expirationSec = Math.floor(Date.now() / 1000) + 3600;
+    const r = await handlePolymarketTool('chaingpt_pm_place_order_payload', { ...base, expirationSec });
+    const mismatched = [
+      await handlePolymarketTool('chaingpt_pm_place_order_payload', { ...base, orderType: 'GTD' }),
+      await handlePolymarketTool('chaingpt_pm_place_order_payload', { ...base, expirationSec, orderType: 'GTC' }),
+    ];
+    spy.mockRestore();
+    for (const m of mismatched) expect(m.content[0].text).toContain('orderType GTD needs a future expirationSec');
+    const t = r.content[0].text;
+    expect(t).toContain('Order type:     GTD');
+    const order = JSON.parse(t.split('--- order (pass back to submit_signed_order) ---')[1]);
+    expect(order.orderType).toBe('GTD');
+    const typed = JSON.parse(t.split('--- EIP-712 typed data (sign via eth_signTypedData_v4) ---')[1].split('--- order')[0]);
+    expect(typed.message).not.toHaveProperty('orderType');
+    expect(typed.message).not.toHaveProperty('binding');
+
+    process.env.POLY_CLOB_API_KEY = 'k'; process.env.POLY_CLOB_SECRET = 'cw=='; process.env.POLY_CLOB_PASSPHRASE = 'p';
+    spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"success":true}', { status: 200 }));
+    try {
+      const signature = '0x' + 'a'.repeat(130);
+      for (const [o, orderType] of [
+        [{ ...order, expiration: String(expirationSec + 86400) }, undefined], // expiration moved after signing
+        [{ ...order, expiration: '0' }, undefined],
+        [order, 'GTC'], [order, 'FOK'],                                       // order type switched at submit
+        [{ ...order, orderType: 'FOK' }, undefined],
+        [{ ...order, binding: undefined }, undefined],                        // built elsewhere / earlier session
+      ] as const) {
+        const refused = await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: o as any, signature, ...(orderType && { orderType }) });
+        expect(refused.content[0].text).toContain('differs from what chaingpt_pm_place_order_payload showed');
+      }
+      expect(spy).not.toHaveBeenCalled();
+      await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order, signature });
+      const body = JSON.parse(String((spy.mock.calls[0][1] as RequestInit).body));
+      expect([body.orderType, body.order.expiration]).toEqual(['GTD', String(expirationSec)]);
+      expect(body.order).not.toHaveProperty('binding');
+    } finally {
+      spy.mockRestore();
+      delete process.env.POLY_CLOB_API_KEY; delete process.env.POLY_CLOB_SECRET; delete process.env.POLY_CLOB_PASSPHRASE;
+    }
+  });
+
   it('proxy-wallet orders keep maker = proxy and signer = EOA', () => {
     const proxy = ('0x' + 'a'.repeat(40)) as `0x${string}`, eoa = ('0x' + 'b'.repeat(40)) as `0x${string}`;
     const o = buildOrder({ maker: proxy, signer: eoa, signatureType: 1, tokenId: '1', price: '0.5', size: '10', side: 'BUY' });
@@ -388,7 +432,8 @@ describe('Polymarket handler smoke', () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true, orderID: '0x1' }), { status: 200 }));
     try {
       const maker = ('0x' + 'a'.repeat(40)) as `0x${string}`, signer = ('0x' + 'b'.repeat(40)) as `0x${string}`; // proxy wallet: maker != signer
-      const order = { ...buildOrder({ maker, signer, signatureType: 1, tokenId: '7', side: 'BUY', price: '0.5', size: '10', expirationSec: 2_000_000_000 }), salt: '281474976710655' };
+      const built = { ...buildOrder({ maker, signer, signatureType: 1, tokenId: '7', side: 'BUY', price: '0.5', size: '10', expirationSec: 2_000_000_000 }), salt: '281474976710655' };
+      const order = { ...built, orderType: 'GTD', binding: orderBinding(built, 'GTD') };
       await handlePolymarketTool('chaingpt_pm_submit_signed_order', { order: order as any, signature: '0x' + 'a'.repeat(130), orderType: 'GTD' });
       const init = spy.mock.calls[0][1] as RequestInit;
       const body = JSON.parse(String(init.body));
