@@ -20,6 +20,17 @@ export function evmAssetSpends(chain, to, data, value, policy) {
         throw new Error('Unlimited approvals are refused in restricted mode.');
     return [{ asset: `${chain}:${to.toLowerCase()}`, recipient: recipient.toLowerCase(), amount: amount.toString() }];
 }
+// Security scan H097-csf_e1ec95ce: an RPC's eth_getCode answer is not authority (a lying or lagging node, or a contract
+// deployed at the address before inclusion). A restricted native transfer goes only to a recipient the admin listed in
+// allowedToAddresses, and code reported there (or no clear answer) still refuses.
+export function checkNativeRecipient(to, code, policy) {
+    if (policy.unrestricted === true)
+        return;
+    if (!policy.allowedToAddresses?.some(a => a.toLowerCase() === to.toLowerCase()))
+        throw new Error('Restricted native transfers need the recipient listed in allowedToAddresses; an RPC no-code answer does not authorize a value call.');
+    if (code !== '0x')
+        throw new Error('Restricted signing refuses opaque contract fallback calls.');
+}
 export function checkAssetLimits(chain, spends, policy, activityFile) {
     if (policy.unrestricted === true)
         return;

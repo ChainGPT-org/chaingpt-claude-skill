@@ -1,6 +1,6 @@
 import { finalizedUserOperationReceipt } from '../lib/signing-finality.js';
 import { withSigningLock, operationFingerprint, findOperation, reserveOperation, saveReservation, replayMessage } from '../lib/signing-journal.js';
-import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
+import { checkAssetLimits, checkNativeRecipient, evmAssetSpends } from '../lib/asset-policy.js';
 import { decodeAbiParameters } from 'viem';
 import { readKeystoreFile, loadAccount } from '../lib/agent-keystore.js';
 import { loadPolicy, policyPath, checkPolicy, checkErc4337Gate, } from '../lib/agent-policy.js';
@@ -188,10 +188,11 @@ async function handleAgentWallet4337ToolUnlocked(name, args) {
             gas: userOpGasUnits(baseOp), // all bundler-chosen gas, not only the inner call
             memo,
         };
-        const targetCode = data === '0x' ? await jsonRpcFallback(rpcs, 'eth_getCode', [target, 'latest']) : undefined;
+        const nativeOnly = data === '0x' || String(data) === ''; // data is typed Hex but arrives unchecked
+        const targetCode = nativeOnly ? await jsonRpcFallback(rpcs, 'eth_getCode', [target, 'latest']) : undefined;
         const currentPolicy = loadPolicy();
-        if (currentPolicy.unrestricted !== true && targetCode && targetCode !== '0x')
-            throw new Error('Restricted signing refuses opaque contract fallback calls.');
+        if (nativeOnly)
+            checkNativeRecipient(target, targetCode, currentPolicy);
         const currentGate = checkErc4337Gate({ account, bundlerUrl }, currentPolicy);
         if (!currentGate.allowed)
             return refusalBlock(currentGate.reason, currentGate.policyDigest);

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodeFunctionData, parseAbi } from 'viem';
 import { withSigningLock, reserveOperation, saveReservation, findOperation, readReservations, operationFingerprint, journalDir } from '../lib/signing-journal.js';
-import { checkAssetLimits, evmAssetSpends } from '../lib/asset-policy.js';
+import { checkAssetLimits, checkNativeRecipient, evmAssetSpends } from '../lib/asset-policy.js';
 import { spendStats, logActivity } from '../lib/agent-activity.js';
 import { loadPolicy, validatePolicyInput, checkPolicy, type AgentPolicy } from '../lib/agent-policy.js';
 
@@ -76,6 +76,19 @@ describe('asset and policy fences', () => {
   it('refuses unknown token recipients and amounts over the per-tx cap', () => {
     expect(() => checkAssetLimits('base', [{ ...base.assets[0], recipient: token }], policy, activity)).toThrow(/not explicitly/);
     expect(() => checkAssetLimits('base', [{ ...base.assets[0], amount: '101' }], policy, activity)).toThrow(/limit/);
+  });
+  it('authorizes restricted native transfers by the admin allowlist, not by an RPC no-code answer (H097-csf_e1ec95ce)', () => {
+    const listed: AgentPolicy = { ...policy, allowedToAddresses: [recipient] };
+    expect(() => checkNativeRecipient(recipient, '0x', listed)).not.toThrow();
+    // An RPC saying "no code" is not enough: an unlisted recipient is refused, with or without an allowlist.
+    for (const p of [policy, { ...policy, allowedToAddresses: [] }, { ...policy, allowedToAddresses: [token] }]) {
+      expect(() => checkNativeRecipient(recipient, '0x', p)).toThrow(/allowedToAddresses/);
+    }
+    // A listed recipient that reports code, or no clear answer, still refuses (fails closed).
+    for (const code of ['0x6080', '0xef0100' + '11'.repeat(20), null, undefined, '']) {
+      expect(() => checkNativeRecipient(recipient, code, listed)).toThrow(/opaque contract fallback/);
+    }
+    expect(() => checkNativeRecipient(recipient, '0x6080', { ...policy, unrestricted: true })).not.toThrow();
   });
   it('refuses opaque protocol calldata and unlimited approvals', () => {
     expect(() => evmAssetSpends('base', token, '0xdeadbeef', 0n, policy)).toThrow(/opaque/);

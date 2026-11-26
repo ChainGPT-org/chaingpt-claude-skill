@@ -23,7 +23,11 @@ Restricted signing supports:
 
 | Surface | Supported autonomous operations |
 | --- | --- |
-| ERC-4337 inner calls | Native transfers to non-contract recipients; exact ERC-20 `transfer` and bounded `approve` |
+| ERC-4337 inner calls | Native transfers to recipients listed in `allowedToAddresses` that report no contract code; exact ERC-20 `transfer` and bounded `approve` |
+
+An RPC's `eth_getCode` answer never authorizes a native transfer on its own: a node can lie or lag, and code can be
+deployed at an address before the operation lands. Restricted native transfers therefore need the recipient in
+`allowedToAddresses`. With that list absent, they are refused. Reported code, or no clear answer, also refuses.
 
 DEX, lending and other opaque protocol transactions must use the unsigned builder and external
 signing until a reviewed adapter can bind their complete asset effects. Existing `unrestricted`
