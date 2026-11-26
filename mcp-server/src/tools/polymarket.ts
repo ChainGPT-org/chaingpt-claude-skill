@@ -6,6 +6,7 @@ import {
   clobHeaders,
   depositWalletTypedData,
   orderTypedData,
+  orderBinding,
   readCLOBCreds,
   wrapDepositWalletSignature,
   POLYMARKET_NEG_RISK_EXCHANGE,
@@ -126,8 +127,13 @@ export const polymarketTools: Tool[] = [
         size: { type: 'string', description: 'Number of outcome tokens (shares), e.g. "100". Rounded down to 2 decimals; must meet the book\'s min_order_size.' },
         expirationSec: {
           type: 'number',
-          description: 'Unix seconds when a GTD order expires (submit with orderType GTD; at least 3 minutes ahead). 0 = never. Default 0.',
+          description: 'Unix seconds when a GTD order expires (orderType GTD; at least 3 minutes ahead). 0 = never. Default 0.',
           default: 0,
+        },
+        orderType: {
+          type: 'string',
+          enum: ['GTC', 'FOK', 'GTD'],
+          description: 'Time-in-force, fixed here and shown with the typed data: GTC=good-till-cancel, FOK=fill-or-kill, GTD=good-till-date (needs expirationSec). Default GTD when expirationSec is set, else GTC.',
         },
         acknowledgeMainnet: { type: 'boolean', description: 'You must pass true. Polymarket orders are real-money trades.' },
       },
@@ -149,8 +155,7 @@ export const polymarketTools: Tool[] = [
         orderType: {
           type: 'string',
           enum: ['GTC', 'FOK', 'GTD'],
-          description: 'Time-in-force: GTC=good-till-cancel, FOK=fill-or-kill, GTD=good-till-date. Default GTC.',
-          default: 'GTC',
+          description: 'Optional. Must equal the order type chaingpt_pm_place_order_payload showed for this order (the default); any other value is refused.',
         },
       },
       required: ['order', 'signature'],
@@ -338,6 +343,10 @@ export async function handlePolymarketTool(
       const price = String(args.price);
       const size = String(args.size);
       const expirationSec = Number(args.expirationSec ?? 0);
+      const orderType = String(args.orderType ?? (expirationSec > 0 ? 'GTD' : 'GTC'));
+      if (!['GTC', 'FOK', 'GTD'].includes(orderType) || (orderType === 'GTD') !== (expirationSec > 0)) {
+        return { content: [{ type: 'text', text: 'orderType GTD needs a future expirationSec; GTC and FOK orders take expirationSec 0.' }] };
+      }
 
       const signer = args.signer ? (String(args.signer) as `0x${string}`) : undefined;
       const signatureType = args.signatureType as 0 | 1 | 2 | 3 | undefined;
@@ -362,6 +371,8 @@ export async function handlePolymarketTool(
       if (signatureType === 3) {
         order.depositWallet = { owner: signer!, exchange: typed.domain.verifyingContract, domainVersion: typed.domain.version };
       }
+      order.orderType = orderType;
+      order.binding = orderBinding(order, orderType);
 
       const [usdc, shares] = (order.side === 0 ? [order.makerAmount, order.takerAmount] : [order.takerAmount, order.makerAmount]).map((v) => Number(v) / 1e6);
       const lines = [
@@ -372,7 +383,8 @@ export async function handlePolymarketTool(
         `Price:          ${price} (${(Number(price) * 100).toFixed(2)}% implied)`,
         `Size:           ${shares} shares`,
         `USDC:           $${usdc}`,
-        `Expiration:     ${expirationSec === 0 ? 'never' : `${new Date(expirationSec * 1000).toISOString()} (submit with orderType GTD)`}`,
+        `Order type:     ${orderType}`,
+        `Expiration:     ${expirationSec === 0 ? 'never' : new Date(expirationSec * 1000).toISOString()}`,
         `Exchange:       ${bookVersion === 'v2' ? 'v2' : negRisk ? 'CTF Neg-Risk' : 'CTF'} (${typed.domain.verifyingContract}, domain version ${typed.domain.version})`,
         ...(signatureType === 3 ? [`Deposit wallet: ${maker}, signed by its owner ${signer}`] : []),
         '',
@@ -406,6 +418,11 @@ export async function handlePolymarketTool(
       if (!order || typeof order !== 'object' || order.timestamp === undefined || order.metadata === undefined || order.builder === undefined) {
         return { content: [{ type: 'text', text: 'This order is not in the current Polymarket order format (no timestamp/metadata/builder). Rebuild it with chaingpt_pm_place_order_payload and sign the new typed data.' }] };
       }
+      // expiration and orderType are not signed: post only the ones shown with this order's typed data.
+      const orderType = String(args.orderType ?? order.orderType ?? 'GTC');
+      if (typeof order.binding !== 'string' || order.binding !== orderBinding(order, orderType)) {
+        return { content: [{ type: 'text', text: 'The expiration or order type of this order differs from what chaingpt_pm_place_order_payload showed with its typed data, or the order came from an earlier server session. Rebuild it with chaingpt_pm_place_order_payload and sign the new typed data.' }] };
+      }
       let signature = String(args.signature) as `0x${string}`;
       let polyAddress = order.signer ?? order.maker;
       if (order.signatureType === 3) {
@@ -433,7 +450,6 @@ export async function handlePolymarketTool(
       // key (the signer for EOA/proxy/Safe orders, the owner EOA for deposit wallets).
       // An address here (the old documented value) is ignored: the API wants the key.
       const owner = typeof args.owner === 'string' && !/^0x[0-9a-fA-F]{40}$/.test(args.owner) ? args.owner : creds.apiKey;
-      const orderType = String(args.orderType ?? 'GTC');
 
       // Field set and order mirror the official client's orderToJsonV2. Wire format: salt as a JSON
       // number (the signed uint256 value, kept exact), side as "BUY"/"SELL", unsigned expiration alongside.

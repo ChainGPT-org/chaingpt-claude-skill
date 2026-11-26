@@ -19,7 +19,7 @@ export const POLYMARKET_V2_EXCHANGE = '0xe3333700cA9d93003F00f0F71f8515005F6c00A
 const BYTES32_ZERO = `0x${'0'.repeat(64)}`;
 /** Construct the EIP-712 typed-data envelope for a Polymarket order. */
 export function orderTypedData(order, opts = {}) {
-    const { expiration: _unsigned, depositWallet: _local, ...message } = order;
+    const { expiration: _unsigned, depositWallet: _local, orderType: _type, binding: _binding, ...message } = order;
     const v2 = opts.bookVersion === 'v2'; // v2 books have one exchange; neg_risk does not pick it
     return {
         domain: {
@@ -151,6 +151,14 @@ export function buildOrder(opts) {
         builder: BYTES32_ZERO,
         expiration: String(opts.expirationSec ?? 0),
     };
+}
+// expiration and the order type are not in the signed Order, so the wallet signature does not fix them. The server
+// binds the values it showed beside the typed data to that exact order with a per-process key, and submit refuses
+// any change (security scan H097-csf_97e65fe5). A payload from an earlier server process must be rebuilt and re-signed.
+const BINDING_KEY = crypto.randomBytes(32);
+export function orderBinding(order, orderType) {
+    const fields = [order.salt, order.maker, order.signer, order.tokenId, order.makerAmount, order.takerAmount, order.side, order.signatureType, order.timestamp, order.metadata, order.builder, order.expiration, orderType];
+    return crypto.createHmac('sha256', BINDING_KEY).update(JSON.stringify(fields)).digest('hex');
 }
 /** Build HMAC headers for a POST to clob.polymarket.com endpoints. */
 export function clobHeaders(creds, method, path, bodyJson, signer) {

@@ -50,9 +50,13 @@ export interface PolymarketOrder {
   /** Deposit wallets (type 3) only, NOT signed or posted: the EOA that owns the wallet (its API key) and
    *  the exchange domain, so the submit step can wrap the EOA's signature. */
   depositWallet?: { owner: Hex; exchange: Hex; domainVersion: '2' | '3' };
+  /** NOT signed or posted as order fields: the time-in-force shown with the typed data, and the server's binding of it
+   *  and `expiration` to this order (orderBinding). */
+  orderType?: string;
+  binding?: string;
 }
 
-type SignedOrderFields = Omit<PolymarketOrder, 'expiration' | 'depositWallet'>;
+type SignedOrderFields = Omit<PolymarketOrder, 'expiration' | 'depositWallet' | 'orderType' | 'binding'>;
 
 export interface OrderTypedData {
   domain: {
@@ -74,7 +78,7 @@ export function orderTypedData(
   order: PolymarketOrder,
   opts: { negRisk?: boolean; bookVersion?: BookVersion } = {}
 ): OrderTypedData {
-  const { expiration: _unsigned, depositWallet: _local, ...message } = order;
+  const { expiration: _unsigned, depositWallet: _local, orderType: _type, binding: _binding, ...message } = order;
   const v2 = opts.bookVersion === 'v2'; // v2 books have one exchange; neg_risk does not pick it
   return {
     domain: {
@@ -233,6 +237,15 @@ export function buildOrder(opts: {
     builder: BYTES32_ZERO,
     expiration: String(opts.expirationSec ?? 0),
   };
+}
+
+// expiration and the order type are not in the signed Order, so the wallet signature does not fix them. The server
+// binds the values it showed beside the typed data to that exact order with a per-process key, and submit refuses
+// any change (security scan H097-csf_97e65fe5). A payload from an earlier server process must be rebuilt and re-signed.
+const BINDING_KEY = crypto.randomBytes(32);
+export function orderBinding(order: PolymarketOrder, orderType: string): string {
+  const fields = [order.salt, order.maker, order.signer, order.tokenId, order.makerAmount, order.takerAmount, order.side, order.signatureType, order.timestamp, order.metadata, order.builder, order.expiration, orderType];
+  return crypto.createHmac('sha256', BINDING_KEY).update(JSON.stringify(fields)).digest('hex');
 }
 
 // ─── HMAC for /order POST authentication ─────────────────────────
