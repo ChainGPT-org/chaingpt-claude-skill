@@ -185,8 +185,8 @@ async function cachedBalance(key, fetchFn) {
 }
 let runningServer = null;
 let runningPort = null;
-// Admin-auth state for the localhost dashboard. Token is regenerated on each
-// serve_ui call. Sessions are in-memory only (no persistence across restarts).
+// Admin-auth state for the localhost dashboard. Token is regenerated each time
+// the dashboard starts. Sessions are in-memory only (no persistence across restarts).
 let adminToken = null;
 const sessions = new Map(); // sessionId -> expiry ms
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -1292,15 +1292,18 @@ async function handleAgentWalletToolUnlocked(name, args) {
             const chains = Array.isArray(args.chains) && args.chains.length > 0
                 ? args.chains
                 : ['ethereum', 'base', 'arbitrum'];
-            // Stop any existing server so re-calling on the same port works
+            // A running dashboard is never restarted from a tool call: that would let any MCP caller rotate
+            // the human's admin token and end their sessions. Restart the MCP server to change it.
             if (runningServer) {
-                try {
-                    runningServer.close();
-                }
-                catch { /* ignore */ }
-                runningServer = null;
+                return {
+                    content: [{
+                            type: 'text',
+                            text: `Agent wallet admin dashboard is already running at http://127.0.0.1:${runningPort}/. ` +
+                                `Its admin token and sessions were left unchanged. To change the port or chains, restart the MCP server.`,
+                        }],
+                };
             }
-            // Rotate admin token on every (re)start. It goes ONLY to a 0600 file the human reads:
+            // Rotate admin token on every start. It goes ONLY to a 0600 file the human reads:
             // the token unlocks policy edits, so it must never enter the tool result (model context).
             adminToken = generateToken();
             sessions.clear();
@@ -1729,7 +1732,7 @@ async function handleAgentWalletToolUnlocked(name, args) {
                             `  • Policy edits validated against a strict schema`,
                             ``,
                             `Open ${url} in a browser.`,
-                            `To stop: kill the MCP server process or re-call this tool with a different port.`,
+                            `To stop it or change the port: restart the MCP server process.`,
                         ].join('\n'),
                     }],
             };
