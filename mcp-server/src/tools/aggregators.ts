@@ -31,6 +31,9 @@ const COW_NETWORKS: Record<string, string> = {
   arbitrum: 'arbitrum_one',
 };
 
+// 1inch v6 AggregationRouterV6, the same address on every supported chain.
+const ONEINCH_ROUTER_V6 = '0x111111125421ca6dc452d289314280a0f8842a65';
+
 // CoW GPv2 Settlement contract (same address on all CoW-supported chains via CREATE2)
 const COW_SETTLEMENT: Hex = '0x9008D19f58AAbD9eD0D60971565AA8510560ab41';
 
@@ -240,6 +243,14 @@ export async function handleAggregatorTool(
       }
 
       if (isSwap && res.tx) {
+        // 1inch builds what the user signs: it must be a 1inch router call from the requesting wallet,
+        // with native value only for a native input.
+        const value = BigInt(res.tx.value ?? 0);
+        if (String(res.tx.to).toLowerCase() !== ONEINCH_ROUTER_V6
+          || String(res.tx.from ?? args.from).toLowerCase() !== String(args.from).toLowerCase()
+          || value !== (inToken === NATIVE_ADDR_1INCH ? BigInt(amount) : 0n)) {
+          throw new Error('1inch returned a transaction that is not a 1inch router call for this swap; refusing to build it.');
+        }
         lines.push('');
         lines.push('--- Unsigned transaction ---');
         lines.push(JSON.stringify({
