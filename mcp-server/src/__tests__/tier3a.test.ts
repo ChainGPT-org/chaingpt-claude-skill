@@ -283,17 +283,17 @@ const SOL_USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const ata = (owner: PublicKey, mint: string) =>
   PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN.toBuffer(), new PublicKey(mint).toBuffer()], ATA_PROGRAM)[0];
 
-function routeData(inAmount: bigint, slippageBps = 50, feeBps = 0) {
+function routeData(inAmount: bigint, quotedOut = 180000000n, slippageBps = 50, feeBps = 0) {
   const tail = Buffer.alloc(19);
   tail.writeBigUInt64LE(inAmount, 0);
-  tail.writeBigUInt64LE(180000000n, 8);
+  tail.writeBigUInt64LE(quotedOut, 8);
   tail.writeUInt16LE(slippageBps, 16);
   tail[18] = feeBps;
   // route discriminator, then an (empty) route plan vec, then the fixed tail
   return Buffer.concat([Buffer.from('e517cb977ae3ad2a', 'hex'), Buffer.from([0, 0, 0, 0]), tail]);
 }
 
-function jupiterSwapTx(user: PublicKey, over: { transferTo?: PublicKey; destination?: PublicKey; feePayer?: PublicKey; unitPrice?: number; inAmount?: bigint } = {}) {
+function jupiterSwapTx(user: PublicKey, over: { transferTo?: PublicKey; destination?: PublicKey; feePayer?: PublicKey; unitPrice?: number; inAmount?: bigint; quotedOut?: bigint } = {}) {
   const wsol = ata(user, WSOL);
   const usdc = ata(user, SOL_USDC);
   const ixs = [
@@ -304,7 +304,7 @@ function jupiterSwapTx(user: PublicKey, over: { transferTo?: PublicKey; destinat
     new TransactionInstruction({
       programId: JUP,
       keys: [TOKEN, user, wsol, over.destination ?? usdc, JUP, new PublicKey(SOL_USDC)].map((pubkey, i) => ({ pubkey, isSigner: i === 1, isWritable: i === 2 || i === 3 })),
-      data: routeData(over.inAmount ?? 1_000_000_000n),
+      data: routeData(over.inAmount ?? 1_000_000_000n, over.quotedOut),
     }),
     new TransactionInstruction({
       programId: TOKEN,
@@ -341,6 +341,8 @@ describe('Jupiter swap tx is checked against the request', () => {
     ['swap output paid to another account', { destination: ata(Keypair.generate().publicKey, SOL_USDC) }],
     ['another fee payer', { feePayer: Keypair.generate().publicKey }],
     ['a different route amount', { inAmount: 5_000_000_000n }],
+    ['a zero quoted output (zero minimum)', { quotedOut: 0n }],
+    ['a quoted output below the displayed quote', { quotedOut: 179_999_999n }],
     ['a priority fee above 0.01 SOL', { unitPrice: 1_000_000_000 }],
   ];
   for (const [label, over] of cases) {
@@ -353,5 +355,10 @@ describe('Jupiter swap tx is checked against the request', () => {
   it('refuses a quote for other mints or another amount', async () => {
     mockJupiter(jupiterSwapTx(user), { outputMint: WSOL });
     await expect(build()).rejects.toThrow(/does not match the requested mints or amount/);
+  });
+
+  it('refuses a quote with a zero output amount', async () => {
+    mockJupiter(jupiterSwapTx(user, { quotedOut: 0n }), { outAmount: '0' });
+    await expect(build()).rejects.toThrow(/has no positive output/);
   });
 });

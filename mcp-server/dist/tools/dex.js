@@ -224,9 +224,11 @@ function checkJupiterSwap(b64, want) {
                 throw refusal("the route does not swap from and to the user's own token accounts");
             }
             // Route args end with in_amount u64, quoted_out_amount u64, slippage_bps u16, platform_fee_bps u8.
+            // The on-chain minimum is quoted_out_amount x (1 - slippage_bps). Binding quoted_out_amount to the shown
+            // quote and slippage_bps to the request keeps that minimum at or above quote x (1 - requested slippage).
             const tail = data.subarray(data.length - 19);
-            if (data.length < 27 || tail.readBigUInt64LE(0) !== want.amount || tail.readUInt16LE(16) > want.slippageBps || tail[18] !== 0) {
-                throw refusal('the route amount, slippage or platform fee differs from the request');
+            if (data.length < 27 || tail.readBigUInt64LE(0) !== want.amount || tail.readBigUInt64LE(8) < want.quotedOut || tail.readUInt16LE(16) > want.slippageBps || tail[18] !== 0) {
+                throw refusal('the route amount, quoted output, slippage or platform fee differs from the request');
             }
             routes++;
         }
@@ -656,8 +658,9 @@ export async function handleDexTool(name, args) {
             if (!userPublicKey) {
                 return { content: [{ type: 'text', text: 'userPublicKey is required for swap-tx build.' }] };
             }
-            if (quote.inputMint !== inputMint || quote.outputMint !== outputMint || String(quote.inAmount) !== rawAmount) {
-                throw new Error('Jupiter quote does not match the requested mints or amount; refusing to build the swap.');
+            // The quoted output must be a positive integer: the route's minimum output is bound to it below.
+            if (quote.inputMint !== inputMint || quote.outputMint !== outputMint || String(quote.inAmount) !== rawAmount || !/^[1-9]\d*$/.test(String(quote.outAmount))) {
+                throw new Error('Jupiter quote does not match the requested mints or amount, or has no positive output; refusing to build the swap.');
             }
             const swap = await httpJson(`${JUPITER_BASE}/swap`, {
                 method: 'POST',
@@ -672,7 +675,7 @@ export async function handleDexTool(name, args) {
             const swapTransaction = swap?.swapTransaction;
             if (typeof swapTransaction !== 'string' || !swapTransaction)
                 throw new Error('Jupiter returned no swapTransaction.');
-            checkJupiterSwap(swapTransaction, { user: userPublicKey, inputMint, outputMint, amount: BigInt(rawAmount), slippageBps });
+            checkJupiterSwap(swapTransaction, { user: userPublicKey, inputMint, outputMint, amount: BigInt(rawAmount), slippageBps, quotedOut: BigInt(quote.outAmount) });
             lines.push('');
             lines.push('--- Serialized swap transaction (base64) ---');
             lines.push(swapTransaction);
