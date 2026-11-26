@@ -1,4 +1,5 @@
-import { encodeFunctionData, parseUnits, formatUnits } from 'viem';
+import { decodeFunctionData, encodeFunctionData, parseUnits, formatUnits } from 'viem';
+import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 import { CHAINS, resolveChain, rpcEndpoints } from '../lib/chains.js';
 import { httpJson, jsonRpcFallback } from '../lib/http.js';
 import { checkedDecimals, fetchErc20Decimals } from '../lib/agent-erc20.js';
@@ -68,6 +69,178 @@ const ERC20_APPROVE_ABI = {
     ],
     outputs: [{ name: '', type: 'bool' }],
 };
+// OpenOcean exchange router, the same address on every supported chain. Swap transactions must
+// call it, and chaingpt_dex_approve_tx approves it.
+const OPENOCEAN_ROUTER = '0x6352a56caadc4f1e25cd6c75970fa768a3304e64';
+const OPENOCEAN_SWAP_ABI = [{
+        type: 'function',
+        name: 'swap',
+        stateMutability: 'payable',
+        inputs: [
+            { name: 'caller', type: 'address' },
+            {
+                name: 'desc',
+                type: 'tuple',
+                components: [
+                    { name: 'srcToken', type: 'address' },
+                    { name: 'dstToken', type: 'address' },
+                    { name: 'srcReceiver', type: 'address' },
+                    { name: 'dstReceiver', type: 'address' },
+                    { name: 'amount', type: 'uint256' },
+                    { name: 'minReturnAmount', type: 'uint256' },
+                    { name: 'guaranteedAmount', type: 'uint256' },
+                    { name: 'flags', type: 'uint256' },
+                    { name: 'referrer', type: 'address' },
+                    { name: 'permit', type: 'bytes' },
+                ],
+            },
+            {
+                name: 'calls',
+                type: 'tuple[]',
+                components: [
+                    { name: 'target', type: 'uint256' },
+                    { name: 'gasLimit', type: 'uint256' },
+                    { name: 'value', type: 'uint256' },
+                    { name: 'data', type: 'bytes' },
+                ],
+            },
+        ],
+        outputs: [{ name: 'returnAmount', type: 'uint256' }],
+    }];
+function decodeOpenOceanSwap(data) {
+    try {
+        return decodeFunctionData({ abi: OPENOCEAN_SWAP_ABI, data: String(data) });
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * OpenOcean builds the calldata the user signs, so it must be the swap that was asked for: the
+ * router's swap() for the requested tokens and amount, paying out to the account with at least the
+ * shown minimum, and native value only for a native input. Throws otherwise.
+ */
+function checkOpenOceanSwap(data, want) {
+    if (String(data?.to ?? '').toLowerCase() !== OPENOCEAN_ROUTER) {
+        throw new Error(`OpenOcean returned a transaction to ${data?.to}, not the OpenOcean router; refusing to build it.`);
+    }
+    const desc = decodeOpenOceanSwap(data?.data)?.args?.[1];
+    if (!desc)
+        throw new Error('OpenOcean returned calldata that is not a router swap(); refusing to build it.');
+    const value = BigInt(data?.value ?? 0);
+    if (desc.srcToken.toLowerCase() !== want.inToken
+        || desc.dstToken.toLowerCase() !== want.outToken
+        || desc.dstReceiver.toLowerCase() !== want.account.toLowerCase()
+        || desc.amount !== want.amount
+        || want.minOut === undefined || desc.minReturnAmount < want.minOut || desc.minReturnAmount === 0n
+        || value !== (want.inToken === NATIVE_ADDR ? want.amount : 0n)) {
+        throw new Error('OpenOcean swap calldata does not match the requested tokens, amount, recipient, minimum output or value; refusing to build it.');
+    }
+}
+// Solana programs a Jupiter swap transaction may call.
+const JUPITER_V6 = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
+const SPL_TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const SPL_TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const SPL_ATA = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
+const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+const MAX_PRIORITY_FEE_LAMPORTS = 10000000n; // 0.01 SOL
+// Jupiter v6 route instructions by Anchor discriminator: account positions of the transfer authority,
+// the source and the destination token account, plus route's optional destination override.
+const JUPITER_ROUTES = {
+    e517cb977ae3ad2a: { authority: 1, source: 2, destination: 3, override: 4 }, // route
+    c1209b3341d69c81: { authority: 2, source: 3, destination: 6 }, // shared_accounts_route
+};
+function associatedTokenAccount(owner, mint, tokenProgram) {
+    return PublicKey.findProgramAddressSync([new PublicKey(owner).toBuffer(), new PublicKey(tokenProgram).toBuffer(), new PublicKey(mint).toBuffer()], new PublicKey(SPL_ATA))[0].toBase58();
+}
+function decodeSolanaTx(b64) {
+    try {
+        return VersionedTransaction.deserialize(Buffer.from(b64, 'base64'));
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * Jupiter serializes the transaction the user signs, so decode it and accept only the swap that was
+ * asked for: the user pays the fee; only compute-budget, SOL wrap/unwrap, token-account creation and
+ * one Jupiter route instruction; the route spends the requested amount from the user's input-mint
+ * account into the user's output-mint account; the priority fee is bounded. Throws otherwise.
+ */
+function checkJupiterSwap(b64, want) {
+    const refusal = (why) => new Error(`Jupiter swap transaction refused: ${why}.`);
+    const tx = decodeSolanaTx(b64);
+    if (!tx)
+        throw refusal('it could not be decoded');
+    const keys = tx.message.staticAccountKeys.map((k) => k.toBase58());
+    // Lookup-table accounts cannot be resolved offline, so a checked position that uses one fails.
+    const key = (index) => (index !== undefined && index < keys.length ? keys[index] : undefined);
+    const owned = (account, mint) => account !== undefined
+        && (account === associatedTokenAccount(want.user, mint, SPL_TOKEN) || account === associatedTokenAccount(want.user, mint, SPL_TOKEN_2022));
+    if (keys[0] !== want.user)
+        throw refusal('the fee payer is not userPublicKey');
+    let unitLimit = 1400000n;
+    let unitPrice = 0n;
+    let routes = 0;
+    for (const ix of tx.message.compiledInstructions) {
+        const program = key(ix.programIdIndex);
+        const account = (n) => key(ix.accountKeyIndexes[n]);
+        const data = Buffer.from(ix.data);
+        if (program === COMPUTE_BUDGET) {
+            if (data[0] === 2 && data.length === 5)
+                unitLimit = BigInt(data.readUInt32LE(1));
+            else if (data[0] === 3 && data.length === 9)
+                unitPrice = data.readBigUInt64LE(1);
+            else if (data[0] !== 1 && data[0] !== 4)
+                throw refusal('it has an unknown compute-budget instruction');
+        }
+        else if (program === SYSTEM_PROGRAM) {
+            // Only wrapping SOL: a transfer from the user into the user's own wSOL account.
+            if (data.length !== 12 || data.readUInt32LE(0) !== 2 || account(0) !== want.user
+                || account(1) !== associatedTokenAccount(want.user, WSOL_MINT, SPL_TOKEN)) {
+                throw refusal("it moves SOL somewhere other than the user's wSOL account");
+            }
+        }
+        else if (program === SPL_TOKEN || program === SPL_TOKEN_2022) {
+            // Only wSOL bookkeeping: syncNative, or closeAccount back to the user.
+            if (!(data.length === 1 && (data[0] === 17 || (data[0] === 9 && account(1) === want.user && account(2) === want.user)))) {
+                throw refusal('it has a token instruction other than wSOL sync or close-to-user');
+            }
+        }
+        else if (program === SPL_ATA) {
+            if (data.length > 1 || (data.length === 1 && data[0] > 1) || account(0) !== want.user || account(2) !== want.user) {
+                throw refusal('it creates a token account for someone other than the user');
+            }
+        }
+        else if (program === JUPITER_V6) {
+            const route = JUPITER_ROUTES[data.subarray(0, 8).toString('hex')];
+            if (!route)
+                throw refusal('it calls a Jupiter instruction other than a route');
+            if (account(route.authority) !== want.user || !owned(account(route.source), want.inputMint)
+                || !owned(account(route.destination), want.outputMint)
+                || (route.override !== undefined && account(route.override) !== JUPITER_V6 && account(route.override) !== account(route.destination))) {
+                throw refusal("the route does not swap from and to the user's own token accounts");
+            }
+            // Route args end with in_amount u64, quoted_out_amount u64, slippage_bps u16, platform_fee_bps u8.
+            // The on-chain minimum is quoted_out_amount x (1 - slippage_bps). Binding quoted_out_amount to the shown
+            // quote and slippage_bps to the request keeps that minimum at or above quote x (1 - requested slippage).
+            const tail = data.subarray(data.length - 19);
+            if (data.length < 27 || tail.readBigUInt64LE(0) !== want.amount || tail.readBigUInt64LE(8) < want.quotedOut || tail.readUInt16LE(16) > want.slippageBps || tail[18] !== 0) {
+                throw refusal('the route amount, quoted output, slippage or platform fee differs from the request');
+            }
+            routes++;
+        }
+        else {
+            throw refusal(`it calls an unexpected program ${program ?? '(lookup-table account)'}`);
+        }
+    }
+    if (routes !== 1)
+        throw refusal('it does not contain exactly one Jupiter route');
+    if ((unitPrice * unitLimit) / 1000000n > MAX_PRIORITY_FEE_LAMPORTS)
+        throw refusal('its priority fee exceeds 0.01 SOL');
+}
 export const dexTools = [
     {
         name: 'chaingpt_dex_quote',
@@ -239,6 +412,9 @@ export async function handleDexTool(name, args) {
             }
             const account = args.account || '0x0000000000000000000000000000000000000000';
             const path = name === 'chaingpt_dex_build_swap_tx' ? 'swap' : 'quote';
+            if (path === 'swap' && (!/^0x[0-9a-fA-F]{40}$/.test(account) || /^0x0{40}$/.test(account))) {
+                throw new Error('account must be the 0x address of the wallet that will sign the swap.');
+            }
             // V4 uses atomic token amounts and gas prices in wei. Do not truncate sub-gwei fees.
             const inDecimals = inToken === NATIVE_ADDR ? 18 : await fetchErc20Decimals(network, inToken);
             if (!/^\d+(?:\.\d+)?$/.test(amountIn) || (amountIn.split('.')[1]?.length ?? 0) > inDecimals)
@@ -316,6 +492,7 @@ export async function handleDexTool(name, args) {
                 lines.push(`Route:           ${data.dexes.map((d) => d.dexCode ?? d).slice(0, 5).join(' → ')}`);
             }
             if (name === 'chaingpt_dex_build_swap_tx') {
+                checkOpenOceanSwap(data, { inToken, outToken, amount: amountRaw, account, minOut: minOutRaw });
                 const tx = {
                     chainId: CHAINS[network]?.chainId,
                     to: data.to,
@@ -370,7 +547,7 @@ export async function handleDexTool(name, args) {
             if (!spender) {
                 // OpenOcean Pathfinder router — same address across all major EVM mainnets via CREATE2.
                 // Source: https://docs.openocean.finance/dev/openocean-api-3.0/api-reference#exchange-contract
-                spender = '0x6352a56caadc4f1e25cd6c75970fa768a3304e64';
+                spender = OPENOCEAN_ROUTER;
             }
             // Determine decimals + current allowance via RPC if possible.
             // If decimals omitted, fetch them on-chain — defaulting to 18 silently
@@ -481,6 +658,10 @@ export async function handleDexTool(name, args) {
             if (!userPublicKey) {
                 return { content: [{ type: 'text', text: 'userPublicKey is required for swap-tx build.' }] };
             }
+            // The quoted output must be a positive integer: the route's minimum output is bound to it below.
+            if (quote.inputMint !== inputMint || quote.outputMint !== outputMint || String(quote.inAmount) !== rawAmount || !/^[1-9]\d*$/.test(String(quote.outAmount))) {
+                throw new Error('Jupiter quote does not match the requested mints or amount, or has no positive output; refusing to build the swap.');
+            }
             const swap = await httpJson(`${JUPITER_BASE}/swap`, {
                 method: 'POST',
                 headers,
@@ -491,9 +672,13 @@ export async function handleDexTool(name, args) {
                     dynamicComputeUnitLimit: true,
                 },
             });
+            const swapTransaction = swap?.swapTransaction;
+            if (typeof swapTransaction !== 'string' || !swapTransaction)
+                throw new Error('Jupiter returned no swapTransaction.');
+            checkJupiterSwap(swapTransaction, { user: userPublicKey, inputMint, outputMint, amount: BigInt(rawAmount), slippageBps, quotedOut: BigInt(quote.outAmount) });
             lines.push('');
             lines.push('--- Serialized swap transaction (base64) ---');
-            lines.push(swap.swapTransaction ?? '(no swapTransaction returned)');
+            lines.push(swapTransaction);
             lines.push('');
             lines.push('Decode this base64 string into a VersionedTransaction in your wallet, sign, and send.');
             return { content: [{ type: 'text', text: lines.join('\n') }] };
